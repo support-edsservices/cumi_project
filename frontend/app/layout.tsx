@@ -26,7 +26,7 @@ export default function RootLayout({
               <Sidebar />
               <Topbar
                 title="Dashboard"
-                subtitle="Real-time overview of energy consumption and meters"
+                subtitle=""
               />
               <main className="main-content">{children}</main>
             </SidebarProvider>

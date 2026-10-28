@@ -23,7 +23,7 @@ function ChildLink({ child }: { child: NavChild }) {
         gap: '0.625rem',
         padding: '0.4rem 0.875rem 0.4rem 1rem',
         borderRadius: 6,
-        fontSize: 'var(--font-size-body)',
+        fontSize: '0.8rem',
         fontWeight: active ? 600 : 400,
         color: active ? '#fff' : 'rgba(255,255,255,0.55)',
         background: active ? 'rgba(59,130,246,0.25)' : 'transparent',
@@ -110,7 +110,7 @@ function NavItemRow({ item }: { item: NavItem }) {
       <span className="nav-label" style={{ flex: 1 }}>{item.label}</span>
       {item.badge !== undefined && !collapsed && (
         <span style={{
-          fontSize: 'var(--font-size-micro)', fontWeight: 700,
+          fontSize: '0.6rem', fontWeight: 700,
           padding: '1px 6px', borderRadius: 10,
           background:
             item.badgeColor === 'red'   ? '#ef4444' :
@@ -157,10 +157,10 @@ export default function Sidebar() {
           <Zap size={17} color="#fff" fill="#fff" />
         </div>
         <div className="sidebar-brand-copy">
-          <div style={{ fontSize: 'var(--font-size-brand)', fontWeight: 700, color: '#fff', lineHeight: 1.2 }}>
+          <div style={{ fontSize: '0.93rem', fontWeight: 700, color: '#fff', lineHeight: 1.2 }}>
             EnergyMeter
           </div>
-          <div style={{ fontSize: 'var(--font-size-micro)', color: 'rgba(255,255,255,0.35)', letterSpacing: '0.1em' }}>
+          <div style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.35)', letterSpacing: '0.1em' }}>
             ENTERPRISE EDITION
           </div>
         </div>
@@ -189,10 +189,10 @@ export default function Sidebar() {
             background: '#10b981', flexShrink: 0,
           }} />
           <div>
-            <div style={{ fontSize: 'var(--font-size-tiny-plus)', color: 'rgba(255,255,255,0.35)', letterSpacing: '0.07em' }}>
+            <div style={{ fontSize: '0.63rem', color: 'rgba(255,255,255,0.35)', letterSpacing: '0.07em' }}>
               ACTIVE PLANT
             </div>
-            <div style={{ fontSize: 'var(--font-size-body-compact)', fontWeight: 600, color: '#fff', lineHeight: 1.2 }}>
+            <div style={{ fontSize: '0.77rem', fontWeight: 600, color: '#fff', lineHeight: 1.2 }}>
               Delphi-TVS Technologies
             </div>
           </div>
@@ -227,13 +227,13 @@ export default function Sidebar() {
           display: 'flex', alignItems: 'center', gap: '0.5rem',
           width: '100%', padding: '0.45rem 0.625rem', borderRadius: 7,
           background: 'transparent', border: 'none', cursor: 'pointer',
-          color: 'rgba(255,255,255,0.35)', fontSize: 'var(--font-size-body)',
+          color: 'rgba(255,255,255,0.35)', fontSize: '0.8rem',
           transition: 'color 0.12s, background 0.12s',
         }}
         >
           <LogOut size={14} /> <span className="sidebar-label">Logout</span>
         </button>
-        <div className="sidebar-version" style={{ fontSize: 'var(--font-size-micro)', color: 'rgba(255,255,255,0.18)', paddingLeft: '0.375rem', marginTop: '0.375rem' }}>
+        <div className="sidebar-version" style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.18)', paddingLeft: '0.375rem', marginTop: '0.375rem' }}>
           v1.0.0 · © 2026 EnergyMeter
         </div>
       </div>

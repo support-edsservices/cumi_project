@@ -31,7 +31,7 @@ export const navSections: NavSection[] = [
     title: 'Overview',
     items: [
       { label: 'Dashboard',           href: '/',          icon: LayoutDashboard },
-      { label: 'Real-time Monitoring',href: '/realtime',  icon: Activity, badge: 'Live', badgeColor: 'green' },
+      // { label: 'Real-time Monitoring',href: '/realtime',  icon: Activity, badge: 'Live', badgeColor: 'green' },
     ],
   },
   {
