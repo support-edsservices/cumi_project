@@ -278,32 +278,12 @@ export default function PlantOverviewPage() {
       {/* ── Page header ── */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.2rem' }}>
-            <span className="pulse" style={{ width: 8, height: 8, background: '#10b981', borderRadius: '50%' }} />
-            <span style={{
-              fontSize: '0.67rem', fontWeight: 700, letterSpacing: '0.07em',
-              textTransform: 'uppercase', color: 'var(--text-muted)',
-            }}>
-              000 Plant Overview · 03-01-2024 00:00 – 13:13
-            </span>
-          </div>
+          
           <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)' }}>
             110kV Plant Overview
           </h2>
         </div>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
-          {['Daily Report', 'Monthly Report', 'Yearly Report'].map(r => (
-            <button key={r} style={{
-              display: 'flex', alignItems: 'center', gap: '0.35rem',
-              padding: '0.4rem 0.875rem', borderRadius: 7,
-              background: 'var(--accent-blue)', color: '#fff',
-              border: 'none', cursor: 'pointer',
-              fontSize: '0.76rem', fontWeight: 600, fontFamily: 'inherit',
-            }}>
-              <Download size={12} /> {r}
-            </button>
-          ))}
-        </div>
+        
       </div>
 
       {/* ── Row 1 · KPI cards (5 cols) ── */}
