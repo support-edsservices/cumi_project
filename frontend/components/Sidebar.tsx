@@ -7,6 +7,7 @@ import { navSections } from '@/data/navigation';
 import type { NavItem, NavChild } from '@/data/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { useSidebar } from '@/context/SidebarContext';
+import { FONT_SIZES } from '@/context/ThemeContext';
 
 /* ── Sub-link (leaf node) ── */
 function ChildLink({ child }: { child: NavChild }) {
@@ -23,7 +24,7 @@ function ChildLink({ child }: { child: NavChild }) {
         gap: '0.625rem',
         padding: '0.4rem 0.875rem 0.4rem 1rem',
         borderRadius: 6,
-        fontSize: '0.8rem',
+        fontSize: FONT_SIZES.nestedLink,
         fontWeight: active ? 600 : 400,
         color: active ? '#fff' : 'rgba(255,255,255,0.55)',
         background: active ? 'rgba(59,130,246,0.25)' : 'transparent',
@@ -65,6 +66,7 @@ function NavItemRow({ item }: { item: NavItem }) {
         <button
           type="button"
           className={`nav-item${childActive ? ' active' : ''}`}
+          style={{ fontSize: FONT_SIZES.navItem }}
           title={collapsed ? item.label : undefined}
           aria-expanded={open}
           onClick={() => {
@@ -103,6 +105,7 @@ function NavItemRow({ item }: { item: NavItem }) {
     <Link
       href={item.href ?? '#'}
       className={`nav-item${isActive ? ' active' : ''}`}
+      style={{ fontSize: FONT_SIZES.navItem }}
       title={collapsed ? item.label : undefined}
       onClick={() => setMobileOpen(false)}
     >
@@ -110,7 +113,7 @@ function NavItemRow({ item }: { item: NavItem }) {
       <span className="nav-label" style={{ flex: 1 }}>{item.label}</span>
       {item.badge !== undefined && !collapsed && (
         <span style={{
-          fontSize: '0.6rem', fontWeight: 700,
+          fontSize: FONT_SIZES.badge, fontWeight: 700,
           padding: '1px 6px', borderRadius: 10,
           background:
             item.badgeColor === 'red'   ? '#ef4444' :
@@ -157,10 +160,10 @@ export default function Sidebar() {
           <Zap size={17} color="#fff" fill="#fff" />
         </div>
         <div className="sidebar-brand-copy">
-          <div style={{ fontSize: '0.93rem', fontWeight: 700, color: '#fff', lineHeight: 1.2 }}>
+          <div style={{ fontSize: FONT_SIZES.brand, fontWeight: 700, color: '#fff', lineHeight: 1.2 }}>
             EnergyMeter
           </div>
-          <div style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.35)', letterSpacing: '0.1em' }}>
+          <div style={{ fontSize: FONT_SIZES.micro, color: 'rgba(255,255,255,0.35)', letterSpacing: '0.1em' }}>
             ENTERPRISE EDITION
           </div>
         </div>
@@ -175,35 +178,14 @@ export default function Sidebar() {
         </button>
       </div>
 
-      {/* Active plant badge */}
-      <div className="sidebar-plant" style={{ padding: '0.625rem 0.75rem' }}>
-        <div style={{
-          background: 'rgba(245,158,11,0.1)',
-          border: '1px solid rgba(245,158,11,0.22)',
-          borderRadius: 8,
-          padding: '0.45rem 0.75rem',
-          display: 'flex', alignItems: 'center', gap: '0.5rem',
-        }}>
-          <span className="pulse" style={{
-            width: 7, height: 7, borderRadius: '50%',
-            background: '#10b981', flexShrink: 0,
-          }} />
-          <div>
-            <div style={{ fontSize: '0.63rem', color: 'rgba(255,255,255,0.35)', letterSpacing: '0.07em' }}>
-              ACTIVE PLANT
-            </div>
-            <div style={{ fontSize: '0.77rem', fontWeight: 600, color: '#fff', lineHeight: 1.2 }}>
-              Delphi-TVS Technologies
-            </div>
-          </div>
-        </div>
-      </div>
 
       {/* Navigation */}
       <nav style={{ flex: 1, padding: '0 0.5rem', paddingBottom: '0.5rem' }}>
         {navSections.map(section => (
           <div key={section.title}>
-            <div className="nav-section">{section.title}</div>
+            <div className="nav-section" style={{ fontSize: FONT_SIZES.navSection }}>
+              {section.title}
+            </div>
             {section.items.map(item => (
               <NavItemRow key={item.label} item={item} />
             ))}
@@ -227,13 +209,13 @@ export default function Sidebar() {
           display: 'flex', alignItems: 'center', gap: '0.5rem',
           width: '100%', padding: '0.45rem 0.625rem', borderRadius: 7,
           background: 'transparent', border: 'none', cursor: 'pointer',
-          color: 'rgba(255,255,255,0.35)', fontSize: '0.8rem',
+          color: 'rgba(255,255,255,0.35)', fontSize: FONT_SIZES.body,
           transition: 'color 0.12s, background 0.12s',
         }}
         >
           <LogOut size={14} /> <span className="sidebar-label">Logout</span>
         </button>
-        <div className="sidebar-version" style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.18)', paddingLeft: '0.375rem', marginTop: '0.375rem' }}>
+        <div className="sidebar-version" style={{ fontSize: FONT_SIZES.micro, color: 'rgba(255,255,255,0.18)', paddingLeft: '0.375rem', marginTop: '0.375rem' }}>
           v1.0.0 · © 2026 EnergyMeter
         </div>
       </div>

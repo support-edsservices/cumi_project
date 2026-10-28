@@ -261,7 +261,6 @@ body {
   border-radius: 8px;
   cursor: pointer;
   color: var(--text-sidebar);
-  font-size: var(--font-size-body-large);
   font-weight: 500;
   transition: background 0.12s, color 0.12s;
   text-decoration: none;
@@ -271,7 +270,6 @@ body {
 .nav-item.active { background: var(--accent-blue); color: #fff; }
 
 .nav-section {
-  font-size: var(--font-size-compact);
   font-weight: 700;
   letter-spacing: 0.11em;
   text-transform: uppercase;

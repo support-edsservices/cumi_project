@@ -32,6 +32,10 @@ export const FONT_SIZES = {
   svgBody: '12px',
   svgLabel: '13px',
   svgMetric: '22px',
+  navItem: '1.3rem',
+  navSection: '0.87rem',
+  nestedLink: '1rem',
+  badge: '0.8rem',
 } as const;
 
 interface ThemeCtx { theme: Theme; toggle: () => void; }
