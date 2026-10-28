@@ -19,6 +19,7 @@ import {
   plantLoadData, kpiTargets, alarmData, summaryTableRows,
   generateHourlyData, generateDailyData, generateMonthlyData,
 } from '@/data/mockData';
+import { FONT_SIZES } from '@/context/ThemeContext';
 
 /* ─── static data (stable across re-renders) ─── */
 const hourlyData  = generateHourlyData();
@@ -36,7 +37,7 @@ function ChartTooltip({ active, payload, label }: any) {
     <div style={{
       background: 'var(--bg-card)', border: '1px solid var(--border)',
       borderRadius: 8, padding: '0.55rem 0.875rem',
-      fontSize: 12, boxShadow: 'var(--card-shadow)',
+      fontSize: FONT_SIZES.chartTooltip, boxShadow: 'var(--card-shadow)',
     }}>
       <div style={{ fontWeight: 700, marginBottom: 4, color: 'var(--text-primary)' }}>{label}</div>
       {payload.map((p: any) => (
@@ -93,13 +94,13 @@ function HalfGauge({
           fill="none" stroke={color} strokeWidth={12} strokeLinecap="round" />
       )}
       {/* labels */}
-      <text x={cx - R - 10} y={cy + 22} fontSize="9" fill="var(--text-muted)" textAnchor="middle">0</text>
-      <text x={cx + R + 10} y={cy + 22} fontSize="9" fill="var(--text-muted)" textAnchor="middle">{max}</text>
+      <text x={cx - R - 10} y={cy + 22} fontSize={FONT_SIZES.svgSmall} fill="var(--text-muted)" textAnchor="middle">0</text>
+      <text x={cx + R + 10} y={cy + 22} fontSize={FONT_SIZES.svgSmall} fill="var(--text-muted)" textAnchor="middle">{max}</text>
       {/* value */}
-      <text x={cx} y={cy - 2} textAnchor="middle" fontSize="22" fontWeight="800" fill="var(--text-primary)">
+      <text x={cx} y={cy - 2} textAnchor="middle" fontSize={FONT_SIZES.svgMetric} fontWeight="800" fill="var(--text-primary)">
         {value}
       </text>
-      <text x={cx} y={cy + 16} textAnchor="middle" fontSize="9" fill="var(--text-muted)">kW</text>
+      <text x={cx} y={cy + 16} textAnchor="middle" fontSize={FONT_SIZES.svgSmall} fill="var(--text-muted)">kW</text>
     </svg>
   );
 }
@@ -140,16 +141,16 @@ function DonutChart({
         {slices.map(s => (
           <path key={s.name} d={s.path} fill={s.color} opacity={0.9} />
         ))}
-        <text x={cx} y={cy - 6} textAnchor="middle" fontSize="13" fontWeight="800" fill="var(--text-primary)">
+        <text x={cx} y={cy - 6} textAnchor="middle" fontSize={FONT_SIZES.svgLabel} fontWeight="800" fill="var(--text-primary)">
           {centerLabel}
         </text>
-        <text x={cx} y={cy + 10} textAnchor="middle" fontSize="8" fill="var(--text-muted)">
+        <text x={cx} y={cy + 10} textAnchor="middle" fontSize={FONT_SIZES.svgTiny} fill="var(--text-muted)">
           {centerSub}
         </text>
       </svg>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', flex: 1 }}>
         {data.map(d => (
-          <div key={d.name} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.75rem' }}>
+          <div key={d.name} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: 'var(--font-size-body-small)' }}>
             <div style={{ width: 9, height: 9, borderRadius: 2, background: d.color, flexShrink: 0 }} />
             <span style={{ flex: 1, color: 'var(--text-secondary)' }}>{d.name}</span>
             <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{d.value}%</span>
@@ -179,15 +180,15 @@ function KpiRing({
           strokeLinecap="round" transform="rotate(-90 34 34)"
           style={{ transition: 'stroke-dashoffset 0.6s ease' }}
         />
-        <text x={34} y={38} textAnchor="middle" fontSize="12" fontWeight="800"
+        <text x={34} y={38} textAnchor="middle" fontSize={FONT_SIZES.svgBody} fontWeight="800"
           fill={over ? '#f59e0b' : color}>
           {pct}%
         </text>
       </svg>
       <div style={{ lineHeight: 1.5 }}>
-        <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-primary)' }}>{label}</div>
-        <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Actual: <b style={{ color: 'var(--text-secondary)' }}>{actual}</b></div>
-        <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Target: <b style={{ color: 'var(--text-secondary)' }}>{target}</b></div>
+        <div style={{ fontSize: 'var(--font-size-body-compact)', fontWeight: 700, color: 'var(--text-primary)' }}>{label}</div>
+        <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>Actual: <b style={{ color: 'var(--text-secondary)' }}>{actual}</b></div>
+        <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>Target: <b style={{ color: 'var(--text-secondary)' }}>{target}</b></div>
       </div>
     </div>
   );
@@ -218,7 +219,7 @@ function StatCard({
     }}>
       {/* Header row */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.625rem' }}>
-        <span style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-muted)', lineHeight: 1.35, maxWidth: '75%' }}>
+        <span style={{ fontSize: 'var(--font-size-label)', fontWeight: 600, color: 'var(--text-muted)', lineHeight: 1.35, maxWidth: '75%' }}>
           {label}
         </span>
         <div style={{
@@ -231,24 +232,24 @@ function StatCard({
       </div>
 
       {/* Value */}
-      <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em', lineHeight: 1 }}>
+      <div style={{ fontSize: 'var(--font-size-display)', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em', lineHeight: 1 }}>
         {unit === 'INR' && (
-          <span style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-muted)', marginRight: 2 }}>₹</span>
+          <span style={{ fontSize: 'var(--font-size-subtitle)', fontWeight: 600, color: 'var(--text-muted)', marginRight: 2 }}>₹</span>
         )}
         {value}
-        <span style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--text-muted)', marginLeft: 3 }}>
+        <span style={{ fontSize: 'var(--font-size-small)', fontWeight: 600, color: 'var(--text-muted)', marginLeft: 3 }}>
           {unit}
         </span>
       </div>
 
       {/* Sub */}
-      <div style={{ fontSize: '0.67rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>{sub}</div>
+      <div style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)', marginTop: '0.2rem' }}>{sub}</div>
 
       {/* Trend */}
       {trend && (
         <div style={{
           display: 'flex', alignItems: 'center', gap: 3, marginTop: '0.45rem',
-          fontSize: '0.7rem', fontWeight: 700,
+          fontSize: 'var(--font-size-small-plus)', fontWeight: 700,
           color: trendUp ? '#10b981' : '#ef4444',
         }}>
           {trendUp ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
@@ -279,7 +280,7 @@ export default function PlantOverviewPage() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
           
-          <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+          <h2 style={{ fontSize: 'var(--font-size-section-heading)', fontWeight: 800, color: 'var(--text-primary)' }}>
             110kV Plant Overview
           </h2>
         </div>
@@ -307,38 +308,38 @@ export default function PlantOverviewPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
           {/* Emission */}
           <div className="stat-card fade-up delay-1">
-            <div style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.5rem' }}>CO₂ Emission</div>
+            <div style={{ fontSize: 'var(--font-size-label)', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.5rem' }}>CO₂ Emission</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
               <div style={{ width: 38, height: 38, borderRadius: 9, background: '#ef444418', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <Activity size={18} color="#ef4444" />
               </div>
               <div>
-                <div style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                <div style={{ fontSize: 'var(--font-size-metric)', fontWeight: 800, color: 'var(--text-primary)' }}>
                   {co2Data.emission.value}
                 </div>
-                <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>{co2Data.emission.unit}</div>
+                <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{co2Data.emission.unit}</div>
               </div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 3, marginTop: '0.5rem', fontSize: '0.68rem', fontWeight: 700, color: '#10b981' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 3, marginTop: '0.5rem', fontSize: 'var(--font-size-small)', fontWeight: 700, color: '#10b981' }}>
               <TrendingDown size={10} /> {co2Data.emission.trend} vs last period
             </div>
           </div>
 
           {/* Saved */}
           <div className="stat-card fade-up delay-2" style={{ borderLeft: '3px solid #10b981', background: 'linear-gradient(135deg, var(--bg-card) 0%, #10b98110 100%)' }}>
-            <div style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.5rem' }}>CO₂ Saved (Solar)</div>
+            <div style={{ fontSize: 'var(--font-size-label)', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.5rem' }}>CO₂ Saved (Solar)</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
               <div style={{ width: 38, height: 38, borderRadius: 9, background: '#10b98118', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <Leaf size={18} color="#10b981" />
               </div>
               <div>
-                <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#10b981' }}>
+                <div style={{ fontSize: 'var(--font-size-metric)', fontWeight: 800, color: '#10b981' }}>
                   {co2Data.saved.value}
                 </div>
-                <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>{co2Data.saved.unit}</div>
+                <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{co2Data.saved.unit}</div>
               </div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 3, marginTop: '0.5rem', fontSize: '0.68rem', fontWeight: 700, color: '#10b981' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 3, marginTop: '0.5rem', fontSize: 'var(--font-size-small)', fontWeight: 700, color: '#10b981' }}>
               <TrendingUp size={10} /> {co2Data.saved.trend} via solar generation
             </div>
           </div>
@@ -361,10 +362,10 @@ export default function PlantOverviewPage() {
           <div className="section-title" style={{ alignSelf: 'flex-start' }}>Total Plant Operational Load</div>
           <HalfGauge value={plantLoadData.current} max={plantLoadData.max} />
           <div style={{ textAlign: 'center', marginTop: '0.375rem' }}>
-            <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#f59e0b' }}>
-              {plantLoadData.current} <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>kW</span>
+            <div style={{ fontSize: 'var(--font-size-metric-large)', fontWeight: 800, color: '#f59e0b' }}>
+              {plantLoadData.current} <span style={{ fontSize: 'var(--font-size-body)', fontWeight: 600 }}>kW</span>
             </div>
-            <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginTop: 2 }}>
+            <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', marginTop: 2 }}>
               Max: {plantLoadData.max.toLocaleString()} kW
             </div>
           </div>
@@ -382,7 +383,7 @@ export default function PlantOverviewPage() {
               {(['hourly', 'daily', 'monthly'] as const).map(t => (
                 <button key={t} onClick={() => setTab(t)} style={{
                   padding: '0.28rem 0.7rem', borderRadius: 6,
-                  fontSize: '0.7rem', fontWeight: 600,
+                  fontSize: 'var(--font-size-small-plus)', fontWeight: 600,
                   border: '1px solid var(--border)',
                   cursor: 'pointer', textTransform: 'capitalize', fontFamily: 'inherit',
                   background: tab === t ? 'var(--accent-blue)' : 'transparent',
@@ -404,10 +405,10 @@ export default function PlantOverviewPage() {
                 ))}
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-              <XAxis dataKey={xKey} tick={{ fontSize: 10, fill: 'var(--text-muted)' }} />
-              <YAxis tick={{ fontSize: 10, fill: 'var(--text-muted)' }} />
+              <XAxis dataKey={xKey} tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} />
+              <YAxis tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} />
               <Tooltip content={<ChartTooltip />} />
-              <Legend wrapperStyle={{ fontSize: 11 }} />
+              <Legend wrapperStyle={{ fontSize: FONT_SIZES.chartLegend }} />
               <Area type="monotone" dataKey="grid"  name="Grid (kWh)"  stroke="#3b82f6" fill="url(#gridG)"  strokeWidth={1.8} />
               <Area type="monotone" dataKey="solar" name="Solar (kWh)" stroke="#10b981" fill="url(#solarG)" strokeWidth={1.8} />
               <Area type="monotone" dataKey="dg"    name="DG (kWh)"    stroke="#f59e0b" fill="url(#dgG)"    strokeWidth={1.8} />
@@ -435,10 +436,10 @@ export default function PlantOverviewPage() {
           <ResponsiveContainer width="100%" height={210}>
             <BarChart data={monthlyData} barSize={10} barCategoryGap="30%">
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-              <XAxis dataKey="month" tick={{ fontSize: 10, fill: 'var(--text-muted)' }} />
-              <YAxis tick={{ fontSize: 10, fill: 'var(--text-muted)' }} />
+              <XAxis dataKey="month" tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} />
+              <YAxis tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} />
               <Tooltip content={<ChartTooltip />} />
-              <Legend wrapperStyle={{ fontSize: 11 }} />
+              <Legend wrapperStyle={{ fontSize: FONT_SIZES.chartLegend }} />
               <Bar dataKey="grid"  name="Grid"  fill="#3b82f6" radius={[3,3,0,0]} />
               <Bar dataKey="solar" name="Solar" fill="#10b981" radius={[3,3,0,0]} />
               <Bar dataKey="dg"    name="DG"    fill="#f59e0b" radius={[3,3,0,0]} />
@@ -450,7 +451,7 @@ export default function PlantOverviewPage() {
         <div className="card fade-up delay-2" style={{ padding: '1.125rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
             <div className="section-title" style={{ margin: 0 }}>Alarms & Events</div>
-            <span style={{ fontSize: '0.72rem', color: 'var(--accent-blue)', fontWeight: 600, cursor: 'pointer' }}>
+            <span style={{ fontSize: 'var(--font-size-label)', color: 'var(--accent-blue)', fontWeight: 600, cursor: 'pointer' }}>
               View All →
             </span>
           </div>
@@ -463,10 +464,10 @@ export default function PlantOverviewPage() {
                 padding: '0.45rem 0.75rem', borderRadius: 8,
                 background: 'var(--bg-secondary)',
               }}>
-                <span style={{ fontSize: '0.67rem', color: 'var(--text-muted)' }}>{a.time}</span>
+                <span style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)' }}>{a.time}</span>
                 <div>
-                  <div style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-primary)' }}>{a.event}</div>
-                  <div style={{ fontSize: '0.67rem', color: 'var(--text-muted)' }}>{a.meter}</div>
+                  <div style={{ fontSize: 'var(--font-size-body-compact)', fontWeight: 600, color: 'var(--text-primary)' }}>{a.event}</div>
+                  <div style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)' }}>{a.meter}</div>
                 </div>
                 <SeverityBadge label={a.severity} />
                 <StatusBadge  label={a.status}   />
@@ -480,13 +481,13 @@ export default function PlantOverviewPage() {
       <div className="card fade-up delay-1" style={{ padding: '1.125rem' }}>
         <div className="section-title">Plant Energy Summary Table</div>
         <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--font-size-body)' }}>
             <thead>
               <tr style={{ borderBottom: '2px solid var(--border)' }}>
                 {['Period', 'Grid (kWh)', 'DG (kWh)', 'Solar (kWh)', 'Total (kWh)', 'Cost (INR)', 'CO₂ (Kg)'].map(h => (
                   <th key={h} style={{
                     padding: '0.55rem 0.875rem', textAlign: 'left',
-                    fontWeight: 700, fontSize: '0.68rem', letterSpacing: '0.06em',
+                    fontWeight: 700, fontSize: 'var(--font-size-small)', letterSpacing: '0.06em',
                     textTransform: 'uppercase', color: 'var(--text-muted)',
                     whiteSpace: 'nowrap',
                   }}>
@@ -525,7 +526,7 @@ function SeverityBadge({ label }: { label: string }) {
   const c = map[label] ?? '#94a3b8';
   return (
     <span style={{
-      fontSize: '0.62rem', fontWeight: 700, padding: '2px 7px', borderRadius: 10,
+      fontSize: 'var(--font-size-tiny)', fontWeight: 700, padding: '2px 7px', borderRadius: 10,
       background: `${c}20`, color: c, whiteSpace: 'nowrap',
     }}>
       {label}
@@ -538,7 +539,7 @@ function StatusBadge({ label }: { label: string }) {
   const c = map[label] ?? '#94a3b8';
   return (
     <span style={{
-      fontSize: '0.62rem', fontWeight: 700, padding: '2px 7px', borderRadius: 10,
+      fontSize: 'var(--font-size-tiny)', fontWeight: 700, padding: '2px 7px', borderRadius: 10,
       background: `${c}20`, color: c, whiteSpace: 'nowrap',
     }}>
       {label}

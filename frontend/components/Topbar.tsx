@@ -27,14 +27,14 @@ export default function Topbar({ title, subtitle }: TopbarProps) {
       {/* Page title */}
       <div className="topbar-title" style={{ flex: 1, minWidth: 0 }}>
         <h1 style={{
-          fontSize: '0.975rem', fontWeight: 700,
+          fontSize: 'var(--font-size-heading)', fontWeight: 700,
           color: 'var(--text-primary)', lineHeight: 1.2,
           whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
         }}>
           {title}
         </h1>
         {subtitle && (
-          <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 1 }}>
+          <p style={{ fontSize: 'var(--font-size-small-plus)', color: 'var(--text-muted)', marginTop: 1 }}>
             {subtitle}
           </p>
         )}
@@ -85,10 +85,10 @@ export default function Topbar({ title, subtitle }: TopbarProps) {
           <User size={13} color="#fff" />
         </div>
         <div className="topbar-user-details" style={{ lineHeight: 1.25 }}>
-          <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+          <div style={{ fontSize: 'var(--font-size-body-small)', fontWeight: 600, color: 'var(--text-primary)' }}>
             {user?.name ?? 'Guest'}
           </div>
-          <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)' }}>
+          <div style={{ fontSize: 'var(--font-size-tiny)', color: 'var(--text-muted)' }}>
             {user?.role ?? 'Signed out'}
           </div>
         </div>
@@ -102,7 +102,7 @@ const filterBtn: React.CSSProperties = {
   display: 'flex', alignItems: 'center', gap: '0.35rem',
   background: 'var(--bg-secondary)', border: '1px solid var(--border)',
   borderRadius: 7, padding: '0.35rem 0.65rem',
-  color: 'var(--text-secondary)', fontSize: '0.76rem',
+  color: 'var(--text-secondary)', fontSize: 'var(--font-size-body-compact)',
   cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
   fontFamily: 'inherit', fontWeight: 500,
 };

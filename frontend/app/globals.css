@@ -2,6 +2,33 @@
 
 /* ── CSS custom properties (light & dark) ── */
 :root {
+  --font-family: Calibri;
+  --font-size-micro: 0.6rem;
+  --font-size-tiny: 0.62rem;
+  --font-size-tiny-plus: 0.63rem;
+  --font-size-compact: 0.67rem;
+  --font-size-small: 0.68rem;
+  --font-size-small-plus: 0.7rem;
+  --font-size-label: 0.72rem;
+  --font-size-body-small: 0.75rem;
+  --font-size-body-compact: 0.76rem;
+  --font-size-body: 0.8rem;
+  --font-size-body-large: 0.83rem;
+  --font-size-subtitle: 0.9rem;
+  --font-size-brand: 0.93rem;
+  --font-size-heading: 0.975rem;
+  --font-size-section-heading: 1.25rem;
+  --font-size-metric: 1.35rem;
+  --font-size-metric-large: 1.4rem;
+  --font-size-display: 1.5rem;
+  --font-size-chart-label: 10px;
+  --font-size-chart-legend: 11px;
+  --font-size-chart-tooltip: 12px;
+  --font-size-svg-tiny: 8px;
+  --font-size-svg-small: 9px;
+  --font-size-svg-body: 12px;
+  --font-size-svg-label: 13px;
+  --font-size-svg-metric: 22px;
   --bg-primary:      #eef2f7;
   --bg-secondary:    #e2eaf3;
   --bg-card:         #ffffff;
@@ -48,7 +75,7 @@ body {
   height: 100%;
   background: var(--bg-primary);
   color: var(--text-primary);
-  font-family: var(--font-ibm), 'Segoe UI', system-ui, sans-serif;
+  font-family: var(--font-family);
   transition: background 0.25s, color 0.25s;
   -webkit-font-smoothing: antialiased;
 }
@@ -234,7 +261,7 @@ body {
   border-radius: 8px;
   cursor: pointer;
   color: var(--text-sidebar);
-  font-size: 0.83rem;
+  font-size: var(--font-size-body-large);
   font-weight: 500;
   transition: background 0.12s, color 0.12s;
   text-decoration: none;
@@ -244,7 +271,7 @@ body {
 .nav-item.active { background: var(--accent-blue); color: #fff; }
 
 .nav-section {
-  font-size: 0.67rem;
+  font-size: var(--font-size-compact);
   font-weight: 700;
   letter-spacing: 0.11em;
   text-transform: uppercase;
@@ -280,7 +307,7 @@ body {
 
 /* ── Utilities ── */
 .section-title {
-  font-size: 0.72rem;
+  font-size: var(--font-size-label);
   font-weight: 700;
   letter-spacing: 0.07em;
   text-transform: uppercase;
