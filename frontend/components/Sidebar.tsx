@@ -2,17 +2,21 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { ChevronDown, Zap, LogOut } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, LogOut, Zap } from 'lucide-react';
 import { navSections } from '@/data/navigation';
 import type { NavItem, NavChild } from '@/data/navigation';
+import { useAuth } from '@/context/AuthContext';
+import { useSidebar } from '@/context/SidebarContext';
 
 /* ── Sub-link (leaf node) ── */
 function ChildLink({ child }: { child: NavChild }) {
   const pathname = usePathname();
+  const { setMobileOpen } = useSidebar();
   const active = pathname === child.href;
   return (
     <Link
       href={child.href}
+      onClick={() => setMobileOpen(false)}
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -45,6 +49,7 @@ function ChildLink({ child }: { child: NavChild }) {
 /* ── Nav item – handles both leaf and parent ── */
 function NavItemRow({ item }: { item: NavItem }) {
   const pathname = usePathname();
+  const { collapsed, setCollapsed, setMobileOpen } = useSidebar();
 
   /* Auto-open if a child is active */
   const childActive = !!item.children?.some(c => c.href === pathname);
@@ -57,14 +62,20 @@ function NavItemRow({ item }: { item: NavItem }) {
   if (item.children?.length) {
     return (
       <div>
-        <div
+        <button
+          type="button"
           className={`nav-item${childActive ? ' active' : ''}`}
-          onClick={() => setOpen(o => !o)}
-          style={{ justifyContent: 'flex-start' }}
+          title={collapsed ? item.label : undefined}
+          aria-expanded={open}
+          onClick={() => {
+            if (collapsed) setCollapsed(false);
+            setOpen(o => !o);
+          }}
         >
           <Icon size={15} style={{ flexShrink: 0 }} />
-          <span style={{ flex: 1 }}>{item.label}</span>
+          <span className="nav-label" style={{ flex: 1 }}>{item.label}</span>
           <ChevronDown
+            className="nav-chevron"
             size={13}
             style={{
               transition: 'transform 0.2s',
@@ -72,8 +83,8 @@ function NavItemRow({ item }: { item: NavItem }) {
               opacity: 0.5,
             }}
           />
-        </div>
-        {open && (
+        </button>
+        {open && !collapsed && (
           <div style={{
             marginLeft: '1.25rem',
             borderLeft: '1px solid rgba(255,255,255,0.07)',
@@ -89,10 +100,15 @@ function NavItemRow({ item }: { item: NavItem }) {
 
   /* Leaf */
   return (
-    <Link href={item.href ?? '#'} className={`nav-item${isActive ? ' active' : ''}`}>
+    <Link
+      href={item.href ?? '#'}
+      className={`nav-item${isActive ? ' active' : ''}`}
+      title={collapsed ? item.label : undefined}
+      onClick={() => setMobileOpen(false)}
+    >
       <Icon size={15} style={{ flexShrink: 0 }} />
-      <span style={{ flex: 1 }}>{item.label}</span>
-      {item.badge !== undefined && (
+      <span className="nav-label" style={{ flex: 1 }}>{item.label}</span>
+      {item.badge !== undefined && !collapsed && (
         <span style={{
           fontSize: '0.6rem', fontWeight: 700,
           padding: '1px 6px', borderRadius: 10,
@@ -111,10 +127,22 @@ function NavItemRow({ item }: { item: NavItem }) {
 
 /* ── Sidebar shell ── */
 export default function Sidebar() {
+  const { logout } = useAuth();
+  const { collapsed, mobileOpen, toggleCollapsed, setMobileOpen } = useSidebar();
+
   return (
-    <aside className="sidebar">
+    <>
+      <button
+        type="button"
+        className={`sidebar-backdrop${mobileOpen ? ' visible' : ''}`}
+        aria-label="Close navigation menu"
+        onClick={() => setMobileOpen(false)}
+        tabIndex={mobileOpen ? 0 : -1}
+      />
+      <aside className={`sidebar${collapsed ? ' collapsed' : ''}${mobileOpen ? ' mobile-open' : ''}`}>
       {/* Logo */}
       <div style={{
+        position: 'relative',
         padding: '1rem 1rem 0.875rem',
         borderBottom: '1px solid rgba(255,255,255,0.05)',
         display: 'flex', alignItems: 'center', gap: '0.625rem',
@@ -128,7 +156,7 @@ export default function Sidebar() {
         }}>
           <Zap size={17} color="#fff" fill="#fff" />
         </div>
-        <div>
+        <div className="sidebar-brand-copy">
           <div style={{ fontSize: '0.93rem', fontWeight: 700, color: '#fff', lineHeight: 1.2 }}>
             EnergyMeter
           </div>
@@ -136,10 +164,19 @@ export default function Sidebar() {
             ENTERPRISE EDITION
           </div>
         </div>
+        <button
+          type="button"
+          className="sidebar-collapse-button"
+          onClick={toggleCollapsed}
+          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        >
+          {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+        </button>
       </div>
 
       {/* Active plant badge */}
-      <div style={{ padding: '0.625rem 0.75rem' }}>
+      <div className="sidebar-plant" style={{ padding: '0.625rem 0.75rem' }}>
         <div style={{
           background: 'rgba(245,158,11,0.1)',
           border: '1px solid rgba(245,158,11,0.22)',
@@ -180,28 +217,27 @@ export default function Sidebar() {
         borderTop: '1px solid rgba(255,255,255,0.05)',
         flexShrink: 0,
       }}>
-        <button style={{
+        <button
+          type="button"
+          className="sidebar-logout"
+          onClick={logout}
+          title={collapsed ? 'Logout' : undefined}
+          aria-label="Logout"
+          style={{
           display: 'flex', alignItems: 'center', gap: '0.5rem',
           width: '100%', padding: '0.45rem 0.625rem', borderRadius: 7,
           background: 'transparent', border: 'none', cursor: 'pointer',
           color: 'rgba(255,255,255,0.35)', fontSize: '0.8rem',
           transition: 'color 0.12s, background 0.12s',
         }}
-          onMouseEnter={e => {
-            (e.currentTarget as HTMLElement).style.color = '#fff';
-            (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.06)';
-          }}
-          onMouseLeave={e => {
-            (e.currentTarget as HTMLElement).style.color = 'rgba(255,255,255,0.35)';
-            (e.currentTarget as HTMLElement).style.background = 'transparent';
-          }}
         >
-          <LogOut size={14} /> Logout
+          <LogOut size={14} /> <span className="sidebar-label">Logout</span>
         </button>
-        <div style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.18)', paddingLeft: '0.375rem', marginTop: '0.375rem' }}>
+        <div className="sidebar-version" style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.18)', paddingLeft: '0.375rem', marginTop: '0.375rem' }}>
           v1.0.0 · © 2026 EnergyMeter
         </div>
       </div>
-    </aside>
+      </aside>
+    </>
   );
 }

@@ -307,21 +307,21 @@ export default function PlantOverviewPage() {
       </div>
 
       {/* ── Row 1 · KPI cards (5 cols) ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.875rem' }}>
+      <div className="dashboard-kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.875rem' }}>
         {row1.map((c, i) => (
           <StatCard key={c.label} {...c} delay={i * 0.05} />
         ))}
       </div>
 
       {/* ── Row 2 · KPI cards (5 cols) ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.875rem' }}>
+      <div className="dashboard-kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.875rem' }}>
         {row2.map((c, i) => (
           <StatCard key={c.label} {...c} delay={i * 0.05} />
         ))}
       </div>
 
       {/* ── Row 3 · CO₂ | Energy Mix | Cost Mix | Gauge ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '0.875rem' }}>
+      <div className="dashboard-mix-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '0.875rem' }}>
 
         {/* CO₂ */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
@@ -392,7 +392,7 @@ export default function PlantOverviewPage() {
       </div>
 
       {/* ── Row 4 · Trend chart | KPI targets ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: '0.875rem' }}>
+      <div className="dashboard-chart-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: '0.875rem' }}>
 
         {/* Trend Chart */}
         <div className="card fade-up delay-2" style={{ padding: '1.125rem' }}>
@@ -447,7 +447,7 @@ export default function PlantOverviewPage() {
       </div>
 
       {/* ── Row 5 · Monthly bar | Alarms ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.875rem' }}>
+      <div className="dashboard-dual-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.875rem' }}>
 
         {/* Monthly Bar */}
         <div className="card fade-up delay-1" style={{ padding: '1.125rem' }}>

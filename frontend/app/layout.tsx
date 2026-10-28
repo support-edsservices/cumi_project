@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 
 import { ThemeProvider } from "@/context/ThemeContext";
+import { AuthProvider } from "@/context/AuthContext";
+import { SidebarProvider } from "@/context/SidebarContext";
 import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
 import './globals.css'
@@ -19,12 +21,16 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body>
         <ThemeProvider>
-          <Sidebar />
-          <Topbar
-            title="Dashboard"
-            subtitle="Real-time overview of energy consumption and meters"
-          />
-          <main className="main-content">{children}</main>
+          <AuthProvider>
+            <SidebarProvider>
+              <Sidebar />
+              <Topbar
+                title="Dashboard"
+                subtitle="Real-time overview of energy consumption and meters"
+              />
+              <main className="main-content">{children}</main>
+            </SidebarProvider>
+          </AuthProvider>
         </ThemeProvider>
       </body>
     </html>

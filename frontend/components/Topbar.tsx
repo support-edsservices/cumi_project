@@ -1,6 +1,8 @@
 'use client';
-import { Bell, Search, RefreshCw, Calendar, ChevronDown, User } from 'lucide-react';
+import { Bell, Search, RefreshCw, Calendar, ChevronDown, Menu, Moon, Sun, User } from 'lucide-react';
 import { useTheme } from '@/context/ThemeContext';
+import { useAuth } from '@/context/AuthContext';
+import { useSidebar } from '@/context/SidebarContext';
 
 interface TopbarProps {
   title: string;
@@ -9,11 +11,21 @@ interface TopbarProps {
 
 export default function Topbar({ title, subtitle }: TopbarProps) {
   const { theme, toggle } = useTheme();
+  const { user } = useAuth();
+  const { setMobileOpen } = useSidebar();
 
   return (
     <header className="topbar">
+      <button
+        type="button"
+        className="mobile-menu-button"
+        aria-label="Open navigation menu"
+        onClick={() => setMobileOpen(true)}
+      >
+        <Menu size={18} />
+      </button>
       {/* Page title */}
-      <div style={{ flex: 1, minWidth: 0 }}>
+      <div className="topbar-title" style={{ flex: 1, minWidth: 0 }}>
         <h1 style={{
           fontSize: '0.975rem', fontWeight: 700,
           color: 'var(--text-primary)', lineHeight: 1.2,
@@ -27,23 +39,6 @@ export default function Topbar({ title, subtitle }: TopbarProps) {
           </p>
         )}
       </div>
-
-      {/* Date range */}
-      <button style={filterBtn}>
-        <Calendar size={13} />
-        <span>May 20 – May 26, 2026</span>
-        <ChevronDown size={12} />
-      </button>
-
-      {/* Quick filters */}
-      {['All Sites', 'All Buildings', 'All Meters'].map(f => (
-        <button key={f} style={filterBtn}>
-          {f} <ChevronDown size={12} />
-        </button>
-      ))}
-
-      {/* Search */}
-      <IconBtn><Search size={14} /></IconBtn>
 
       {/* Notifications */}
       <div style={{ position: 'relative' }}>
@@ -65,16 +60,15 @@ export default function Topbar({ title, subtitle }: TopbarProps) {
         aria-label="Toggle light / dark mode"
         title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
       />
-
-      {/* Auto refresh indicator */}
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: '0.35rem',
-        fontSize: '0.7rem', color: 'var(--text-muted)', flexShrink: 0,
-      }}>
-        <span className="pulse" style={{ width: 6, height: 6, background: '#10b981', borderRadius: '50%' }} />
-        Auto Refresh
-        <RefreshCw size={11} style={{ cursor: 'pointer', opacity: 0.65 }} />
-      </div>
+      <button
+        type="button"
+        className="mobile-theme-button"
+        onClick={toggle}
+        aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+        title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+      >
+        {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
+      </button>
 
       {/* User avatar */}
       <div style={{
@@ -90,9 +84,13 @@ export default function Topbar({ title, subtitle }: TopbarProps) {
         }}>
           <User size={13} color="#fff" />
         </div>
-        <div style={{ lineHeight: 1.25 }}>
-          <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-primary)' }}>Admin</div>
-          <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)' }}>Administrator</div>
+        <div className="topbar-user-details" style={{ lineHeight: 1.25 }}>
+          <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+            {user?.name ?? 'Guest'}
+          </div>
+          <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)' }}>
+            {user?.role ?? 'Signed out'}
+          </div>
         </div>
       </div>
     </header>
