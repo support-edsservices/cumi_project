@@ -47,6 +47,8 @@ export enum ROUTES {
   SIGNUP = "/signup",
   DASHBOARD = "/",
   ADMIN_USERS = "/admin/users",
+  SHIPMENTS = "/shipments",
+  SHIPMENT_ENTRY = "/shipments/entry",
 }
 
 export enum METER_STATUS {
