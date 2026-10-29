@@ -418,7 +418,6 @@ function DatePaymentDetails({
 }
 
 /* ── Supplier-Wise Chart + Interactive Product Pie Chart ── */
-/* ── Supplier-Wise Chart + Interactive Product Pie Chart ── */
 function SupplierAndProductAnalytics({ data }: { data: Shipment[] }) {
   const supplierData = useMemo(() => {
     const map = new Map<string, number>();
@@ -533,10 +532,11 @@ function SupplierAndProductAnalytics({ data }: { data: Shipment[] }) {
                 outerRadius={80}
                 paddingAngle={4}
                 dataKey="value"
-                label={({ name, percent }:any) => `${name} (${(percent * 100).toFixed(0)}%)`}
+                stroke="none"
+                label={({ name, percent }: any) => `${name} (${(percent * 100).toFixed(0)}%)`}
               >
                 {productPieData.map((entry) => (
-                  <Cell key={entry.name} fill={entry.color} />
+                  <Cell key={entry.name} fill={entry.color} stroke="none" />
                 ))}
               </Pie>
               <Tooltip content={<ChartTooltip />} />
@@ -579,9 +579,10 @@ function PaymentDonut({ data }: { data: Shipment[] }) {
             outerRadius={65}
             paddingAngle={3}
             dataKey="value"
+            stroke="none"
           >
             {slices.map((entry) => (
-              <Cell key={entry.name} fill={entry.color} />
+              <Cell key={entry.name} fill={entry.color} stroke="none" />
             ))}
           </Pie>
           <Tooltip content={<ChartTooltip />} />
@@ -1129,7 +1130,7 @@ export default function ShipmentDashboardPage() {
       <DuePaymentsTable data={filtered} />
 
       {/* ── ROW 6: Recent Shipments Timeline ── */}
-      <RecentTimeline data={filtered} />
+      {/* <RecentTimeline data={filtered} /> */}
     </div>
   );
 }
