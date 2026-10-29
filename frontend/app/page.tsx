@@ -13,7 +13,7 @@ import {
 } from 'recharts';
 import {
   Package, Ship, AlertCircle, Clock, Search, Plus,
-  ChevronLeft, ChevronRight, Anchor, Plane, FileText, X, Calendar as CalendarIcon,
+  ChevronLeft, ChevronRight, Anchor, Plane, FileText, X, Calendar as CalendarIcon, Filter, Globe,
 } from 'lucide-react';
 
 import { Shipment, MaterialStatus, PaymentStatus } from '@/types/shipment';
@@ -44,6 +44,8 @@ const ACCENT = {
 } as const;
 
 const PIE_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#06b6d4', '#ec4899', '#f97316'];
+
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 const PAYMENT_STATUS_COLOR: Record<PaymentStatus, string> = {
   PAID: ACCENT.green,
@@ -417,6 +419,109 @@ function DatePaymentDetails({
   );
 }
 
+/* ── Month-Wise PO Raised vs Payment Status (Side-by-Side Stacked Bar Chart) ── */
+function MonthlyPoAndPaymentAnalytics({
+  data,
+  selectedYear,
+  onYearChange,
+  availableYears,
+}: {
+  data: Shipment[];
+  selectedYear: number;
+  onYearChange: (y: number) => void;
+  availableYears: number[];
+}) {
+  /* Aggregate month-wise PO Raised and Payment statuses */
+  const monthlyData = useMemo(() => {
+    const list = MONTH_NAMES.map((m, idx) => ({
+      month: m,
+      monthIndex: idx,
+      poRaised: 0,
+      paid: 0,
+      unpaid: 0,
+      partial: 0,
+    }));
+
+    data.forEach(s => {
+      const poDate = s.poDate ? new Date(s.poDate) : null;
+      if (poDate && poDate.getFullYear() === selectedYear) {
+        const idx = poDate.getMonth();
+        list[idx].poRaised += 1;
+        if (s.paymentStatus === 'PAID') list[idx].paid += 1;
+        else if (s.paymentStatus === 'NOT PAID') list[idx].unpaid += 1;
+        else if (s.paymentStatus === 'PARTIAL') list[idx].partial += 1;
+      }
+    });
+
+    return list;
+  }, [data, selectedYear]);
+
+  return (
+    <div className="card fade-up delay-1" style={{ padding: '1.125rem' }}>
+      {/* Header with Title and Integrated Year Filter */}
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: '1rem',
+        flexWrap: 'wrap',
+        gap: '0.5rem',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <Filter size={18} color={ACCENT.purple} />
+          <div className="section-title" style={{ margin: 0 }}>
+            Month-Wise PO & Payment Breakdown ({selectedYear})
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <label style={{ fontSize: 'var(--font-size-compact)', fontWeight: 700, color: 'var(--text-muted)' }}>
+            Year:
+          </label>
+          <select
+            value={selectedYear}
+            onChange={e => onYearChange(Number(e.target.value))}
+            style={{
+              background: 'var(--bg-secondary)',
+              border: '1px solid var(--border)',
+              borderRadius: 6,
+              padding: '0.3rem 0.64rem',
+              fontSize: 'var(--font-size-body-small)',
+              color: 'var(--text-primary)',
+              fontWeight: 800,
+              outline: 'none',
+              cursor: 'pointer',
+            }}
+          >
+            {availableYears.map(y => (
+              <option key={y} value={y}>{y}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* Chart: PO Raised on 'po' stack vs Payments Stacked on 'payments' stack */}
+      <ResponsiveContainer width="100%" height={280}>
+        <BarChart data={monthlyData} barSize={22}>
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+          <XAxis dataKey="month" tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} />
+          <YAxis allowDecimals={false} tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} />
+          <Tooltip content={<ChartTooltip />} />
+          <Legend wrapperStyle={{ fontSize: FONT_SIZES.chartLabel, paddingTop: 10 }} />
+          
+          {/* Standalone Bar for PO Raised */}
+          <Bar dataKey="poRaised" name="PO Raised" stackId="po" fill={ACCENT.blue} radius={[4, 4, 0, 0]} />
+          
+          {/* Stacked Bars for Payment Status Breakdown */}
+          <Bar dataKey="paid" name="Paid" stackId="payments" fill={ACCENT.green} radius={[0, 0, 0, 0]} />
+          <Bar dataKey="partial" name="Partial" stackId="payments" fill={ACCENT.orange} radius={[0, 0, 0, 0]} />
+          <Bar dataKey="unpaid" name="Unpaid" stackId="payments" fill={ACCENT.red} radius={[4, 4, 0, 0]} />
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
 /* ── Supplier-Wise Chart + Interactive Product Pie Chart ── */
 function SupplierAndProductAnalytics({ data }: { data: Shipment[] }) {
   const supplierData = useMemo(() => {
@@ -459,14 +564,14 @@ function SupplierAndProductAnalytics({ data }: { data: Shipment[] }) {
         </div>
         <ResponsiveContainer width="100%" height={260}>
           <BarChart 
-              data={supplierData} 
-              barSize={36} 
-              onClick={(state: any) => {
-                if (state && state.activePayload && state.activePayload.length) {
-                  setSelectedSupplier(state.activePayload[0].payload.supplier);
-                }
-              }}
-            >
+            data={supplierData} 
+            barSize={36} 
+            onClick={(state: any) => {
+              if (state && state.activePayload && state.activePayload.length) {
+                setSelectedSupplier(state.activePayload[0].payload.supplier);
+              }
+            }}
+          >
             <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
             <XAxis dataKey="supplier" tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} interval={0} angle={-15} textAnchor="end" />
             <YAxis allowDecimals={false} tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} />
@@ -544,6 +649,45 @@ function SupplierAndProductAnalytics({ data }: { data: Shipment[] }) {
           </ResponsiveContainer>
         )}
       </div>
+    </div>
+  );
+}
+
+/* ── Country-Wise Shipments Chart Component ── */
+function ShipmentsByCountry({ data }: { data: Shipment[] }) {
+  const countryData = useMemo(() => {
+    const map = new Map<string, number>();
+    data.forEach(s => {
+      const country = s.country || 'Unknown';
+      map.set(country, (map.get(country) || 0) + 1);
+    });
+    return Array.from(map.entries())
+      .map(([country, count]) => ({ country, count }))
+      .sort((a, b) => b.count - a.count);
+  }, [data]);
+
+  return (
+    <div className="card fade-up delay-1" style={{ padding: '1.125rem' }}>
+      <div className="section-title">Country-Wise Shipments</div>
+      <ResponsiveContainer width="100%" height={210}>
+        <BarChart data={countryData} barSize={36}>
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+          <XAxis 
+            dataKey="country" 
+            tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} 
+            interval={0} 
+            angle={-15} 
+            textAnchor="end" 
+          />
+          <YAxis allowDecimals={false} tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} />
+          <Tooltip content={<ChartTooltip />} />
+          <Bar dataKey="count" name="Shipments" radius={[6, 6, 0, 0]}>
+            {countryData.map((entry, index) => (
+              <Cell key={entry.country} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+            ))}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
     </div>
   );
 }
@@ -954,6 +1098,21 @@ export default function ShipmentDashboardPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<Date | null>(null);
 
+  /* Dynamically detect available years from data */
+  const availableYears = useMemo(() => {
+    const set = new Set<number>();
+    shipments.forEach(s => {
+      if (s.poDate) {
+        const y = new Date(s.poDate).getFullYear();
+        if (!isNaN(y)) set.add(y);
+      }
+    });
+    if (set.size === 0) set.add(2026);
+    return Array.from(set).sort((a, b) => b - a);
+  }, [shipments]);
+
+  const [selectedYear, setSelectedYear] = useState<number>(() => availableYears[0] || 2026);
+
   /* Filtered data */
   const filtered = useMemo(() => {
     if (!searchTerm.trim()) return shipments;
@@ -1115,22 +1274,26 @@ export default function ShipmentDashboardPage() {
         />
       )}
 
-      {/* ── ROW 3: Supplier Wise Bar Chart + Supplier Product Breakdown Pie Chart ── */}
+      {/* ── ROW 3: Monthly PO Raised vs Payment Status Breakdown ── */}
+      <MonthlyPoAndPaymentAnalytics
+        data={filtered}
+        selectedYear={selectedYear}
+        onYearChange={setSelectedYear}
+        availableYears={availableYears}
+      />
+
+      {/* ── ROW 4: Supplier Wise Bar Chart + Supplier Product Breakdown Pie Chart ── */}
       <SupplierAndProductAnalytics data={filtered} />
 
-      {/* ── ROW 4: Shipments by Mode + Material Status ── */}
-      <div className="dashboard-dual-grid" style={{
-        display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.875rem',
-      }}>
+      {/* ── ROW 5: Shipments by Mode + Material Status + Country Breakdown ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.875rem' }}>
         <ShipmentsByMode data={filtered} />
         <MaterialStatusBreakdown data={filtered} />
+        <ShipmentsByCountry data={filtered} />
       </div>
 
-      {/* ── ROW 5: Upcoming Due Payments Table ── */}
+      {/* ── ROW 6: Upcoming Due Payments Table ── */}
       <DuePaymentsTable data={filtered} />
-
-      {/* ── ROW 6: Recent Shipments Timeline ── */}
-      {/* <RecentTimeline data={filtered} /> */}
     </div>
   );
 }
