@@ -360,9 +360,41 @@ export default function AdminUsersPage() {
               ) : (
                 filteredUsers.map((u, i) => {
                   const isCurrentLoggedIn = u.phone_number === user?.phone_number;
-                  const isSuper = u.role.toLowerCase() === 'superadmin';
                   const isSelf = isCurrentLoggedIn;
+                  const isTargetSuperAdmin = u.role.toLowerCase() === 'superadmin';
+                  const isTargetAdmin = u.role.toLowerCase() === 'admin';
+                  const isCallerSuperAdmin = user?.role?.toLowerCase() === 'superadmin';
                   const isActionBusy = actionLoading === u.phone_number;
+
+                  // Permission Rule 1: Admin can NEVER delete or modify Super Admin
+                  // Permission Rule 2: Super Admin CAN delete Admin and others
+                  let canDelete = false;
+                  let deleteDisabledReason = '';
+
+                  if (isSelf) {
+                    canDelete = false;
+                    deleteDisabledReason = 'You cannot delete your own account.';
+                  } else if (isTargetSuperAdmin) {
+                    canDelete = false;
+                    deleteDisabledReason = 'Admins can never delete the Super Admin.';
+                  } else if (isTargetAdmin) {
+                    if (isCallerSuperAdmin) {
+                      canDelete = true;
+                    } else {
+                      canDelete = false;
+                      deleteDisabledReason = 'Only a Super Admin has permission to delete the Admin.';
+                    }
+                  } else {
+                    // Normal users (manager, user) can be deleted by admin or superadmin
+                    canDelete = true;
+                  }
+
+                  const canToggleGrant = !(isTargetSuperAdmin && !isCallerSuperAdmin);
+                  const grantDisabledReason = !canToggleGrant
+                    ? 'Admins cannot modify Super Admin permissions.'
+                    : u.is_granted
+                    ? 'Revoke login access'
+                    : 'Grant login access';
 
                   return (
                     <tr
@@ -445,26 +477,18 @@ export default function AdminUsersPage() {
                           {/* Grant / Revoke Toggle */}
                           <button
                             onClick={() => handleToggleGrant(u.phone_number, u.is_granted)}
-                            disabled={isActionBusy || (isSuper && user?.role !== 'superadmin')}
-                            title={
-                              isSuper && user?.role !== 'superadmin'
-                                ? 'Only Super Admin can modify Super Admin access'
-                                : u.is_granted
-                                ? 'Revoke login access'
-                                : 'Grant login access'
-                            }
+                            disabled={isActionBusy || !canToggleGrant}
+                            title={grantDisabledReason}
                             style={{
                               padding: '0.35rem 0.65rem',
                               borderRadius: 6,
                               fontSize: '0.76rem',
                               fontWeight: 700,
                               border: 'none',
-                              cursor:
-                                isActionBusy || (isSuper && user?.role !== 'superadmin')
-                                  ? 'not-allowed'
-                                  : 'pointer',
+                              cursor: isActionBusy || !canToggleGrant ? 'not-allowed' : 'pointer',
                               background: u.is_granted ? '#ef444418' : '#10b98118',
                               color: u.is_granted ? '#ef4444' : '#10b981',
+                              opacity: !canToggleGrant ? 0.45 : 1,
                               display: 'inline-flex',
                               alignItems: 'center',
                               gap: 4,
@@ -485,19 +509,20 @@ export default function AdminUsersPage() {
                             )}
                           </button>
 
-                          {/* Delete Button (disabled for self and superadmin if not caller) */}
+                          {/* Delete Button */}
                           {!isSelf && (
                             <button
                               onClick={() => handleDeleteUser(u.phone_number, u.user_name)}
-                              disabled={isActionBusy || (isSuper && user?.role !== 'superadmin')}
-                              title="Delete user"
+                              disabled={isActionBusy || !canDelete}
+                              title={canDelete ? `Delete ${ROLE_LABELS[u.role] || u.role}` : deleteDisabledReason}
                               style={{
                                 padding: '0.35rem 0.5rem',
                                 borderRadius: 6,
                                 border: '1px solid var(--border)',
-                                background: 'transparent',
-                                color: 'var(--text-muted)',
-                                cursor: 'pointer',
+                                background: canDelete ? 'transparent' : 'var(--bg-secondary)',
+                                color: canDelete ? '#ef4444' : 'var(--text-muted)',
+                                cursor: canDelete && !isActionBusy ? 'pointer' : 'not-allowed',
+                                opacity: canDelete ? 1 : 0.4,
                                 display: 'inline-flex',
                                 alignItems: 'center',
                               }}

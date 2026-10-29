@@ -585,12 +585,13 @@ def grant_user_access(data: GrantAccessRequest, admin_user: dict = Depends(requi
             )
 
         target_role = (target_user.get("role") or "").lower()
-        admin_role = (admin_user.get("role") or "").lower()
+        caller_role = (admin_user.get("role") or "").lower()
 
-        if target_role == "superadmin" and admin_role != "superadmin":
+        # Admin can NEVER modify or revoke Super Admin
+        if target_role == "superadmin" and caller_role != "superadmin":
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Only a Superadmin can modify Superadmin permissions."
+                detail="Admins can never modify Super Admin permissions."
             )
 
         update_query = f"UPDATE {User_Table} SET isGranted = %s WHERE phone_number = %s"
@@ -646,20 +647,29 @@ def delete_user(phone_number: str, admin_user: dict = Depends(require_admin)):
             )
 
         target_role = (target_user.get("role") or "").lower()
-        admin_role = (admin_user.get("role") or "").lower()
+        caller_role = (admin_user.get("role") or "").lower()
 
-        if target_role == "superadmin" and admin_role != "superadmin":
+        # Rule 1: Admin can NEVER delete the Super Admin
+        if target_role == "superadmin":
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Only a Superadmin can delete a Superadmin account."
+                detail="Admins can never delete the Super Admin."
             )
 
+        # Rule 2: If target is Admin, only Super Admin has permission to delete them
+        if target_role == "admin" and caller_role != "superadmin":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only a Super Admin has permission to delete an Admin account."
+            )
+
+        # Super Admin can delete admin and all other users; Admin can delete manager & user
         cursor.execute(f"DELETE FROM {User_Table} WHERE phone_number = %s", (target_phone,))
         conn.commit()
 
         return {
             "status": "success",
-            "message": f"User {target_phone} deleted successfully."
+            "message": f"User {target_phone} ({target_role.upper()}) deleted successfully."
         }
     finally:
         if cursor is not None:
