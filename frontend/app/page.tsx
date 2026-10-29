@@ -9,11 +9,11 @@ import { useState, useMemo } from 'react';
 import Link from 'next/link';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, Cell,
+  ResponsiveContainer, Cell, PieChart, Pie, Legend,
 } from 'recharts';
 import {
   Package, Ship, AlertCircle, Clock, Search, Plus,
-  ChevronLeft, ChevronRight, Anchor, Plane, FileText,
+  ChevronLeft, ChevronRight, Anchor, Plane, FileText, X, Calendar as CalendarIcon,
 } from 'lucide-react';
 
 import { Shipment, MaterialStatus, PaymentStatus } from '@/types/shipment';
@@ -26,6 +26,7 @@ import {
   getPaymentPeriod,
   getPaymentTermsLabel,
   isPaymentOverdue,
+  toISODate,
 } from '@/data/shipmentData';
 import { useShipments } from '@/hooks/useShipments';
 import { FONT_SIZES } from '@/context/ThemeContext';
@@ -41,6 +42,8 @@ const ACCENT = {
   purple: '#8b5cf6',
   teal: '#06b6d4',
 } as const;
+
+const PIE_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#06b6d4', '#ec4899', '#f97316'];
 
 const PAYMENT_STATUS_COLOR: Record<PaymentStatus, string> = {
   PAID: ACCENT.green,
@@ -66,8 +69,9 @@ function ChartTooltip({ active, payload, label }: any) {
       background: 'var(--bg-card)', border: '1px solid var(--border)',
       borderRadius: 8, padding: '0.55rem 0.875rem',
       fontSize: FONT_SIZES.chartTooltip, boxShadow: 'var(--card-shadow)',
+      zIndex: 100,
     }}>
-      <div style={{ fontWeight: 700, marginBottom: 4, color: 'var(--text-primary)' }}>{label}</div>
+      <div style={{ fontWeight: 700, marginBottom: 4, color: 'var(--text-primary)' }}>{label || payload[0].name}</div>
       {payload.map((p: any) => (
         <div key={p.name} style={{ color: p.color || p.fill, display: 'flex', gap: 8, lineHeight: 1.7 }}>
           <span style={{ color: 'var(--text-muted)' }}>{p.name}:</span>
@@ -149,8 +153,16 @@ function KpiCard({
   );
 }
 
-/* ── Payment Calendar ── */
-function PaymentCalendar({ data }: { data: Shipment[] }) {
+/* ── Interactive Payment Calendar ── */
+function PaymentCalendar({
+  data,
+  selectedDate,
+  onSelectDate,
+}: {
+  data: Shipment[];
+  selectedDate: Date | null;
+  onSelectDate: (d: Date | null) => void;
+}) {
   const [calDate, setCalDate] = useState(() => new Date());
   const year = calDate.getFullYear();
   const month = calDate.getMonth();
@@ -158,7 +170,7 @@ function PaymentCalendar({ data }: { data: Shipment[] }) {
   const firstDay = getFirstDayOfMonth(year, month);
   const today = new Date();
 
-  /* Build a map: day → shipments due on that day */
+  /* Build map: day → shipments due on that day */
   const dayMap = useMemo(() => {
     const map = new Map<number, { shipment: Shipment; dueDate: Date }[]>();
     data.forEach(s => {
@@ -176,8 +188,6 @@ function PaymentCalendar({ data }: { data: Shipment[] }) {
 
   const prevMonth = () => setCalDate(new Date(year, month - 1, 1));
   const nextMonth = () => setCalDate(new Date(year, month + 1, 1));
-
-  const [hoveredDay, setHoveredDay] = useState<number | null>(null);
 
   const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -236,29 +246,38 @@ function PaymentCalendar({ data }: { data: Shipment[] }) {
           if (day === null) return <div key={`empty-${idx}`} />;
 
           const entries = dayMap.get(day);
-          const isToday = isSameDay(today, new Date(year, month, day));
-          const hovered = hoveredDay === day && !!entries;
+          const cellDate = new Date(year, month, day);
+          const isToday = isSameDay(today, cellDate);
+          const isSelected = selectedDate ? isSameDay(selectedDate, cellDate) : false;
 
           return (
             <div
               key={day}
-              onMouseEnter={() => setHoveredDay(day)}
-              onMouseLeave={() => setHoveredDay(null)}
+              onClick={() => onSelectDate(cellDate)}
               style={{
                 position: 'relative',
-                minHeight: 36,
+                minHeight: 40,
                 borderRadius: 6,
-                border: isToday ? `2px solid ${ACCENT.blue}` : '1px solid transparent',
-                background: entries ? 'var(--bg-secondary)' : 'transparent',
+                border: isSelected
+                  ? `2px solid ${ACCENT.purple}`
+                  : isToday
+                  ? `2px solid ${ACCENT.blue}`
+                  : '1px solid transparent',
+                background: isSelected
+                  ? 'rgba(139, 92, 246, 0.15)'
+                  : entries
+                  ? 'var(--bg-secondary)'
+                  : 'transparent',
                 display: 'flex', flexDirection: 'column',
                 alignItems: 'center', justifyContent: 'center',
-                cursor: entries ? 'pointer' : 'default',
-                transition: 'background 0.15s',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
               }}
             >
               <span style={{
-                fontSize: 'var(--font-size-compact)', fontWeight: isToday ? 800 : 500,
-                color: isToday ? ACCENT.blue : 'var(--text-secondary)',
+                fontSize: 'var(--font-size-compact)',
+                fontWeight: isSelected || isToday ? 800 : 500,
+                color: isSelected ? ACCENT.purple : isToday ? ACCENT.blue : 'var(--text-secondary)',
               }}>
                 {day}
               </span>
@@ -277,52 +296,6 @@ function PaymentCalendar({ data }: { data: Shipment[] }) {
                   ))}
                 </div>
               )}
-
-              {/* Tooltip on hover */}
-              {hovered && entries && (
-                <div style={{
-                  position: 'absolute', bottom: '100%', left: '50%',
-                  transform: 'translateX(-50%)', marginBottom: 4,
-                  background: 'var(--bg-card)', border: '1px solid var(--border)',
-                  borderRadius: 8, padding: '0.5rem 0.75rem',
-                  boxShadow: 'var(--card-shadow)', zIndex: 20,
-                  minWidth: 200, whiteSpace: 'nowrap',
-                }}>
-                  <div style={{
-                    fontSize: 'var(--font-size-compact)', fontWeight: 700,
-                    color: 'var(--text-primary)', marginBottom: 4,
-                  }}>
-                    Due: {formatDMY(new Date(year, month, day))}
-                  </div>
-                  {entries.map(({ shipment: s }) => (
-                    <div key={s.id} style={{ lineHeight: 1.5, marginBottom: 2 }}>
-                      <div style={{
-                        display: 'flex', alignItems: 'center', gap: 6,
-                        fontSize: 'var(--font-size-compact)',
-                      }}>
-                        <div style={{
-                          width: 6, height: 6, borderRadius: '50%',
-                          background: PAYMENT_STATUS_COLOR[s.paymentStatus], flexShrink: 0,
-                        }} />
-                        <span style={{ color: 'var(--text-secondary)' }}>{s.supplier}</span>
-                        <span style={{
-                          marginLeft: 'auto', fontWeight: 700,
-                          fontSize: 'var(--font-size-tiny)',
-                          color: PAYMENT_STATUS_COLOR[s.paymentStatus],
-                        }}>
-                          {s.paymentStatus}
-                        </span>
-                      </div>
-                      <div style={{
-                        paddingLeft: 12, fontSize: 'var(--font-size-tiny)',
-                        color: 'var(--text-muted)',
-                      }}>
-                        {getPaymentTermsLabel(s)}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
           );
         })}
@@ -330,21 +303,252 @@ function PaymentCalendar({ data }: { data: Shipment[] }) {
 
       {/* Legend */}
       <div style={{
-        display: 'flex', gap: '0.875rem', marginTop: '0.75rem',
-        fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)',
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.75rem',
+        fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)', flexWrap: 'wrap', gap: 8,
       }}>
-        {([['PAID', ACCENT.green], ['NOT PAID', ACCENT.red], ['PARTIAL', ACCENT.orange]] as const).map(([label, c]) => (
-          <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            <div style={{ width: 10, height: 4, borderRadius: 1, background: c }} />
-            {label}
-          </div>
-        ))}
+        <div style={{ display: 'flex', gap: '0.875rem' }}>
+          {([['PAID', ACCENT.green], ['NOT PAID', ACCENT.red], ['PARTIAL', ACCENT.orange]] as const).map(([label, c]) => (
+            <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <div style={{ width: 10, height: 4, borderRadius: 1, background: c }} />
+              {label}
+            </div>
+          ))}
+        </div>
+        <div style={{ fontSize: 'var(--font-size-tiny)', fontStyle: 'italic' }}>
+          Click any date to inspect payment details
+        </div>
       </div>
     </div>
   );
 }
 
-/* ── Payment Status Donut (pure SVG) ── */
+/* ── Selected Date Details Modal/Panel ── */
+function DatePaymentDetails({
+  selectedDate,
+  data,
+  onClose,
+}: {
+  selectedDate: Date;
+  data: Shipment[];
+  onClose: () => void;
+}) {
+  const matchingShipments = useMemo(() => {
+    return data.filter(s => {
+      const due = getPaymentDueDate(s);
+      return due ? isSameDay(due, selectedDate) : false;
+    });
+  }, [data, selectedDate]);
+
+  return (
+    <div className="card fade-up" style={{
+      padding: '1.25rem', borderLeft: `4px solid ${ACCENT.purple}`,
+      background: 'var(--bg-card)', boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
+          <CalendarIcon size={18} color={ACCENT.purple} />
+          <h3 style={{ margin: 0, fontSize: 'var(--font-size-heading)', fontWeight: 800, color: 'var(--text-primary)' }}>
+            Payment Details for {formatDMY(selectedDate)}
+          </h3>
+          <span style={{
+            fontSize: 'var(--font-size-compact)', fontWeight: 700, padding: '2px 8px', borderRadius: 12,
+            background: 'rgba(139, 92, 246, 0.15)', color: ACCENT.purple,
+          }}>
+            {matchingShipments.length} {matchingShipments.length === 1 ? 'Shipment' : 'Shipments'} Due
+          </span>
+        </div>
+        <button onClick={onClose} style={{
+          background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 4,
+        }}>
+          <X size={18} />
+        </button>
+      </div>
+
+      {matchingShipments.length === 0 ? (
+        <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-body-small)', padding: '0.5rem 0' }}>
+          No payments are due on this date.
+        </div>
+      ) : (
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 'var(--font-size-body-small)' }}>
+            <thead>
+              <tr style={{ borderBottom: '2px solid var(--border)' }}>
+                {['ID', 'Supplier', 'Invoice No', 'Payment Terms', 'Status', 'Bank Ref', 'Documents'].map(h => (
+                  <th key={h} style={{
+                    padding: '0.5rem 0.75rem', fontWeight: 700, color: 'var(--text-muted)',
+                    fontSize: 'var(--font-size-label)', textTransform: 'uppercase', whiteSpace: 'nowrap',
+                  }}>
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {matchingShipments.map((s, idx) => (
+                <tr key={s.id} style={{ borderBottom: '1px solid var(--border)', background: idx % 2 === 1 ? 'var(--bg-secondary)' : 'transparent' }}>
+                  <td style={{ padding: '0.5rem 0.75rem', fontWeight: 800, color: ACCENT.blue }}>{s.id}</td>
+                  <td style={{ padding: '0.5rem 0.75rem', fontWeight: 700, color: 'var(--text-primary)' }}>{s.supplier}</td>
+                  <td style={{ padding: '0.5rem 0.75rem', color: 'var(--text-secondary)' }}>{s.invoiceNo}</td>
+                  <td style={{ padding: '0.5rem 0.75rem', color: 'var(--text-secondary)' }}>{getPaymentTermsLabel(s)}</td>
+                  <td style={{ padding: '0.5rem 0.75rem' }}>
+                    <span style={{
+                      display: 'inline-block', padding: '2px 8px', borderRadius: 8,
+                      background: `${PAYMENT_STATUS_COLOR[s.paymentStatus]}18`, color: PAYMENT_STATUS_COLOR[s.paymentStatus],
+                      fontWeight: 800, fontSize: 'var(--font-size-tiny)',
+                    }}>
+                      {s.paymentStatus}
+                    </span>
+                  </td>
+                  <td style={{ padding: '0.5rem 0.75rem', color: 'var(--text-muted)' }}>{s.bankReferenceNo || '-'}</td>
+                  <td style={{ padding: '0.5rem 0.75rem' }}>
+                    {s.link ? (
+                      <a href={s.link} target="_blank" rel="noopener noreferrer" style={{ color: ACCENT.blue, textDecoration: 'none', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                        <FileText size={12} /> View
+                      </a>
+                    ) : '-'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Supplier-Wise Chart + Interactive Product Pie Chart ── */
+/* ── Supplier-Wise Chart + Interactive Product Pie Chart ── */
+function SupplierAndProductAnalytics({ data }: { data: Shipment[] }) {
+  const supplierData = useMemo(() => {
+    const map = new Map<string, number>();
+    data.forEach(s => {
+      map.set(s.supplier, (map.get(s.supplier) || 0) + 1);
+    });
+    return Array.from(map.entries())
+      .map(([supplier, count]) => ({ supplier, count }))
+      .sort((a, b) => b.count - a.count);
+  }, [data]);
+
+  const [selectedSupplier, setSelectedSupplier] = useState<string | null>(null);
+
+  // Default to first supplier if none selected
+  const activeSupplier = selectedSupplier || supplierData[0]?.supplier || '';
+
+  /* Calculate Product Breakdown Pie Data for Active Supplier */
+  const productPieData = useMemo(() => {
+    if (!activeSupplier) return [];
+    const map = new Map<string, number>();
+    data.filter(s => s.supplier === activeSupplier).forEach(s => {
+      const prod = s.material || 'General Material';
+      map.set(prod, (map.get(prod) || 0) + 1);
+    });
+    return Array.from(map.entries()).map(([name, value], i) => ({
+      name,
+      value,
+      color: PIE_COLORS[i % PIE_COLORS.length],
+    }));
+  }, [data, activeSupplier]);
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '0.875rem' }}>
+      {/* 1st Chart: Supplier Wise Shipments Bar Chart */}
+      <div className="card fade-up delay-1" style={{ padding: '1.125rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+          <div className="section-title" style={{ margin: 0 }}>Supplier-Wise Shipments</div>
+          <div style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)' }}>Click bar to choose supplier</div>
+        </div>
+        <ResponsiveContainer width="100%" height={260}>
+          <BarChart 
+              data={supplierData} 
+              barSize={36} 
+              onClick={(state: any) => {
+                if (state && state.activePayload && state.activePayload.length) {
+                  setSelectedSupplier(state.activePayload[0].payload.supplier);
+                }
+              }}
+            >
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+            <XAxis dataKey="supplier" tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} interval={0} angle={-15} textAnchor="end" />
+            <YAxis allowDecimals={false} tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} />
+            <Tooltip content={<ChartTooltip />} />
+            <Bar dataKey="count" name="Shipments" radius={[6, 6, 0, 0]} cursor="pointer">
+              {supplierData.map((entry) => (
+                <Cell
+                  key={entry.supplier}
+                  fill={entry.supplier === activeSupplier ? ACCENT.purple : ACCENT.blue}
+                  opacity={entry.supplier === activeSupplier ? 1 : 0.75}
+                />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+
+      {/* 2nd Chart: Supplier Product Breakdown Pie Chart with Dropdown Selection */}
+      <div className="card fade-up delay-2" style={{ padding: '1.125rem', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+          <div className="section-title" style={{ margin: 0 }}>Product Breakdown</div>
+          
+          {/* Supplier Dropdown Selector */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <label style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)', fontWeight: 600 }}>Supplier:</label>
+            <select
+              value={activeSupplier}
+              onChange={(e) => setSelectedSupplier(e.target.value)}
+              style={{
+                background: 'var(--bg-secondary)',
+                border: '1px solid var(--border)',
+                borderRadius: 6,
+                padding: '0.25rem 0.5rem',
+                fontSize: 'var(--font-size-compact)',
+                color: 'var(--text-primary)',
+                fontWeight: 700,
+                outline: 'none',
+                cursor: 'pointer',
+                maxWidth: 180,
+              }}
+            >
+              {supplierData.map(s => (
+                <option key={s.supplier} value={s.supplier}>
+                  {s.supplier} ({s.count})
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {productPieData.length === 0 ? (
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
+            No product data for selected supplier.
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height={260}>
+            <PieChart>
+              <Pie
+                data={productPieData}
+                cx="50%"
+                cy="50%"
+                innerRadius={50}
+                outerRadius={80}
+                paddingAngle={4}
+                dataKey="value"
+                label={({ name, percent }:any) => `${name} (${(percent * 100).toFixed(0)}%)`}
+              >
+                {productPieData.map((entry) => (
+                  <Cell key={entry.name} fill={entry.color} />
+                ))}
+              </Pie>
+              <Tooltip content={<ChartTooltip />} />
+            </PieChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ── Payment Status Donut ── */
 function PaymentDonut({ data }: { data: Shipment[] }) {
   const counts = useMemo(() => {
     const map: Record<PaymentStatus, number> = { PAID: 0, 'NOT PAID': 0, PARTIAL: 0 };
@@ -353,33 +557,11 @@ function PaymentDonut({ data }: { data: Shipment[] }) {
   }, [data]);
 
   const total = data.length;
-  const slices: { name: string; value: number; color: string }[] = [
+  const slices = [
     { name: 'Paid', value: counts.PAID, color: ACCENT.green },
     { name: 'Not Paid', value: counts['NOT PAID'], color: ACCENT.red },
     { name: 'Partial', value: counts.PARTIAL, color: ACCENT.orange },
   ];
-
-  let startAngle = -90;
-  const R = 56, r = 36, cx = 80, cy = 80;
-  const toRad = (d: number) => (d * Math.PI) / 180;
-
-  const paths = slices.filter(s => s.value > 0).map(s => {
-    // A single full slice cannot be drawn as one arc (start == end), so cap it just under 360.
-    const sweep = Math.min((s.value / total) * 360, 359.99);
-    const end = startAngle + sweep;
-    const x1 = cx + R * Math.cos(toRad(startAngle));
-    const y1 = cy + R * Math.sin(toRad(startAngle));
-    const x2 = cx + R * Math.cos(toRad(end));
-    const y2 = cy + R * Math.sin(toRad(end));
-    const large = sweep > 180 ? 1 : 0;
-    const ix1 = cx + r * Math.cos(toRad(end));
-    const iy1 = cy + r * Math.sin(toRad(end));
-    const ix2 = cx + r * Math.cos(toRad(startAngle));
-    const iy2 = cy + r * Math.sin(toRad(startAngle));
-    const path = `M ${x1} ${y1} A ${R} ${R} 0 ${large} 1 ${x2} ${y2} L ${ix1} ${iy1} A ${r} ${r} 0 ${large} 0 ${ix2} ${iy2} Z`;
-    startAngle = end;
-    return { ...s, path };
-  });
 
   return (
     <div className="card fade-up delay-3" style={{
@@ -387,19 +569,24 @@ function PaymentDonut({ data }: { data: Shipment[] }) {
       alignItems: 'center', minWidth: 260,
     }}>
       <div className="section-title" style={{ alignSelf: 'flex-start' }}>Payment Status</div>
-      <svg viewBox="0 0 160 160" style={{ width: 150, margin: '0.5rem 0' }}>
-        {paths.map(s => (
-          <path key={s.name} d={s.path} fill={s.color} opacity={0.88} />
-        ))}
-        <text x={cx} y={cy - 4} textAnchor="middle" fontSize={FONT_SIZES.svgMetric}
-          fontWeight="800" fill="var(--text-primary)">
-          {total}
-        </text>
-        <text x={cx} y={cy + 14} textAnchor="middle" fontSize={FONT_SIZES.svgSmall}
-          fill="var(--text-muted)">
-          Shipments
-        </text>
-      </svg>
+      <ResponsiveContainer width="100%" height={160}>
+        <PieChart>
+          <Pie
+            data={slices}
+            cx="50%"
+            cy="50%"
+            innerRadius={45}
+            outerRadius={65}
+            paddingAngle={3}
+            dataKey="value"
+          >
+            {slices.map((entry) => (
+              <Cell key={entry.name} fill={entry.color} />
+            ))}
+          </Pie>
+          <Tooltip content={<ChartTooltip />} />
+        </PieChart>
+      </ResponsiveContainer>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem', width: '100%' }}>
         {slices.map(s => (
           <div key={s.name} style={{
@@ -421,7 +608,7 @@ function PaymentDonut({ data }: { data: Shipment[] }) {
   );
 }
 
-/* ── Shipments by Mode (Recharts Bar): Sea / Air / Others ── */
+/* ── Shipments by Mode (Recharts Bar) ── */
 function ShipmentsByMode({ data }: { data: Shipment[] }) {
   const modeData = useMemo(() => {
     let sea = 0, air = 0, others = 0;
@@ -458,7 +645,6 @@ function ShipmentsByMode({ data }: { data: Shipment[] }) {
           </Bar>
         </BarChart>
       </ResponsiveContainer>
-      {/* Icon summary below chart */}
       <div style={{
         display: 'flex', justifyContent: 'center', gap: '2rem', marginTop: '0.5rem', flexWrap: 'wrap',
       }}>
@@ -668,7 +854,6 @@ function DuePaymentsTable({ data }: { data: Shipment[] }) {
 /* ── Recent Shipments Timeline ── */
 function RecentTimeline({ data }: { data: Shipment[] }) {
   const recent = useMemo(() => {
-    // createdAt is YYYY-MM-DD, so a string compare sorts correctly. Ties: newest id first.
     return [...data]
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id, undefined, { numeric: true }))
       .slice(0, 5);
@@ -695,7 +880,6 @@ function RecentTimeline({ data }: { data: Shipment[] }) {
               display: 'flex', flexDirection: 'column', alignItems: 'center',
               flex: 1, minWidth: 170, position: 'relative',
             }}>
-              {/* Connecting line */}
               {!isLast && (
                 <div style={{
                   position: 'absolute', top: 18, left: '50%', width: '100%',
@@ -703,7 +887,6 @@ function RecentTimeline({ data }: { data: Shipment[] }) {
                 }} />
               )}
 
-              {/* Dot */}
               <div style={{
                 width: 14, height: 14, borderRadius: '50%',
                 background: statusColor, border: '3px solid var(--bg-card)',
@@ -711,7 +894,6 @@ function RecentTimeline({ data }: { data: Shipment[] }) {
                 zIndex: 1, marginBottom: '0.5rem', flexShrink: 0,
               }} />
 
-              {/* Date */}
               <div style={{
                 fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)',
                 fontWeight: 600, marginBottom: 2,
@@ -719,7 +901,6 @@ function RecentTimeline({ data }: { data: Shipment[] }) {
                 {formatDMY(s.createdAt)}
               </div>
 
-              {/* Supplier */}
               <div style={{
                 fontSize: 'var(--font-size-body-small)', fontWeight: 700,
                 color: 'var(--text-primary)', textAlign: 'center',
@@ -728,7 +909,6 @@ function RecentTimeline({ data }: { data: Shipment[] }) {
                 {s.supplier}
               </div>
 
-              {/* Material status badge */}
               <span style={{
                 display: 'inline-block', padding: '2px 8px', borderRadius: 10,
                 background: `${statusColor}18`, color: statusColor,
@@ -738,7 +918,6 @@ function RecentTimeline({ data }: { data: Shipment[] }) {
                 {s.materialStatus}
               </span>
 
-              {/* Delivered date, or ETD / ETA */}
               <div style={{
                 marginTop: 4, textAlign: 'center', padding: '0 0.5rem',
                 fontSize: 'var(--font-size-tiny)', color: 'var(--text-secondary)', lineHeight: 1.4,
@@ -748,7 +927,6 @@ function RecentTimeline({ data }: { data: Shipment[] }) {
                   : formatEtdEta(s)}
               </div>
 
-              {/* Mode icon + label */}
               <div style={{
                 marginTop: 4, color: 'var(--text-muted)',
                 display: 'flex', alignItems: 'center', gap: 4,
@@ -773,6 +951,7 @@ function RecentTimeline({ data }: { data: Shipment[] }) {
 export default function ShipmentDashboardPage() {
   const { shipments, ready } = useShipments();
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState<Date | null>(null);
 
   /* Filtered data */
   const filtered = useMemo(() => {
@@ -799,7 +978,6 @@ export default function ShipmentDashboardPage() {
     return { totalShipments, inTransit, pendingPayments, overduePayments };
   }, [filtered]);
 
-  // Wait for the saved data so the page doesn't flash the starting records first.
   if (!ready) {
     return (
       <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: 'var(--font-size-body)' }}>
@@ -809,7 +987,7 @@ export default function ShipmentDashboardPage() {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
 
       {/* ── Page header ── */}
       <div style={{
@@ -919,11 +1097,27 @@ export default function ShipmentDashboardPage() {
       <div className="dashboard-dual-grid" style={{
         display: 'grid', gridTemplateColumns: '1fr 300px', gap: '0.875rem',
       }}>
-        <PaymentCalendar data={filtered} />
+        <PaymentCalendar
+          data={filtered}
+          selectedDate={selectedCalendarDate}
+          onSelectDate={(d) => setSelectedCalendarDate(d)}
+        />
         <PaymentDonut data={filtered} />
       </div>
 
-      {/* ── ROW 3: Shipments by Mode + Material Status ── */}
+      {/* Expanded Payment Details for selected date */}
+      {selectedCalendarDate && (
+        <DatePaymentDetails
+          selectedDate={selectedCalendarDate}
+          data={filtered}
+          onClose={() => setSelectedCalendarDate(null)}
+        />
+      )}
+
+      {/* ── ROW 3: Supplier Wise Bar Chart + Supplier Product Breakdown Pie Chart ── */}
+      <SupplierAndProductAnalytics data={filtered} />
+
+      {/* ── ROW 4: Shipments by Mode + Material Status ── */}
       <div className="dashboard-dual-grid" style={{
         display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.875rem',
       }}>
@@ -931,10 +1125,10 @@ export default function ShipmentDashboardPage() {
         <MaterialStatusBreakdown data={filtered} />
       </div>
 
-      {/* ── ROW 4: Upcoming Due Payments Table ── */}
+      {/* ── ROW 5: Upcoming Due Payments Table ── */}
       <DuePaymentsTable data={filtered} />
 
-      {/* ── ROW 5: Recent Shipments Timeline ── */}
+      {/* ── ROW 6: Recent Shipments Timeline ── */}
       <RecentTimeline data={filtered} />
     </div>
   );

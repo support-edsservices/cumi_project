@@ -151,7 +151,6 @@ function shipmentToForm(s: Shipment): FormState {
 }
 
 function formToShipment(f: FormState, id: string, createdAt: string, prev?: Shipment): Shipment {
-  // Keep the original document record (and its url) when the file name is unchanged.
   const doc = (name: string, existing?: ShipmentDocument): ShipmentDocument | undefined =>
     !name ? undefined : existing && existing.name === name ? existing : { name, url: '#', type: 'pdf' };
 
@@ -173,7 +172,7 @@ function formToShipment(f: FormState, id: string, createdAt: string, prev?: Ship
     blDocument: doc(f.blDocName, prev?.blDocument),
     mawb: f.mawb.trim(),
     hawb: f.hawb.trim(),
-    cha: f.cha.trim() || 'In-House CUMI Clearance',
+    cha: f.cha.trim() || 'In-House Clearance',
     documentStatus: f.documentStatus,
     modeOfShipment: f.modeOfShipment,
     otherModeDetail: f.modeOfShipment === 'Others' ? f.otherModeDetail.trim() : undefined,
@@ -255,14 +254,12 @@ export default function ShipmentEntryAndHistoryPage() {
   const errors = useMemo(() => (showErrors ? validate(formData) : {}), [showErrors, formData]);
   const errorCount = Object.keys(errors).length;
 
-  // Dashboard links here with ?tab=history
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get('tab') === 'history') {
       setActiveTab('history');
     }
   }, []);
 
-  // Esc closes the dialog / drawer, and the page behind does not scroll while they are open
   useEffect(() => {
     if (!selectedId && !deleteTarget) return;
     const onKey = (e: KeyboardEvent) => {
@@ -299,7 +296,6 @@ export default function ShipmentEntryAndHistoryPage() {
     }
   };
 
-  /* ── Edit / delete ── */
   const startEdit = (s: Shipment) => {
     setEditingId(s.id);
     setFormData(shipmentToForm(s));
@@ -369,12 +365,10 @@ export default function ShipmentEntryAndHistoryPage() {
     if (!stayOnPage) setActiveTab('history');
   };
 
-  /* ── Live previews inside the form ── */
   const creditDaysNum = parseInt(formData.creditDays, 10);
   const creditBaseISO = getPaymentBaseISO(formData);
   const creditDue = creditDaysNum > 0 ? addDaysToISO(creditBaseISO, creditDaysNum) : null;
 
-  /* ── History: filtering ── */
   const filteredShipments = useMemo(() => {
     const q = searchTerm.toLowerCase();
     return shipments.filter((item) => {
@@ -399,7 +393,6 @@ export default function ShipmentEntryAndHistoryPage() {
     });
   }, [shipments, searchTerm, filterMode, filterPayment, filterDocStatus, filterMaterialStatus]);
 
-  /* ── Excel (.xlsx) export ── */
   const handleExportExcel = () => {
     if (filteredShipments.length === 0) {
       alert('No records available to export.');
@@ -447,12 +440,11 @@ export default function ShipmentEntryAndHistoryPage() {
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Shipment History');
     worksheet['!cols'] = Object.keys(exportRows[0]).map((key) => ({ wch: Math.max(key.length, 14) }));
 
-    const fileName = `CUMI_Shipments_History_${toISODate(new Date())}.xlsx`;
+    const fileName = `Shipments_History_${toISODate(new Date())}.xlsx`;
     XLSX.writeFile(workbook, fileName);
     showToast(`Exported ${filteredShipments.length} rows to ${fileName}`);
   };
 
-  /* ── CSV export ── */
   const handleExportCSV = () => {
     if (filteredShipments.length === 0) {
       alert('No records available to export.');
@@ -497,7 +489,7 @@ export default function ShipmentEntryAndHistoryPage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.setAttribute('download', `CUMI_Shipments_${toISODate(new Date())}.csv`);
+    link.setAttribute('download', `Shipments_${toISODate(new Date())}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -505,14 +497,10 @@ export default function ShipmentEntryAndHistoryPage() {
     showToast('Exported CSV successfully!');
   };
 
-  /* ═════════════════════════════════════════════════════════════════════════
-     Render
-  ═════════════════════════════════════════════════════════════════════════ */
   const isEditing = editingId !== null;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', maxWidth: 1400, margin: '0 auto', width: '100%' }}>
-      {/* Page-level CSS: themed date picker icon + drawer animations */}
       <style>{PAGE_CSS}</style>
 
       {/* ── Toast ── */}
@@ -675,7 +663,6 @@ export default function ShipmentEntryAndHistoryPage() {
             </div>
           )}
 
-          {/* ── 1. Supplier & PO ── */}
           <Section icon={<Building2 size={16} color="var(--accent-blue)" />} tint="#3b82f618" title="Supplier & Purchase Order">
             <div style={gridStyle}>
               <Field label="Supplier Name" required id="supplier" error={errors.supplier}>
@@ -712,7 +699,6 @@ export default function ShipmentEntryAndHistoryPage() {
             </div>
           </Section>
 
-          {/* ── 2. Material & Invoice ── */}
           <Section icon={<Receipt size={16} color="var(--accent-purple)" />} tint="#8b5cf618" title="Material Description & Commercial Invoice" delay={1}>
             <div style={gridStyle}>
               <Field label="Material / Product Description">
@@ -749,7 +735,6 @@ export default function ShipmentEntryAndHistoryPage() {
             </div>
           </Section>
 
-          {/* ── 3. Mode of shipment & freight documents ── */}
           <Section icon={<Navigation size={16} color="var(--accent-teal)" />} tint="#06b6d418" title="Mode of Shipment & Freight Documents" delay={2}>
             <div style={gridStyle}>
               <div style={{ gridColumn: '1 / -1' }}>
@@ -832,7 +817,6 @@ export default function ShipmentEntryAndHistoryPage() {
             </div>
           </Section>
 
-          {/* ── 4. Customs, BOE & CHA ── */}
           <Section icon={<ShieldCheck size={16} color="var(--accent-green)" />} tint="#10b98118" title="Customs Clearance, BOE & CHA" delay={3}>
             <div style={gridStyle}>
               <Field label="Custom House Agent (CHA)">
@@ -892,7 +876,6 @@ export default function ShipmentEntryAndHistoryPage() {
             </div>
           </Section>
 
-          {/* ── 5. Payment ── */}
           <Section icon={<CreditCard size={16} color="var(--accent-orange)" />} tint="#f59e0b18" title="Payment Terms" delay={4}>
             <div style={gridStyle}>
               <div>
@@ -962,7 +945,6 @@ export default function ShipmentEntryAndHistoryPage() {
                 </div>
               </div>
 
-              {/* Credit days */}
               <div style={{ gridColumn: '1 / -1' }}>
                 <label
                   style={{
@@ -1036,7 +1018,6 @@ export default function ShipmentEntryAndHistoryPage() {
             </div>
           </Section>
 
-          {/* ── 6. Material status & dates ── */}
           <Section icon={<Calendar size={16} color="var(--accent-blue)" />} tint="#3b82f618" title="Material Status, Delivery Dates & Documents Link" delay={5}>
             <div style={gridStyle}>
               <Field label="Material Status">
@@ -1105,7 +1086,6 @@ export default function ShipmentEntryAndHistoryPage() {
             </div>
           </Section>
 
-          {/* ── Footer actions ── */}
           <div
             style={{
               display: 'flex',
@@ -1317,8 +1297,8 @@ export default function ShipmentEntryAndHistoryPage() {
             </div>
           </div>
 
-          {/* Table */}
-          <div className="card fade-up delay-1" style={{ padding: '1.125rem', overflow: 'hidden' }}>
+          {/* Table Container - Fixed 800px Height & Fixed Layout Alignment */}
+          <div className="card fade-up delay-1" style={{ padding: '1.125rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
               <div style={{ fontSize: 'var(--font-size-heading)', fontWeight: 700, color: 'var(--text-primary)' }}>
                 Shipment Register & Records ({filteredShipments.length} matching)
@@ -1326,26 +1306,109 @@ export default function ShipmentEntryAndHistoryPage() {
               <div style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)' }}>Click View to open the full details</div>
             </div>
 
-            <div style={{ overflowX: 'auto', width: '100%' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: 1200 }}>
+            {/* Scroll Container: Fixed 800px Height */}
+            <div
+              style={{
+                height: '800px',
+                maxHeight: '800px',
+                overflow: 'auto',
+                width: '100%',
+                position: 'relative',
+                border: '1px solid var(--border)',
+                borderRadius: '8px',
+              }}
+            >
+              <table
+                style={{
+                  width: '100%',
+                  borderCollapse: 'separate',
+                  borderSpacing: 0,
+                  textAlign: 'left',
+                  minWidth: 1350,
+                  tableLayout: 'fixed',
+                }}
+              >
+                <colgroup>
+                  <col style={{ width: '120px' }} />
+                  <col style={{ width: '220px' }} />
+                  <col style={{ width: '200px' }} />
+                  <col style={{ width: '180px' }} />
+                  <col style={{ width: '180px' }} />
+                  <col style={{ width: '220px' }} />
+                  <col style={{ width: '180px' }} />
+                  <col style={{ width: '140px' }} />
+                </colgroup>
+
                 <thead>
-                  <tr style={{ borderBottom: '2px solid var(--border)', background: 'var(--bg-secondary)' }}>
-                    {['ID / Mode', 'Supplier & Country', 'PO & Invoice', 'BL / MAWB', 'BOE / CHA', 'Payment', 'Material Status', 'Actions'].map((h) => (
+                  <tr>
+                    {/* Fixed First Column Header */}
+                    <th
+                      style={{
+                        position: 'sticky',
+                        top: 0,
+                        left: 0,
+                        zIndex: 11,
+                        background: 'var(--bg-secondary)',
+                        borderBottom: '2px solid var(--border)',
+                        padding: '0.75rem 0.85rem',
+                        fontSize: 'var(--font-size-label)',
+                        fontWeight: 700,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.05em',
+                        color: 'var(--text-muted)',
+                        whiteSpace: 'nowrap',
+                        boxShadow: '2px 0 5px rgba(0,0,0,0.05)',
+                        verticalAlign: 'middle',
+                      }}
+                    >
+                      ID / Mode
+                    </th>
+
+                    {['Supplier & Country', 'PO & Invoice', 'BL / MAWB', 'BOE / CHA', 'Payment', 'Material Status'].map((h) => (
                       <th
                         key={h}
                         style={{
-                          padding: '0.65rem 0.85rem',
+                          position: 'sticky',
+                          top: 0,
+                          zIndex: 10,
+                          background: 'var(--bg-secondary)',
+                          borderBottom: '2px solid var(--border)',
+                          padding: '0.75rem 0.85rem',
                           fontSize: 'var(--font-size-label)',
                           fontWeight: 700,
                           textTransform: 'uppercase',
                           letterSpacing: '0.05em',
                           color: 'var(--text-muted)',
                           whiteSpace: 'nowrap',
+                          verticalAlign: 'middle',
                         }}
                       >
                         {h}
                       </th>
                     ))}
+
+                    {/* Fixed Actions Header */}
+                    <th
+                      style={{
+                        position: 'sticky',
+                        top: 0,
+                        right: 0,
+                        zIndex: 11,
+                        background: 'var(--bg-secondary)',
+                        borderBottom: '2px solid var(--border)',
+                        padding: '0.75rem 0.85rem',
+                        fontSize: 'var(--font-size-label)',
+                        fontWeight: 700,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.05em',
+                        color: 'var(--text-muted)',
+                        whiteSpace: 'nowrap',
+                        boxShadow: '-2px 0 5px rgba(0,0,0,0.05)',
+                        verticalAlign: 'middle',
+                      }}
+                    >
+                      Actions
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1362,65 +1425,82 @@ export default function ShipmentEntryAndHistoryPage() {
                       const isOverdue = !!dueDate && item.paymentStatus !== 'PAID' && (getDaysUntilDue(item) ?? 0) < 0;
                       const isSelected = item.id === selectedId;
 
+                      const rowBg = isSelected
+                        ? 'rgba(59,130,246,0.1)'
+                        : idx % 2 === 1
+                        ? 'var(--bg-secondary)'
+                        : 'var(--bg-card)';
+
                       return (
                         <tr
                           key={item.id}
                           style={{
-                            borderBottom: '1px solid var(--border)',
-                            background: isSelected ? 'rgba(59,130,246,0.1)' : idx % 2 === 1 ? 'var(--bg-secondary)' : 'transparent',
+                            background: rowBg,
                             transition: 'background 0.15s ease',
                           }}
                         >
-                          {/* ID & Mode */}
-                          <td style={{ padding: '0.65rem 0.85rem', whiteSpace: 'nowrap' }}>
+                          {/* Fixed First Column: ID & Mode */}
+                          <td
+                            style={{
+                              position: 'sticky',
+                              left: 0,
+                              zIndex: 2,
+                              background: rowBg,
+                              padding: '0.75rem 0.85rem',
+                              whiteSpace: 'nowrap',
+                              borderBottom: '1px solid var(--border)',
+                              boxShadow: '2px 0 5px rgba(0,0,0,0.05)',
+                              verticalAlign: 'top',
+                            }}
+                          >
                             <div style={{ fontWeight: 800, color: 'var(--accent-blue)', fontSize: 'var(--font-size-body-compact)' }}>{item.id}</div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2, fontSize: 'var(--font-size-tiny)', color: 'var(--text-muted)' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4, fontSize: 'var(--font-size-tiny)', color: 'var(--text-muted)' }}>
                               <ModeIcon mode={item.modeOfShipment} size={12} />
                               <span>{getModeLabel(item)}</span>
                             </div>
                           </td>
 
                           {/* Supplier & Country */}
-                          <td style={{ padding: '0.65rem 0.85rem' }}>
+                          <td style={{ padding: '0.75rem 0.85rem', borderBottom: '1px solid var(--border)', verticalAlign: 'top' }}>
                             <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: 'var(--font-size-body-compact)' }}>{item.supplier}</div>
-                            <div style={{ fontSize: 'var(--font-size-tiny)', color: 'var(--text-muted)' }}>
+                            <div style={{ fontSize: 'var(--font-size-tiny)', color: 'var(--text-muted)', marginTop: 2 }}>
                               {item.country} • {item.portOfLoading}
                             </div>
                           </td>
 
                           {/* PO & Invoice */}
-                          <td style={{ padding: '0.65rem 0.85rem' }}>
+                          <td style={{ padding: '0.75rem 0.85rem', borderBottom: '1px solid var(--border)', verticalAlign: 'top' }}>
                             <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 'var(--font-size-compact)' }}>{item.invoiceNo}</div>
-                            <div style={{ fontSize: 'var(--font-size-tiny)', color: 'var(--text-muted)' }}>
+                            <div style={{ fontSize: 'var(--font-size-tiny)', color: 'var(--text-muted)', marginTop: 2 }}>
                               PO: {item.poNo}
                               {item.poDate ? ` (${formatDMY(item.poDate)})` : ''}
                             </div>
                           </td>
 
                           {/* BL / MAWB */}
-                          <td style={{ padding: '0.65rem 0.85rem' }}>
+                          <td style={{ padding: '0.75rem 0.85rem', borderBottom: '1px solid var(--border)', verticalAlign: 'top' }}>
                             <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 'var(--font-size-compact)' }}>
                               {item.blNo || item.mawb || '-'}
                             </div>
-                            <div style={{ fontSize: 'var(--font-size-tiny)', color: 'var(--text-muted)' }}>
+                            <div style={{ fontSize: 'var(--font-size-tiny)', color: 'var(--text-muted)', marginTop: 2 }}>
                               BL Date: {formatDMY(item.blDate) || '-'}
                             </div>
                           </td>
 
                           {/* BOE / CHA */}
-                          <td style={{ padding: '0.65rem 0.85rem' }}>
+                          <td style={{ padding: '0.75rem 0.85rem', borderBottom: '1px solid var(--border)', verticalAlign: 'top' }}>
                             <div style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-primary)', fontWeight: 600 }}>{item.boeNo || '-'}</div>
-                            <div style={{ fontSize: 'var(--font-size-tiny)', color: 'var(--text-muted)' }}>CHA: {item.cha}</div>
+                            <div style={{ fontSize: 'var(--font-size-tiny)', color: 'var(--text-muted)', marginTop: 2 }}>CHA: {item.cha}</div>
                           </td>
 
                           {/* Payment */}
-                          <td style={{ padding: '0.65rem 0.85rem', whiteSpace: 'nowrap' }}>
+                          <td style={{ padding: '0.75rem 0.85rem', borderBottom: '1px solid var(--border)', verticalAlign: 'top' }}>
                             <PaymentBadge status={item.paymentStatus} />
-                            <div style={{ fontSize: 'var(--font-size-tiny)', color: 'var(--text-primary)', fontWeight: 600, marginTop: 3 }}>
+                            <div style={{ fontSize: 'var(--font-size-tiny)', color: 'var(--text-primary)', fontWeight: 600, marginTop: 4 }}>
                               {getPaymentTermsLabel(item)}
                             </div>
                             {period && (
-                              <div style={{ fontSize: 'var(--font-size-tiny)', color: isOverdue ? 'var(--accent-red)' : 'var(--text-muted)' }}>
+                              <div style={{ fontSize: 'var(--font-size-tiny)', color: isOverdue ? 'var(--accent-red)' : 'var(--text-muted)', marginTop: 2 }}>
                                 {formatDMY(period.from)} → {formatDMY(period.to)}
                                 {isOverdue && ' (Overdue)'}
                               </div>
@@ -1428,7 +1508,7 @@ export default function ShipmentEntryAndHistoryPage() {
                           </td>
 
                           {/* Material Status */}
-                          <td style={{ padding: '0.65rem 0.85rem', whiteSpace: 'nowrap' }}>
+                          <td style={{ padding: '0.75rem 0.85rem', borderBottom: '1px solid var(--border)', verticalAlign: 'top' }}>
                             <span
                               style={{
                                 fontSize: 'var(--font-size-tiny)',
@@ -1438,11 +1518,12 @@ export default function ShipmentEntryAndHistoryPage() {
                                 background: 'var(--bg-card)',
                                 border: '1px solid var(--border)',
                                 color: 'var(--text-primary)',
+                                display: 'inline-block',
                               }}
                             >
                               {item.materialStatus}
                             </span>
-                            <div style={{ fontSize: 'var(--font-size-tiny)', color: 'var(--text-muted)', marginTop: 3 }}>
+                            <div style={{ fontSize: 'var(--font-size-tiny)', color: 'var(--text-muted)', marginTop: 4 }}>
                               {item.materialStatus === 'Delivered' ? (
                                 <>Delivered : {formatDMY(item.deliveredDate) || '?'}</>
                               ) : (
@@ -1454,8 +1535,20 @@ export default function ShipmentEntryAndHistoryPage() {
                             </div>
                           </td>
 
-                          {/* Actions */}
-                          <td style={{ padding: '0.65rem 0.85rem', whiteSpace: 'nowrap' }}>
+                          {/* Fixed Actions Column */}
+                          <td
+                            style={{
+                              position: 'sticky',
+                              right: 0,
+                              zIndex: 2,
+                              background: rowBg,
+                              padding: '0.75rem 0.85rem',
+                              whiteSpace: 'nowrap',
+                              borderBottom: '1px solid var(--border)',
+                              boxShadow: '-2px 0 5px rgba(0,0,0,0.05)',
+                              verticalAlign: 'top',
+                            }}
+                          >
                             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                               <button type="button" onClick={() => setSelectedId(item.id)} style={rowButtonStyle} title="View complete shipment info">
                                 <Eye size={13} color="var(--accent-blue)" />
@@ -1558,7 +1651,6 @@ function ShipmentDrawer({
 
   return (
     <>
-      {/* Dimmed left half; click to close */}
       <div
         onClick={onClose}
         style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 10000, animation: 'sp-fade-in 0.2s ease' }}
@@ -1584,7 +1676,6 @@ function ShipmentDrawer({
           animation: 'sp-drawer-in 0.25s ease',
         }}
       >
-        {/* Header */}
         <div
           style={{
             display: 'flex',
@@ -1649,7 +1740,6 @@ function ShipmentDrawer({
           </div>
         </div>
 
-        {/* Body */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '1.25rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
           <DetailGroup title="Supplier & Purchase Order">
             <Detail label="Supplier">{s.supplier}</Detail>
@@ -1931,11 +2021,6 @@ function Field({
   );
 }
 
-/**
- * Date input with its own calendar icon.
- * The browser's built-in icon is hidden (see PAGE_CSS) and ours uses the theme
- * text colour, so it stays visible in both light and dark mode.
- */
 function DateField({
   value,
   onChange,
@@ -2104,9 +2189,6 @@ function FileUploadZone({
    Shared styles
 ═══════════════════════════════════════════════════════════════════════════ */
 const PAGE_CSS = `
-/* Hide the browser's own calendar icon (it can render white in light mode) and
-   stretch it over the whole field so a click anywhere still opens the picker.
-   The visible icon is the themed <Calendar /> drawn by DateField. */
 .sp-date { position: relative; }
 .sp-date::-webkit-calendar-picker-indicator {
   position: absolute; top: 0; left: 0; right: 0; bottom: 0;
@@ -2157,7 +2239,6 @@ const filterSelectStyle: React.CSSProperties = {
   fontSize: 'var(--font-size-compact)',
 };
 
-/** Red border when `error` is set. Uses the `border` shorthand so React never mixes shorthand and longhand. */
 function withError(base: React.CSSProperties, error?: string): React.CSSProperties {
   return error ? { ...base, border: '1px solid var(--accent-red)' } : base;
 }
