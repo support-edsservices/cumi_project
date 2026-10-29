@@ -13,7 +13,7 @@ import {
 } from 'recharts';
 import {
   Package, Ship, AlertCircle, Clock, Search, Plus,
-  ChevronLeft, ChevronRight, Anchor, Plane, FileText, X, Calendar as CalendarIcon, Filter, Globe,
+  ChevronLeft, ChevronRight, Anchor, Plane, FileText, X, Calendar as CalendarIcon, Filter, Globe, AlertTriangle, PackageX, ExternalLink,
 } from 'lucide-react';
 
 import { Shipment, MaterialStatus, PaymentStatus } from '@/types/shipment';
@@ -99,20 +99,51 @@ function getFirstDayOfMonth(year: number, month: number): number {
   return new Date(year, month, 1).getDay();
 }
 
+/** Parses Date objects and 'yyyy-mm-dd' strings without timezone shifts. */
+function toLocalDate(v: unknown): Date | null {
+  if (!v) return null;
+  if (typeof v === 'string') {
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(v);
+    if (m) return new Date(+m[1], +m[2] - 1, +m[3]);
+  }
+  const d = v instanceof Date ? v : new Date(String(v));
+  return isNaN(d.getTime()) ? null : new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    Sub-components
 ═══════════════════════════════════════════════════════════════════════════ */
 
-/* ── KPI Stat Card ── */
+/* ── KPI Stat Card with Click Handler ── */
 function KpiCard({
-  icon: Icon, label, value, total, color, delay, pulsing,
+  icon: Icon, label, value, total, color, delay, pulsing, onClick,
 }: {
   icon: React.ElementType; label: string; value: number; total: number;
-  color: string; delay: number; pulsing?: boolean;
+  color: string; delay: number; pulsing?: boolean; onClick?: () => void;
 }) {
   const pct = Math.min((value / Math.max(total, 1)) * 100, 100);
   return (
-    <div className={`stat-card fade-up`} style={{ animationDelay: `${delay}s` }}>
+    <div 
+      className={`stat-card fade-up`} 
+      onClick={onClick}
+      style={{ 
+        animationDelay: `${delay}s`,
+        cursor: onClick ? 'pointer' : 'default',
+        transition: 'transform 0.15s ease, box-shadow 0.15s ease',
+      }}
+      onMouseEnter={e => {
+        if (onClick) {
+          (e.currentTarget as HTMLElement).style.transform = 'translateY(-2px)';
+          (e.currentTarget as HTMLElement).style.boxShadow = '0 6px 20px rgba(0,0,0,0.15)';
+        }
+      }}
+      onMouseLeave={e => {
+        if (onClick) {
+          (e.currentTarget as HTMLElement).style.transform = 'translateY(0)';
+          (e.currentTarget as HTMLElement).style.boxShadow = 'var(--card-shadow)';
+        }
+      }}
+    >
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
         <div style={{
           width: 38, height: 38, borderRadius: 10, flexShrink: 0,
@@ -146,10 +177,120 @@ function KpiCard({
         }} />
       </div>
       <div style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         marginTop: '0.25rem', fontSize: 'var(--font-size-compact)',
         color: 'var(--text-muted)',
       }}>
-        {pct.toFixed(0)}% of total
+        <span>{pct.toFixed(0)}% of total</span>
+        {onClick && <span style={{ color: ACCENT.blue, fontWeight: 700 }}>View details →</span>}
+      </div>
+    </div>
+  );
+}
+
+/* ── Generic Modal Dialog Box for KPI / Chart Details ── */
+function ShipmentListModal({
+  title,
+  shipments,
+  onClose,
+  color = ACCENT.blue,
+}: {
+  title: string;
+  shipments: Shipment[];
+  onClose: () => void;
+  color?: string;
+}) {
+  return (
+    <div style={{
+      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+      background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      zIndex: 1000, padding: '0.75rem',
+    }}>
+      <div className="card fade-up" style={{
+        width: '100%', maxWidth: 900, maxHeight: '85vh', display: 'flex', flexDirection: 'column',
+        background: 'var(--bg-card)', borderLeft: `5px solid ${color}`,
+        boxShadow: '0 16px 40px rgba(0,0,0,0.3)', padding: '1rem',
+      }}>
+        {/* Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
+            <h3 style={{ margin: 0, fontSize: 'var(--font-size-heading)', fontWeight: 800, color: 'var(--text-primary)' }}>
+              {title}
+            </h3>
+            <span style={{
+              fontSize: 'var(--font-size-compact)', fontWeight: 800, padding: '2px 10px', borderRadius: 12,
+              background: `${color}18`, color: color,
+            }}>
+              {shipments.length} {shipments.length === 1 ? 'Shipment' : 'Shipments'}
+            </span>
+          </div>
+          <button onClick={onClose} style={{
+            background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 4,
+          }}>
+            <X size={20} />
+          </button>
+        </div>
+
+        {/* Body Table */}
+        {shipments.length === 0 ? (
+          <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: 'var(--font-size-body)' }}>
+            No shipments match this criteria.
+          </div>
+        ) : (
+          <div style={{ overflowY: 'auto', flex: 1 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 'var(--font-size-body-small)' }}>
+              <thead>
+                <tr style={{ borderBottom: '2px solid var(--border)' }}>
+                  {['ID', 'Supplier', 'PO No', 'Invoice No', 'ETD / ETA', 'Material Status', 'Payment', 'Docs'].map(h => (
+                    <th key={h} style={{
+                      padding: '0.5rem 0.75rem', fontWeight: 700, color: 'var(--text-muted)',
+                      fontSize: 'var(--font-size-label)', textTransform: 'uppercase', whiteSpace: 'nowrap',
+                    }}>
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {shipments.map((s, idx) => (
+                  <tr key={s.id} style={{ borderBottom: '1px solid var(--border)', background: idx % 2 === 1 ? 'var(--bg-secondary)' : 'transparent' }}>
+                    <td style={{ padding: '0.5rem 0.75rem', fontWeight: 800, color: ACCENT.blue }}>{s.id}</td>
+                    <td style={{ padding: '0.5rem 0.75rem', fontWeight: 700, color: 'var(--text-primary)' }}>{s.supplier}</td>
+                    <td style={{ padding: '0.5rem 0.75rem', color: 'var(--text-secondary)' }}>{s.poNo}</td>
+                    <td style={{ padding: '0.5rem 0.75rem', color: 'var(--text-secondary)' }}>{s.invoiceNo}</td>
+                    <td style={{ padding: '0.5rem 0.75rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{formatEtdEta(s)}</td>
+                    <td style={{ padding: '0.5rem 0.75rem' }}>
+                      <span style={{
+                        display: 'inline-block', padding: '2px 8px', borderRadius: 8,
+                        background: `${MATERIAL_STATUS_COLOR[s.materialStatus]}18`, color: MATERIAL_STATUS_COLOR[s.materialStatus],
+                        fontWeight: 800, fontSize: 'var(--font-size-tiny)',
+                      }}>
+                        {s.materialStatus}
+                      </span>
+                    </td>
+                    <td style={{ padding: '0.5rem 0.75rem' }}>
+                      <span style={{
+                        display: 'inline-block', padding: '2px 8px', borderRadius: 8,
+                        background: `${PAYMENT_STATUS_COLOR[s.paymentStatus]}18`, color: PAYMENT_STATUS_COLOR[s.paymentStatus],
+                        fontWeight: 800, fontSize: 'var(--font-size-tiny)',
+                      }}>
+                        {s.paymentStatus}
+                      </span>
+                    </td>
+                    <td style={{ padding: '0.5rem 0.75rem' }}>
+                      {s.link ? (
+                        <a href={s.link} target="_blank" rel="noopener noreferrer" style={{ color: ACCENT.blue, textDecoration: 'none', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          <FileText size={12} /> View
+                        </a>
+                      ) : '-'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -198,7 +339,7 @@ function PaymentCalendar({
   for (let d = 1; d <= daysInMonth; d++) cells.push(d);
 
   return (
-    <div className="card fade-up delay-2" style={{ padding: '1.125rem', flex: 1, minWidth: 0 }}>
+    <div className="card fade-up delay-2" style={{ padding: '1.125rem', minWidth: 0, width: '100%' }}>
       <div style={{
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         marginBottom: '0.75rem',
@@ -215,7 +356,7 @@ function PaymentCalendar({
           </button>
           <span style={{
             fontSize: 'var(--font-size-body)', fontWeight: 700,
-            color: 'var(--text-primary)', minWidth: 120, textAlign: 'center',
+            color: 'var(--text-primary)', minWidth: 100, textAlign: 'center',
           }}>
             {calDate.toLocaleString('en-US', { month: 'long', year: 'numeric' })}
           </span>
@@ -258,7 +399,7 @@ function PaymentCalendar({
               onClick={() => onSelectDate(cellDate)}
               style={{
                 position: 'relative',
-                minHeight: 40,
+                minHeight: 38,
                 borderRadius: 6,
                 border: isSelected
                   ? `2px solid ${ACCENT.purple}`
@@ -316,9 +457,6 @@ function PaymentCalendar({
             </div>
           ))}
         </div>
-        <div style={{ fontSize: 'var(--font-size-tiny)', fontStyle: 'italic' }}>
-          Click any date to inspect payment details
-        </div>
       </div>
     </div>
   );
@@ -342,95 +480,27 @@ function DatePaymentDetails({
   }, [data, selectedDate]);
 
   return (
-    <div className="card fade-up" style={{
-      padding: '1.25rem', borderLeft: `4px solid ${ACCENT.purple}`,
-      background: 'var(--bg-card)', boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
-    }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
-          <CalendarIcon size={18} color={ACCENT.purple} />
-          <h3 style={{ margin: 0, fontSize: 'var(--font-size-heading)', fontWeight: 800, color: 'var(--text-primary)' }}>
-            Payment Details for {formatDMY(selectedDate)}
-          </h3>
-          <span style={{
-            fontSize: 'var(--font-size-compact)', fontWeight: 700, padding: '2px 8px', borderRadius: 12,
-            background: 'rgba(139, 92, 246, 0.15)', color: ACCENT.purple,
-          }}>
-            {matchingShipments.length} {matchingShipments.length === 1 ? 'Shipment' : 'Shipments'} Due
-          </span>
-        </div>
-        <button onClick={onClose} style={{
-          background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 4,
-        }}>
-          <X size={18} />
-        </button>
-      </div>
-
-      {matchingShipments.length === 0 ? (
-        <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-body-small)', padding: '0.5rem 0' }}>
-          No payments are due on this date.
-        </div>
-      ) : (
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 'var(--font-size-body-small)' }}>
-            <thead>
-              <tr style={{ borderBottom: '2px solid var(--border)' }}>
-                {['ID', 'Supplier', 'Invoice No', 'Payment Terms', 'Status', 'Bank Ref', 'Documents'].map(h => (
-                  <th key={h} style={{
-                    padding: '0.5rem 0.75rem', fontWeight: 700, color: 'var(--text-muted)',
-                    fontSize: 'var(--font-size-label)', textTransform: 'uppercase', whiteSpace: 'nowrap',
-                  }}>
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {matchingShipments.map((s, idx) => (
-                <tr key={s.id} style={{ borderBottom: '1px solid var(--border)', background: idx % 2 === 1 ? 'var(--bg-secondary)' : 'transparent' }}>
-                  <td style={{ padding: '0.5rem 0.75rem', fontWeight: 800, color: ACCENT.blue }}>{s.id}</td>
-                  <td style={{ padding: '0.5rem 0.75rem', fontWeight: 700, color: 'var(--text-primary)' }}>{s.supplier}</td>
-                  <td style={{ padding: '0.5rem 0.75rem', color: 'var(--text-secondary)' }}>{s.invoiceNo}</td>
-                  <td style={{ padding: '0.5rem 0.75rem', color: 'var(--text-secondary)' }}>{getPaymentTermsLabel(s)}</td>
-                  <td style={{ padding: '0.5rem 0.75rem' }}>
-                    <span style={{
-                      display: 'inline-block', padding: '2px 8px', borderRadius: 8,
-                      background: `${PAYMENT_STATUS_COLOR[s.paymentStatus]}18`, color: PAYMENT_STATUS_COLOR[s.paymentStatus],
-                      fontWeight: 800, fontSize: 'var(--font-size-tiny)',
-                    }}>
-                      {s.paymentStatus}
-                    </span>
-                  </td>
-                  <td style={{ padding: '0.5rem 0.75rem', color: 'var(--text-muted)' }}>{s.bankReferenceNo || '-'}</td>
-                  <td style={{ padding: '0.5rem 0.75rem' }}>
-                    {s.link ? (
-                      <a href={s.link} target="_blank" rel="noopener noreferrer" style={{ color: ACCENT.blue, textDecoration: 'none', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                        <FileText size={12} /> View
-                      </a>
-                    ) : '-'}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
+    <ShipmentListModal
+      title={`Payment Details for ${formatDMY(selectedDate)}`}
+      shipments={matchingShipments}
+      onClose={onClose}
+      color={ACCENT.purple}
+    />
   );
 }
 
-/* ── Month-Wise PO Raised vs Payment Status (Side-by-Side Stacked Bar Chart) ── */
+/* ── Month-Wise PO Raised vs Payment Status ── */
 function MonthlyPoAndPaymentAnalytics({
   data,
   selectedYear,
   onYearChange,
-  availableYears,
 }: {
   data: Shipment[];
   selectedYear: number;
   onYearChange: (y: number) => void;
-  availableYears: number[];
 }) {
+  const [clickedMonthIndex, setClickedMonthIndex] = useState<number | null>(null);
+
   /* Aggregate month-wise PO Raised and Payment statuses */
   const monthlyData = useMemo(() => {
     const list = MONTH_NAMES.map((m, idx) => ({
@@ -443,7 +513,7 @@ function MonthlyPoAndPaymentAnalytics({
     }));
 
     data.forEach(s => {
-      const poDate = s.poDate ? new Date(s.poDate) : null;
+      const poDate = s.poDate ? toLocalDate(s.poDate) : null;
       if (poDate && poDate.getFullYear() === selectedYear) {
         const idx = poDate.getMonth();
         list[idx].poRaised += 1;
@@ -456,69 +526,100 @@ function MonthlyPoAndPaymentAnalytics({
     return list;
   }, [data, selectedYear]);
 
+  /* Get shipments for clicked month */
+  const monthShipments = useMemo(() => {
+    if (clickedMonthIndex === null) return [];
+    return data.filter(s => {
+      const poDate = s.poDate ? toLocalDate(s.poDate) : null;
+      return poDate && poDate.getFullYear() === selectedYear && poDate.getMonth() === clickedMonthIndex;
+    });
+  }, [data, selectedYear, clickedMonthIndex]);
+
   return (
-    <div className="card fade-up delay-1" style={{ padding: '1.125rem' }}>
-      {/* Header with Title and Integrated Year Filter */}
-      <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: '1rem',
-        flexWrap: 'wrap',
-        gap: '0.5rem',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <Filter size={18} color={ACCENT.purple} />
-          <div className="section-title" style={{ margin: 0 }}>
-            Month-Wise PO & Payment Breakdown ({selectedYear})
+    <>
+      <div className="card fade-up delay-1" style={{ padding: '1.125rem', minWidth: 0, width: '100%' }}>
+        {/* Header with Title and Number Input Field for Year */}
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '1rem',
+          flexWrap: 'wrap',
+          gap: '0.5rem',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <Filter size={18} color={ACCENT.purple} />
+            <div className="section-title" style={{ margin: 0 }}>
+              Month-Wise PO & Payment Breakdown ({selectedYear})
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <label style={{ fontSize: 'var(--font-size-compact)', fontWeight: 700, color: 'var(--text-muted)' }}>
+              Enter Year:
+            </label>
+            <input
+              type="number"
+              value={selectedYear}
+              onChange={e => onYearChange(Number(e.target.value) || new Date().getFullYear())}
+              style={{
+                background: 'var(--bg-secondary)',
+                border: '1px solid var(--border)',
+                borderRadius: 6,
+                padding: '0.3rem 0.6rem',
+                fontSize: 'var(--font-size-body-small)',
+                color: 'var(--text-primary)',
+                fontWeight: 800,
+                outline: 'none',
+                width: 80,
+              }}
+            />
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <label style={{ fontSize: 'var(--font-size-compact)', fontWeight: 700, color: 'var(--text-muted)' }}>
-            Year:
-          </label>
-          <select
-            value={selectedYear}
-            onChange={e => onYearChange(Number(e.target.value))}
-            style={{
-              background: 'var(--bg-secondary)',
-              border: '1px solid var(--border)',
-              borderRadius: 6,
-              padding: '0.3rem 0.64rem',
-              fontSize: 'var(--font-size-body-small)',
-              color: 'var(--text-primary)',
-              fontWeight: 800,
-              outline: 'none',
-              cursor: 'pointer',
+        {/* Chart */}
+        <ResponsiveContainer width="100%" height={260}>
+          <BarChart 
+            accessibilityLayer={false}
+            data={monthlyData} 
+            barSize={18}
+            margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+            style={{ outline: 'none' }}
+            onClick={(state: any) => {
+              if (state && state.activePayload && state.activePayload.length) {
+                const monthIdx = state.activePayload[0].payload.monthIndex;
+                setClickedMonthIndex(monthIdx);
+              }
             }}
           >
-            {availableYears.map(y => (
-              <option key={y} value={y}>{y}</option>
-            ))}
-          </select>
-        </div>
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+            <XAxis dataKey="month" tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} />
+            <YAxis 
+              width={35} 
+              allowDecimals={false} 
+              tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} 
+            />
+            <Tooltip content={<ChartTooltip />} />
+            <Legend wrapperStyle={{ fontSize: FONT_SIZES.chartLabel, paddingTop: 10 }} />
+            
+            <Bar dataKey="poRaised" name="PO Raised" stackId="po" fill={ACCENT.blue} radius={[4, 4, 0, 0]} cursor="pointer" />
+            <Bar dataKey="paid" name="Paid" stackId="payments" fill={ACCENT.green} radius={[0, 0, 0, 0]} cursor="pointer" />
+            <Bar dataKey="partial" name="Partial" stackId="payments" fill={ACCENT.orange} radius={[0, 0, 0, 0]} cursor="pointer" />
+            <Bar dataKey="unpaid" name="Unpaid" stackId="payments" fill={ACCENT.red} radius={[4, 4, 0, 0]} cursor="pointer" />
+          </BarChart>
+        </ResponsiveContainer>
       </div>
 
-      {/* Chart: PO Raised on 'po' stack vs Payments Stacked on 'payments' stack */}
-      <ResponsiveContainer width="100%" height={280}>
-        <BarChart data={monthlyData} barSize={22}>
-          <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-          <XAxis dataKey="month" tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} />
-          <YAxis allowDecimals={false} tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} />
-          <Tooltip content={<ChartTooltip />} />
-          <Legend wrapperStyle={{ fontSize: FONT_SIZES.chartLabel, paddingTop: 10 }} />
-          
-          {/* Standalone Bar for PO Raised */}
-          <Bar dataKey="poRaised" name="PO Raised" stackId="po" fill={ACCENT.blue} radius={[4, 4, 0, 0]} />
-          
-          {/* Stacked Bars for Payment Status Breakdown */}
-          <Bar dataKey="paid" name="Paid" stackId="payments" fill={ACCENT.green} radius={[0, 0, 0, 0]} />
-          <Bar dataKey="partial" name="Partial" stackId="payments" fill={ACCENT.orange} radius={[0, 0, 0, 0]} />
-          <Bar dataKey="unpaid" name="Unpaid" stackId="payments" fill={ACCENT.red} radius={[4, 4, 0, 0]} />
-        </BarChart>
-      </ResponsiveContainer>
-    </div>
+      {/* Modal Popup on Chart Click */}
+      {clickedMonthIndex !== null && (
+        <ShipmentListModal
+          title={`Shipments for ${MONTH_NAMES[clickedMonthIndex]} ${selectedYear}`}
+          shipments={monthShipments}
+          onClose={() => setClickedMonthIndex(null)}
+          color={ACCENT.blue}
+        />
+      )}
+    </>
   );
 }
 
@@ -536,10 +637,8 @@ function SupplierAndProductAnalytics({ data }: { data: Shipment[] }) {
 
   const [selectedSupplier, setSelectedSupplier] = useState<string | null>(null);
 
-  // Default to first supplier if none selected
   const activeSupplier = selectedSupplier || supplierData[0]?.supplier || '';
 
-  /* Calculate Product Breakdown Pie Data for Active Supplier */
   const productPieData = useMemo(() => {
     if (!activeSupplier) return [];
     const map = new Map<string, number>();
@@ -555,17 +654,20 @@ function SupplierAndProductAnalytics({ data }: { data: Shipment[] }) {
   }, [data, activeSupplier]);
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '0.875rem' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '0.875rem' }}>
       {/* 1st Chart: Supplier Wise Shipments Bar Chart */}
-      <div className="card fade-up delay-1" style={{ padding: '1.125rem' }}>
+      <div className="card fade-up delay-1" style={{ padding: '1.125rem', minWidth: 0 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
           <div className="section-title" style={{ margin: 0 }}>Supplier-Wise Shipments</div>
-          <div style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)' }}>Click bar to choose supplier</div>
+          <div style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)' }}>Tap bar to choose supplier</div>
         </div>
-        <ResponsiveContainer width="100%" height={260}>
+        <ResponsiveContainer width="100%" height={240}>
           <BarChart 
+            accessibilityLayer={false}
             data={supplierData} 
-            barSize={36} 
+            barSize={28} 
+            margin={{ top: 10, right: 10, left: 0, bottom: 25 }}
+            style={{ outline: 'none' }}
             onClick={(state: any) => {
               if (state && state.activePayload && state.activePayload.length) {
                 setSelectedSupplier(state.activePayload[0].payload.supplier);
@@ -573,8 +675,18 @@ function SupplierAndProductAnalytics({ data }: { data: Shipment[] }) {
             }}
           >
             <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-            <XAxis dataKey="supplier" tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} interval={0} angle={-15} textAnchor="end" />
-            <YAxis allowDecimals={false} tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} />
+            <XAxis 
+              dataKey="supplier" 
+              tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} 
+              interval={0} 
+              angle={-20} 
+              textAnchor="end" 
+            />
+            <YAxis 
+              width={35} 
+              allowDecimals={false} 
+              tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} 
+            />
             <Tooltip content={<ChartTooltip />} />
             <Bar dataKey="count" name="Shipments" radius={[6, 6, 0, 0]} cursor="pointer">
               {supplierData.map((entry) => (
@@ -589,12 +701,11 @@ function SupplierAndProductAnalytics({ data }: { data: Shipment[] }) {
         </ResponsiveContainer>
       </div>
 
-      {/* 2nd Chart: Supplier Product Breakdown Pie Chart with Dropdown Selection */}
+      {/* 2nd Chart: Supplier Product Breakdown Pie Chart */}
       <div className="card fade-up delay-2" style={{ padding: '1.125rem', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.5rem' }}>
           <div className="section-title" style={{ margin: 0 }}>Product Breakdown</div>
           
-          {/* Supplier Dropdown Selector */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
             <label style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)', fontWeight: 600 }}>Supplier:</label>
             <select
@@ -610,7 +721,7 @@ function SupplierAndProductAnalytics({ data }: { data: Shipment[] }) {
                 fontWeight: 700,
                 outline: 'none',
                 cursor: 'pointer',
-                maxWidth: 180,
+                maxWidth: 160,
               }}
             >
               {supplierData.map(s => (
@@ -627,14 +738,14 @@ function SupplierAndProductAnalytics({ data }: { data: Shipment[] }) {
             No product data for selected supplier.
           </div>
         ) : (
-          <ResponsiveContainer width="100%" height={260}>
-            <PieChart>
+          <ResponsiveContainer width="100%" height={240}>
+            <PieChart style={{ outline: 'none' }}>
               <Pie
                 data={productPieData}
                 cx="50%"
                 cy="50%"
-                innerRadius={50}
-                outerRadius={80}
+                innerRadius={45}
+                outerRadius={75}
                 paddingAngle={4}
                 dataKey="value"
                 stroke="none"
@@ -667,10 +778,10 @@ function ShipmentsByCountry({ data }: { data: Shipment[] }) {
   }, [data]);
 
   return (
-    <div className="card fade-up delay-1" style={{ padding: '1.125rem' }}>
+    <div className="card fade-up delay-1" style={{ padding: '1.125rem', minWidth: 0, width: '100%' }}>
       <div className="section-title">Country-Wise Shipments</div>
       <ResponsiveContainer width="100%" height={210}>
-        <BarChart data={countryData} barSize={36}>
+        <BarChart accessibilityLayer={false} data={countryData} barSize={28} margin={{ top: 10, right: 10, left: 0, bottom: 20 }} style={{ outline: 'none' }}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
           <XAxis 
             dataKey="country" 
@@ -679,7 +790,11 @@ function ShipmentsByCountry({ data }: { data: Shipment[] }) {
             angle={-15} 
             textAnchor="end" 
           />
-          <YAxis allowDecimals={false} tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} />
+          <YAxis 
+            width={35} 
+            allowDecimals={false} 
+            tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} 
+          />
           <Tooltip content={<ChartTooltip />} />
           <Bar dataKey="count" name="Shipments" radius={[6, 6, 0, 0]}>
             {countryData.map((entry, index) => (
@@ -710,11 +825,11 @@ function PaymentDonut({ data }: { data: Shipment[] }) {
   return (
     <div className="card fade-up delay-3" style={{
       padding: '1.125rem', display: 'flex', flexDirection: 'column',
-      alignItems: 'center', minWidth: 260,
+      alignItems: 'center', minWidth: 0, width: '100%',
     }}>
       <div className="section-title" style={{ alignSelf: 'flex-start' }}>Payment Status</div>
       <ResponsiveContainer width="100%" height={160}>
-        <PieChart>
+        <PieChart style={{ outline: 'none' }}>
           <Pie
             data={slices}
             cx="50%"
@@ -775,13 +890,17 @@ function ShipmentsByMode({ data }: { data: Shipment[] }) {
     : <Package size={14} color={color} />;
 
   return (
-    <div className="card fade-up delay-1" style={{ padding: '1.125rem' }}>
+    <div className="card fade-up delay-1" style={{ padding: '1.125rem', minWidth: 0, width: '100%' }}>
       <div className="section-title">Shipments by Mode</div>
       <ResponsiveContainer width="100%" height={210}>
-        <BarChart data={modeData} barSize={48} barCategoryGap="40%">
+        <BarChart accessibilityLayer={false} data={modeData} barSize={36} barCategoryGap="40%" margin={{ top: 10, right: 10, left: 0, bottom: 0 }} style={{ outline: 'none' }}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
           <XAxis dataKey="mode" tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} />
-          <YAxis allowDecimals={false} tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} />
+          <YAxis 
+            width={35} 
+            allowDecimals={false} 
+            tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} 
+          />
           <Tooltip content={<ChartTooltip />} />
           <Bar dataKey="count" name="Shipments" radius={[6, 6, 0, 0]}>
             {modeData.map((entry, i) => (
@@ -791,7 +910,7 @@ function ShipmentsByMode({ data }: { data: Shipment[] }) {
         </BarChart>
       </ResponsiveContainer>
       <div style={{
-        display: 'flex', justifyContent: 'center', gap: '2rem', marginTop: '0.5rem', flexWrap: 'wrap',
+        display: 'flex', justifyContent: 'center', gap: '1.5rem', marginTop: '0.5rem', flexWrap: 'wrap',
       }}>
         {modeData.map(m => (
           <div key={m.mode} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -812,8 +931,14 @@ function ShipmentsByMode({ data }: { data: Shipment[] }) {
   );
 }
 
-/* ── Material Status Breakdown ── */
-function MaterialStatusBreakdown({ data }: { data: Shipment[] }) {
+/* ── Interactive Material Status Breakdown ── */
+function MaterialStatusBreakdown({ 
+  data, 
+  onSelectStatus 
+}: { 
+  data: Shipment[]; 
+  onSelectStatus: (status: MaterialStatus, shipments: Shipment[]) => void;
+}) {
   const statusCounts = useMemo(() => {
     const map: Record<string, number> = {};
     data.forEach(s => {
@@ -824,17 +949,27 @@ function MaterialStatusBreakdown({ data }: { data: Shipment[] }) {
       status: st,
       count: map[st] || 0,
       color: MATERIAL_STATUS_COLOR[st],
+      shipments: data.filter(s => s.materialStatus === st),
     }));
   }, [data]);
 
   const maxCount = Math.max(...statusCounts.map(s => s.count), 1);
 
   return (
-    <div className="card fade-up delay-2" style={{ padding: '1.125rem' }}>
-      <div className="section-title">Material Status</div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem', marginTop: '0.5rem' }}>
+    <div className="card fade-up delay-2" style={{ padding: '1.125rem', minWidth: 0, width: '100%' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div className="section-title" style={{ margin: 0 }}>Material Status</div>
+        <span style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)' }}>Tap status to inspect</span>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem', marginTop: '0.75rem' }}>
         {statusCounts.map(s => (
-          <div key={s.status}>
+          <div 
+            key={s.status} 
+            onClick={() => onSelectStatus(s.status, s.shipments)}
+            style={{ cursor: 'pointer', borderRadius: 6, padding: '2px 4px', transition: 'background 0.15s' }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-secondary)')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+          >
             <div style={{
               display: 'flex', justifyContent: 'space-between', alignItems: 'center',
               marginBottom: 4,
@@ -848,12 +983,15 @@ function MaterialStatusBreakdown({ data }: { data: Shipment[] }) {
                   {s.status}
                 </span>
               </div>
-              <span style={{
-                fontSize: 'var(--font-size-body-small)', fontWeight: 800,
-                color: 'var(--text-primary)',
-              }}>
-                {s.count}
-              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{
+                  fontSize: 'var(--font-size-body-small)', fontWeight: 800,
+                  color: 'var(--text-primary)',
+                }}>
+                  {s.count}
+                </span>
+                <span style={{ fontSize: 'var(--font-size-compact)', color: ACCENT.blue }}>→</span>
+              </div>
             </div>
             <div style={{
               height: 6, borderRadius: 3, background: 'var(--bg-secondary)',
@@ -996,100 +1134,6 @@ function DuePaymentsTable({ data }: { data: Shipment[] }) {
   );
 }
 
-/* ── Recent Shipments Timeline ── */
-function RecentTimeline({ data }: { data: Shipment[] }) {
-  const recent = useMemo(() => {
-    return [...data]
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id, undefined, { numeric: true }))
-      .slice(0, 5);
-  }, [data]);
-
-  return (
-    <div className="card fade-up delay-2" style={{ padding: '1.125rem' }}>
-      <div className="section-title">Recent Shipments</div>
-      {recent.length === 0 && (
-        <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-body-small)', padding: '0.5rem 0' }}>
-          No shipments to show.
-        </div>
-      )}
-      <div style={{
-        display: 'flex', alignItems: 'flex-start', gap: 0,
-        position: 'relative', overflowX: 'auto', paddingBottom: '0.5rem',
-      }}>
-        {recent.map((s, i) => {
-          const statusColor = MATERIAL_STATUS_COLOR[s.materialStatus];
-          const isLast = i === recent.length - 1;
-
-          return (
-            <div key={s.id} style={{
-              display: 'flex', flexDirection: 'column', alignItems: 'center',
-              flex: 1, minWidth: 170, position: 'relative',
-            }}>
-              {!isLast && (
-                <div style={{
-                  position: 'absolute', top: 18, left: '50%', width: '100%',
-                  height: 2, background: 'var(--border)', zIndex: 0,
-                }} />
-              )}
-
-              <div style={{
-                width: 14, height: 14, borderRadius: '50%',
-                background: statusColor, border: '3px solid var(--bg-card)',
-                boxShadow: `0 0 0 2px ${statusColor}40`,
-                zIndex: 1, marginBottom: '0.5rem', flexShrink: 0,
-              }} />
-
-              <div style={{
-                fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)',
-                fontWeight: 600, marginBottom: 2,
-              }}>
-                {formatDMY(s.createdAt)}
-              </div>
-
-              <div style={{
-                fontSize: 'var(--font-size-body-small)', fontWeight: 700,
-                color: 'var(--text-primary)', textAlign: 'center',
-                lineHeight: 1.3, marginBottom: 4,
-              }}>
-                {s.supplier}
-              </div>
-
-              <span style={{
-                display: 'inline-block', padding: '2px 8px', borderRadius: 10,
-                background: `${statusColor}18`, color: statusColor,
-                fontSize: 'var(--font-size-tiny)', fontWeight: 700,
-                whiteSpace: 'nowrap',
-              }}>
-                {s.materialStatus}
-              </span>
-
-              <div style={{
-                marginTop: 4, textAlign: 'center', padding: '0 0.5rem',
-                fontSize: 'var(--font-size-tiny)', color: 'var(--text-secondary)', lineHeight: 1.4,
-              }}>
-                {s.materialStatus === 'Delivered'
-                  ? `Delivered : ${formatDMY(s.deliveredDate) || '?'}`
-                  : formatEtdEta(s)}
-              </div>
-
-              <div style={{
-                marginTop: 4, color: 'var(--text-muted)',
-                display: 'flex', alignItems: 'center', gap: 4,
-                fontSize: 'var(--font-size-tiny)',
-              }}>
-                {s.modeOfShipment === 'Sea' ? <Ship size={12} />
-                  : s.modeOfShipment === 'Air' ? <Plane size={12} />
-                  : <Package size={12} />}
-                <span>{getModeLabel(s)}</span>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 /* ═══════════════════════════════════════════════════════════════════════════
    Main Dashboard Page
 ═══════════════════════════════════════════════════════════════════════════ */
@@ -1098,20 +1142,11 @@ export default function ShipmentDashboardPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<Date | null>(null);
 
-  /* Dynamically detect available years from data */
-  const availableYears = useMemo(() => {
-    const set = new Set<number>();
-    shipments.forEach(s => {
-      if (s.poDate) {
-        const y = new Date(s.poDate).getFullYear();
-        if (!isNaN(y)) set.add(y);
-      }
-    });
-    if (set.size === 0) set.add(2026);
-    return Array.from(set).sort((a, b) => b - a);
-  }, [shipments]);
+  /* Modal state for active KPI card click / Material Status click */
+  const [activeModal, setActiveModal] = useState<{ title: string; color: string; data: Shipment[] } | null>(null);
 
-  const [selectedYear, setSelectedYear] = useState<number>(() => availableYears[0] || 2026);
+  /* Default year set to current year (2026) */
+  const [selectedYear, setSelectedYear] = useState<number>(() => new Date().getFullYear());
 
   /* Filtered data */
   const filtered = useMemo(() => {
@@ -1129,14 +1164,42 @@ export default function ShipmentDashboardPage() {
     );
   }, [shipments, searchTerm]);
 
-  /* KPI computations */
+  /* Today date normalized */
+  const today = useMemo(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  }, []);
+
+  /* KPI Groups */
   const kpis = useMemo(() => {
-    const totalShipments = filtered.length;
-    const inTransit = filtered.filter(s => s.materialStatus === 'In Transit').length;
-    const pendingPayments = filtered.filter(s => s.paymentStatus === 'NOT PAID').length;
-    const overduePayments = filtered.filter(s => isPaymentOverdue(s)).length;
-    return { totalShipments, inTransit, pendingPayments, overduePayments };
-  }, [filtered]);
+    const totalList = filtered;
+    const inTransitList = filtered.filter(s => s.materialStatus === 'In Transit');
+    const pendingPaymentsList = filtered.filter(s => s.paymentStatus === 'NOT PAID');
+    const overduePaymentsList = filtered.filter(s => isPaymentOverdue(s));
+
+    // Card 5: ETD date surpassed but still not in transit (Pending Shipment)
+    const etdSurpassedNotTransitList = filtered.filter(s => {
+      if (s.materialStatus !== 'Pending Shipment') return false;
+      const etd = s.etd ? toLocalDate(s.etd) : null;
+      return etd ? etd < today : false;
+    });
+
+    // Card 6: ETA date surpassed but not arrived (In Transit)
+    const etaSurpassedNotArrivedList = filtered.filter(s => {
+      if (s.materialStatus !== 'In Transit') return false;
+      const eta = s.eta ? toLocalDate(s.eta) : null;
+      return eta ? eta < today : false;
+    });
+
+    return {
+      total: totalList,
+      inTransit: inTransitList,
+      pendingPayments: pendingPaymentsList,
+      overduePayments: overduePaymentsList,
+      etdSurpassedNotTransit: etdSurpassedNotTransitList,
+      etaSurpassedNotArrived: etaSurpassedNotArrivedList,
+    };
+  }, [filtered, today]);
 
   if (!ready) {
     return (
@@ -1243,19 +1306,82 @@ export default function ShipmentDashboardPage() {
         </span>
       </div>
 
-      {/* ── ROW 1: KPI Summary Cards ── */}
-      <div className="dashboard-kpi-grid" style={{
-        display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.875rem',
+      {/* ── ROW 1: KPI Summary Cards (Mobile Responsive Grid & Interactive Modals) ── */}
+      <div style={{
+        display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.5rem',
       }}>
-        <KpiCard icon={Package} label="Total Shipments" value={kpis.totalShipments} total={kpis.totalShipments} color={ACCENT.blue} delay={0.05} />
-        <KpiCard icon={Ship} label="In Transit" value={kpis.inTransit} total={kpis.totalShipments} color={ACCENT.orange} delay={0.1} />
-        <KpiCard icon={AlertCircle} label="Pending Payments" value={kpis.pendingPayments} total={kpis.totalShipments} color={ACCENT.red} delay={0.15} />
-        <KpiCard icon={Clock} label="Overdue Payments" value={kpis.overduePayments} total={kpis.totalShipments} color={ACCENT.red} delay={0.2} pulsing />
+        <KpiCard 
+          icon={Package} 
+          label="Total Shipments" 
+          value={kpis.total.length} 
+          total={kpis.total.length} 
+          color={ACCENT.blue} 
+          delay={0.05} 
+          onClick={() => setActiveModal({ title: 'Total Shipments', color: ACCENT.blue, data: kpis.total })}
+        />
+        <KpiCard 
+          icon={Ship} 
+          label="In Transit" 
+          value={kpis.inTransit.length} 
+          total={kpis.total.length} 
+          color={ACCENT.orange} 
+          delay={0.1} 
+          onClick={() => setActiveModal({ title: 'In Transit Shipments', color: ACCENT.orange, data: kpis.inTransit })}
+        />
+        <KpiCard 
+          icon={AlertCircle} 
+          label="Pending Payments" 
+          value={kpis.pendingPayments.length} 
+          total={kpis.total.length} 
+          color={ACCENT.red} 
+          delay={0.15} 
+          onClick={() => setActiveModal({ title: 'Pending Payments', color: ACCENT.red, data: kpis.pendingPayments })}
+        />
+        <KpiCard 
+          icon={Clock} 
+          label="Overdue Payments" 
+          value={kpis.overduePayments.length} 
+          total={kpis.total.length} 
+          color={ACCENT.red} 
+          delay={0.2} 
+          pulsing={kpis.overduePayments.length > 0} 
+          onClick={() => setActiveModal({ title: 'Overdue Payments', color: ACCENT.red, data: kpis.overduePayments })}
+        />
+        <KpiCard 
+          icon={PackageX} 
+          label="ETD Passed – Not In Transit" 
+          value={kpis.etdSurpassedNotTransit.length} 
+          total={kpis.total.length} 
+          color={ACCENT.red} 
+          delay={0.25} 
+          pulsing={kpis.etdSurpassedNotTransit.length > 0} 
+          onClick={() => setActiveModal({ title: 'ETD Surpassed – Still Pending Shipment', color: ACCENT.red, data: kpis.etdSurpassedNotTransit })}
+        />
+        <KpiCard 
+          icon={Anchor} 
+          label="ETA Passed – Not Arrived" 
+          value={kpis.etaSurpassedNotArrived.length} 
+          total={kpis.total.length} 
+          color={ACCENT.orange} 
+          delay={0.3} 
+          pulsing={kpis.etaSurpassedNotArrived.length > 0} 
+          onClick={() => setActiveModal({ title: 'ETA Surpassed – Still In Transit', color: ACCENT.orange, data: kpis.etaSurpassedNotArrived })}
+        />
       </div>
 
-      {/* ── ROW 2: Payment Calendar + Payment Status Donut ── */}
-      <div className="dashboard-dual-grid" style={{
-        display: 'grid', gridTemplateColumns: '1fr 300px', gap: '0.875rem',
+      {/* KPI & Material Detail Dialog Popup */}
+      {activeModal && (
+        <ShipmentListModal
+          title={activeModal.title}
+          shipments={activeModal.data}
+          color={activeModal.color}
+          onClose={() => setActiveModal(null)}
+        />
+      )}
+
+      {/* ── ROW 2: Payment Calendar + Payment Status Donut + Interactive Material Status ── */}
+      <div style={{
+        display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '0.5rem',
       }}>
         <PaymentCalendar
           data={filtered}
@@ -1263,6 +1389,16 @@ export default function ShipmentDashboardPage() {
           onSelectDate={(d) => setSelectedCalendarDate(d)}
         />
         <PaymentDonut data={filtered} />
+        <MaterialStatusBreakdown 
+          data={filtered} 
+          onSelectStatus={(status, items) => {
+            setActiveModal({
+              title: `Shipments in ${status}`,
+              color: MATERIAL_STATUS_COLOR[status],
+              data: items,
+            });
+          }}
+        />
       </div>
 
       {/* Expanded Payment Details for selected date */}
@@ -1279,16 +1415,14 @@ export default function ShipmentDashboardPage() {
         data={filtered}
         selectedYear={selectedYear}
         onYearChange={setSelectedYear}
-        availableYears={availableYears}
       />
 
       {/* ── ROW 4: Supplier Wise Bar Chart + Supplier Product Breakdown Pie Chart ── */}
       <SupplierAndProductAnalytics data={filtered} />
 
-      {/* ── ROW 5: Shipments by Mode + Material Status + Country Breakdown ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.875rem' }}>
+      {/* ── ROW 5: Shipments by Mode + Country Breakdown ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '0.5rem' }}>
         <ShipmentsByMode data={filtered} />
-        <MaterialStatusBreakdown data={filtered} />
         <ShipmentsByCountry data={filtered} />
       </div>
 
