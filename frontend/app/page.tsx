@@ -2,8 +2,10 @@
 
 /* ─────────────────────────────────────────────────────────────────────────────
    Shipment Dashboard  –  Comprehensive shipment tracking & payment overview
+   Reads from the shared store (useShipments), so entries added, edited or
+   deleted on the entry / history page show up here straight away.
 ───────────────────────────────────────────────────────────────────────────── */
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo } from 'react';
 import Link from 'next/link';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -11,16 +13,21 @@ import {
 } from 'recharts';
 import {
   Package, Ship, AlertCircle, Clock, Search, Plus,
-  ChevronLeft, ChevronRight, Anchor, Plane, ExternalLink,
+  ChevronLeft, ChevronRight, Anchor, Plane, FileText,
 } from 'lucide-react';
 
 import { Shipment, MaterialStatus, PaymentStatus } from '@/types/shipment';
 import {
-  shipmentData,
-  getPaymentDueDate,
-  isPaymentOverdue,
+  formatDMY,
+  formatEtdEta,
   getDaysUntilDue,
+  getModeLabel,
+  getPaymentDueDate,
+  getPaymentPeriod,
+  getPaymentTermsLabel,
+  isPaymentOverdue,
 } from '@/data/shipmentData';
+import { useShipments } from '@/hooks/useShipments';
 import { FONT_SIZES } from '@/context/ThemeContext';
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -74,10 +81,6 @@ function ChartTooltip({ active, payload, label }: any) {
 /* ═══════════════════════════════════════════════════════════════════════════
    Date helpers
 ═══════════════════════════════════════════════════════════════════════════ */
-function formatDate(d: Date): string {
-  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
-}
-
 function isSameDay(a: Date, b: Date): boolean {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 }
@@ -96,12 +99,12 @@ function getFirstDayOfMonth(year: number, month: number): number {
 
 /* ── KPI Stat Card ── */
 function KpiCard({
-  icon: Icon, label, value, color, delay, pulsing,
+  icon: Icon, label, value, total, color, delay, pulsing,
 }: {
-  icon: React.ElementType; label: string; value: number;
+  icon: React.ElementType; label: string; value: number; total: number;
   color: string; delay: number; pulsing?: boolean;
 }) {
-  const pct = Math.min((value / Math.max(shipmentData.length, 1)) * 100, 100);
+  const pct = Math.min((value / Math.max(total, 1)) * 100, 100);
   return (
     <div className={`stat-card fade-up`} style={{ animationDelay: `${delay}s` }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
@@ -190,7 +193,7 @@ function PaymentCalendar({ data }: { data: Shipment[] }) {
       }}>
         <div className="section-title" style={{ margin: 0 }}>Payment Calendar</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <button onClick={prevMonth} style={{
+          <button onClick={prevMonth} aria-label="Previous month" style={{
             background: 'var(--bg-secondary)', border: '1px solid var(--border)',
             borderRadius: 6, cursor: 'pointer', padding: '0.25rem',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -204,7 +207,7 @@ function PaymentCalendar({ data }: { data: Shipment[] }) {
           }}>
             {calDate.toLocaleString('en-US', { month: 'long', year: 'numeric' })}
           </span>
-          <button onClick={nextMonth} style={{
+          <button onClick={nextMonth} aria-label="Next month" style={{
             background: 'var(--bg-secondary)', border: '1px solid var(--border)',
             borderRadius: 6, cursor: 'pointer', padding: '0.25rem',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -283,31 +286,39 @@ function PaymentCalendar({ data }: { data: Shipment[] }) {
                   background: 'var(--bg-card)', border: '1px solid var(--border)',
                   borderRadius: 8, padding: '0.5rem 0.75rem',
                   boxShadow: 'var(--card-shadow)', zIndex: 20,
-                  minWidth: 170, whiteSpace: 'nowrap',
+                  minWidth: 200, whiteSpace: 'nowrap',
                 }}>
                   <div style={{
                     fontSize: 'var(--font-size-compact)', fontWeight: 700,
                     color: 'var(--text-primary)', marginBottom: 4,
                   }}>
-                    Due: {formatDate(new Date(year, month, day))}
+                    Due: {formatDMY(new Date(year, month, day))}
                   </div>
                   {entries.map(({ shipment: s }) => (
-                    <div key={s.id} style={{
-                      display: 'flex', alignItems: 'center', gap: 6,
-                      fontSize: 'var(--font-size-compact)', lineHeight: 1.6,
-                    }}>
+                    <div key={s.id} style={{ lineHeight: 1.5, marginBottom: 2 }}>
                       <div style={{
-                        width: 6, height: 6, borderRadius: '50%',
-                        background: PAYMENT_STATUS_COLOR[s.paymentStatus], flexShrink: 0,
-                      }} />
-                      <span style={{ color: 'var(--text-secondary)' }}>{s.supplier}</span>
-                      <span style={{
-                        marginLeft: 'auto', fontWeight: 700,
-                        fontSize: 'var(--font-size-tiny)',
-                        color: PAYMENT_STATUS_COLOR[s.paymentStatus],
+                        display: 'flex', alignItems: 'center', gap: 6,
+                        fontSize: 'var(--font-size-compact)',
                       }}>
-                        {s.paymentStatus}
-                      </span>
+                        <div style={{
+                          width: 6, height: 6, borderRadius: '50%',
+                          background: PAYMENT_STATUS_COLOR[s.paymentStatus], flexShrink: 0,
+                        }} />
+                        <span style={{ color: 'var(--text-secondary)' }}>{s.supplier}</span>
+                        <span style={{
+                          marginLeft: 'auto', fontWeight: 700,
+                          fontSize: 'var(--font-size-tiny)',
+                          color: PAYMENT_STATUS_COLOR[s.paymentStatus],
+                        }}>
+                          {s.paymentStatus}
+                        </span>
+                      </div>
+                      <div style={{
+                        paddingLeft: 12, fontSize: 'var(--font-size-tiny)',
+                        color: 'var(--text-muted)',
+                      }}>
+                        {getPaymentTermsLabel(s)}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -353,7 +364,8 @@ function PaymentDonut({ data }: { data: Shipment[] }) {
   const toRad = (d: number) => (d * Math.PI) / 180;
 
   const paths = slices.filter(s => s.value > 0).map(s => {
-    const sweep = (s.value / total) * 360;
+    // A single full slice cannot be drawn as one arc (start == end), so cap it just under 360.
+    const sweep = Math.min((s.value / total) * 360, 359.99);
     const end = startAngle + sweep;
     const x1 = cx + R * Math.cos(toRad(startAngle));
     const y1 = cy + R * Math.sin(toRad(startAngle));
@@ -409,16 +421,26 @@ function PaymentDonut({ data }: { data: Shipment[] }) {
   );
 }
 
-/* ── Shipments by Mode (Recharts Bar) ── */
+/* ── Shipments by Mode (Recharts Bar): Sea / Air / Others ── */
 function ShipmentsByMode({ data }: { data: Shipment[] }) {
   const modeData = useMemo(() => {
-    let sea = 0, air = 0;
-    data.forEach(s => { if (s.modeOfShipment === 'Sea') sea++; else air++; });
+    let sea = 0, air = 0, others = 0;
+    data.forEach(s => {
+      if (s.modeOfShipment === 'Sea') sea++;
+      else if (s.modeOfShipment === 'Air') air++;
+      else others++;
+    });
     return [
       { mode: 'Sea', count: sea, color: ACCENT.blue },
       { mode: 'Air', count: air, color: ACCENT.teal },
+      { mode: 'Others', count: others, color: ACCENT.purple },
     ];
   }, [data]);
+
+  const modeIcon = (mode: string, color: string) =>
+    mode === 'Sea' ? <Anchor size={14} color={color} />
+    : mode === 'Air' ? <Plane size={14} color={color} />
+    : <Package size={14} color={color} />;
 
   return (
     <div className="card fade-up delay-1" style={{ padding: '1.125rem' }}>
@@ -438,14 +460,11 @@ function ShipmentsByMode({ data }: { data: Shipment[] }) {
       </ResponsiveContainer>
       {/* Icon summary below chart */}
       <div style={{
-        display: 'flex', justifyContent: 'center', gap: '2rem', marginTop: '0.5rem',
+        display: 'flex', justifyContent: 'center', gap: '2rem', marginTop: '0.5rem', flexWrap: 'wrap',
       }}>
         {modeData.map(m => (
           <div key={m.mode} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            {m.mode === 'Sea'
-              ? <Anchor size={14} color={m.color} />
-              : <Plane size={14} color={m.color} />
-            }
+            {modeIcon(m.mode, m.color)}
             <span style={{
               fontSize: 'var(--font-size-body-small)', fontWeight: 700,
               color: 'var(--text-primary)',
@@ -526,11 +545,12 @@ function MaterialStatusBreakdown({ data }: { data: Shipment[] }) {
 function DuePaymentsTable({ data }: { data: Shipment[] }) {
   const rows = useMemo(() => {
     return data
-      .map(s => {
-        const dueDate = getPaymentDueDate(s);
-        const daysLeft = getDaysUntilDue(s);
-        return { shipment: s, dueDate, daysLeft };
-      })
+      .map(s => ({
+        shipment: s,
+        dueDate: getPaymentDueDate(s),
+        daysLeft: getDaysUntilDue(s),
+        period: getPaymentPeriod(s),
+      }))
       .filter(r => r.dueDate !== null)
       .sort((a, b) => {
         if (a.daysLeft === null) return 1;
@@ -540,6 +560,8 @@ function DuePaymentsTable({ data }: { data: Shipment[] }) {
       .slice(0, 10);
   }, [data]);
 
+  const cell: React.CSSProperties = { padding: '0.55rem 0.875rem' };
+
   return (
     <div className="card fade-up delay-1" style={{ padding: '1.125rem' }}>
       <div className="section-title">Upcoming Due Payments</div>
@@ -547,7 +569,7 @@ function DuePaymentsTable({ data }: { data: Shipment[] }) {
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--font-size-body)' }}>
           <thead>
             <tr style={{ borderBottom: '2px solid var(--border)' }}>
-              {['Supplier', 'Invoice No', 'BL Date', 'Due Date', 'Days Left', 'Status', 'Action'].map(h => (
+              {['Supplier', 'Invoice No', 'Payment Terms', 'Due Date', 'Days Left', 'Status', 'Documents'].map(h => (
                 <th key={h} style={{
                   padding: '0.55rem 0.875rem', textAlign: 'left',
                   fontWeight: 700, fontSize: 'var(--font-size-small)',
@@ -560,6 +582,13 @@ function DuePaymentsTable({ data }: { data: Shipment[] }) {
             </tr>
           </thead>
           <tbody>
+            {rows.length === 0 && (
+              <tr>
+                <td colSpan={7} style={{ ...cell, textAlign: 'center', color: 'var(--text-muted)', padding: '1.5rem' }}>
+                  No payments with a due date yet.
+                </td>
+              </tr>
+            )}
             {rows.map((r, i) => {
               const s = r.shipment;
               const daysLeft = r.daysLeft ?? 0;
@@ -574,31 +603,26 @@ function DuePaymentsTable({ data }: { data: Shipment[] }) {
                   borderBottom: '1px solid var(--border)',
                   background: i % 2 === 1 ? 'var(--bg-secondary)' : 'transparent',
                 }}>
-                  <td style={{
-                    padding: '0.55rem 0.875rem', fontWeight: 600,
-                    color: 'var(--text-primary)', whiteSpace: 'nowrap',
-                  }}>
+                  <td style={{ ...cell, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
                     {s.supplier}
                   </td>
-                  <td style={{
-                    padding: '0.55rem 0.875rem', color: 'var(--text-secondary)',
-                    fontSize: 'var(--font-size-body-small)',
-                  }}>
+                  <td style={{ ...cell, color: 'var(--text-secondary)', fontSize: 'var(--font-size-body-small)' }}>
                     {s.invoiceNo}
                   </td>
-                  <td style={{
-                    padding: '0.55rem 0.875rem', color: 'var(--text-secondary)',
-                    fontSize: 'var(--font-size-body-small)', whiteSpace: 'nowrap',
-                  }}>
-                    {s.blDate ? formatDate(new Date(s.blDate)) : '—'}
+                  <td style={{ ...cell, whiteSpace: 'nowrap' }}>
+                    <div style={{ color: 'var(--text-primary)', fontWeight: 600, fontSize: 'var(--font-size-body-small)' }}>
+                      {getPaymentTermsLabel(s)}
+                    </div>
+                    {r.period && (
+                      <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-compact)' }}>
+                        {formatDMY(r.period.from)} → {formatDMY(r.period.to)}
+                      </div>
+                    )}
                   </td>
-                  <td style={{
-                    padding: '0.55rem 0.875rem', color: 'var(--text-secondary)',
-                    fontSize: 'var(--font-size-body-small)', whiteSpace: 'nowrap',
-                  }}>
-                    {r.dueDate ? formatDate(r.dueDate) : '—'}
+                  <td style={{ ...cell, color: 'var(--text-secondary)', fontSize: 'var(--font-size-body-small)', whiteSpace: 'nowrap' }}>
+                    {r.dueDate ? formatDMY(r.dueDate) : '—'}
                   </td>
-                  <td style={{ padding: '0.55rem 0.875rem' }}>
+                  <td style={cell}>
                     <span style={{
                       display: 'inline-block', padding: '2px 10px', borderRadius: 10,
                       background: `${daysColor}18`, color: daysColor,
@@ -608,7 +632,7 @@ function DuePaymentsTable({ data }: { data: Shipment[] }) {
                       {overdue ? `${Math.abs(daysLeft)}d overdue` : `${daysLeft}d left`}
                     </span>
                   </td>
-                  <td style={{ padding: '0.55rem 0.875rem' }}>
+                  <td style={cell}>
                     <span style={{
                       display: 'inline-block', padding: '2px 10px', borderRadius: 10,
                       background: `${statusColor}18`, color: statusColor,
@@ -618,14 +642,14 @@ function DuePaymentsTable({ data }: { data: Shipment[] }) {
                       {s.paymentStatus}
                     </span>
                   </td>
-                  <td style={{ padding: '0.55rem 0.875rem' }}>
+                  <td style={cell}>
                     {s.link ? (
                       <a href={s.link} target="_blank" rel="noopener noreferrer" style={{
                         display: 'inline-flex', alignItems: 'center', gap: 4,
                         color: ACCENT.blue, fontSize: 'var(--font-size-compact)',
                         fontWeight: 600, textDecoration: 'none',
                       }}>
-                        Track <ExternalLink size={11} />
+                        <FileText size={12} /> View PDF
                       </a>
                     ) : (
                       <span style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-compact)' }}>—</span>
@@ -644,14 +668,20 @@ function DuePaymentsTable({ data }: { data: Shipment[] }) {
 /* ── Recent Shipments Timeline ── */
 function RecentTimeline({ data }: { data: Shipment[] }) {
   const recent = useMemo(() => {
+    // createdAt is YYYY-MM-DD, so a string compare sorts correctly. Ties: newest id first.
     return [...data]
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id, undefined, { numeric: true }))
       .slice(0, 5);
   }, [data]);
 
   return (
     <div className="card fade-up delay-2" style={{ padding: '1.125rem' }}>
       <div className="section-title">Recent Shipments</div>
+      {recent.length === 0 && (
+        <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-body-small)', padding: '0.5rem 0' }}>
+          No shipments to show.
+        </div>
+      )}
       <div style={{
         display: 'flex', alignItems: 'flex-start', gap: 0,
         position: 'relative', overflowX: 'auto', paddingBottom: '0.5rem',
@@ -663,7 +693,7 @@ function RecentTimeline({ data }: { data: Shipment[] }) {
           return (
             <div key={s.id} style={{
               display: 'flex', flexDirection: 'column', alignItems: 'center',
-              flex: 1, minWidth: 140, position: 'relative',
+              flex: 1, minWidth: 170, position: 'relative',
             }}>
               {/* Connecting line */}
               {!isLast && (
@@ -686,7 +716,7 @@ function RecentTimeline({ data }: { data: Shipment[] }) {
                 fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)',
                 fontWeight: 600, marginBottom: 2,
               }}>
-                {formatDate(new Date(s.createdAt))}
+                {formatDMY(s.createdAt)}
               </div>
 
               {/* Supplier */}
@@ -708,12 +738,26 @@ function RecentTimeline({ data }: { data: Shipment[] }) {
                 {s.materialStatus}
               </span>
 
-              {/* Mode icon */}
-              <div style={{ marginTop: 4, color: 'var(--text-muted)' }}>
-                {s.modeOfShipment === 'Sea'
-                  ? <Ship size={12} />
-                  : <Plane size={12} />
-                }
+              {/* Delivered date, or ETD / ETA */}
+              <div style={{
+                marginTop: 4, textAlign: 'center', padding: '0 0.5rem',
+                fontSize: 'var(--font-size-tiny)', color: 'var(--text-secondary)', lineHeight: 1.4,
+              }}>
+                {s.materialStatus === 'Delivered'
+                  ? `Delivered : ${formatDMY(s.deliveredDate) || '?'}`
+                  : formatEtdEta(s)}
+              </div>
+
+              {/* Mode icon + label */}
+              <div style={{
+                marginTop: 4, color: 'var(--text-muted)',
+                display: 'flex', alignItems: 'center', gap: 4,
+                fontSize: 'var(--font-size-tiny)',
+              }}>
+                {s.modeOfShipment === 'Sea' ? <Ship size={12} />
+                  : s.modeOfShipment === 'Air' ? <Plane size={12} />
+                  : <Package size={12} />}
+                <span>{getModeLabel(s)}</span>
               </div>
             </div>
           );
@@ -727,22 +771,24 @@ function RecentTimeline({ data }: { data: Shipment[] }) {
    Main Dashboard Page
 ═══════════════════════════════════════════════════════════════════════════ */
 export default function ShipmentDashboardPage() {
+  const { shipments, ready } = useShipments();
   const [searchTerm, setSearchTerm] = useState('');
 
   /* Filtered data */
   const filtered = useMemo(() => {
-    if (!searchTerm.trim()) return shipmentData;
+    if (!searchTerm.trim()) return shipments;
     const q = searchTerm.toLowerCase();
-    return shipmentData.filter(s =>
+    return shipments.filter(s =>
       s.supplier.toLowerCase().includes(q) ||
       s.invoiceNo.toLowerCase().includes(q) ||
       s.material.toLowerCase().includes(q) ||
       s.blNo.toLowerCase().includes(q) ||
       s.poNo.toLowerCase().includes(q) ||
       s.id.toLowerCase().includes(q) ||
-      s.country.toLowerCase().includes(q)
+      s.country.toLowerCase().includes(q) ||
+      (s.otherModeDetail ?? '').toLowerCase().includes(q)
     );
-  }, [searchTerm]);
+  }, [shipments, searchTerm]);
 
   /* KPI computations */
   const kpis = useMemo(() => {
@@ -752,6 +798,15 @@ export default function ShipmentDashboardPage() {
     const overduePayments = filtered.filter(s => isPaymentOverdue(s)).length;
     return { totalShipments, inTransit, pendingPayments, overduePayments };
   }, [filtered]);
+
+  // Wait for the saved data so the page doesn't flash the starting records first.
+  if (!ready) {
+    return (
+      <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: 'var(--font-size-body)' }}>
+        Loading shipments…
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
@@ -770,7 +825,7 @@ export default function ShipmentDashboardPage() {
           </h2>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
-          <Link href="/shipments/entry" style={{ textDecoration: 'none' }}>
+          <Link href="/shipments/entry?tab=history" style={{ textDecoration: 'none' }}>
             <button style={{
               display: 'flex', alignItems: 'center', gap: 6,
               padding: '0.5rem 1rem', borderRadius: 8,
@@ -854,10 +909,10 @@ export default function ShipmentDashboardPage() {
       <div className="dashboard-kpi-grid" style={{
         display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.875rem',
       }}>
-        <KpiCard icon={Package} label="Total Shipments" value={kpis.totalShipments} color={ACCENT.blue} delay={0.05} />
-        <KpiCard icon={Ship} label="In Transit" value={kpis.inTransit} color={ACCENT.orange} delay={0.1} />
-        <KpiCard icon={AlertCircle} label="Pending Payments" value={kpis.pendingPayments} color={ACCENT.red} delay={0.15} />
-        <KpiCard icon={Clock} label="Overdue Payments" value={kpis.overduePayments} color={ACCENT.red} delay={0.2} pulsing />
+        <KpiCard icon={Package} label="Total Shipments" value={kpis.totalShipments} total={kpis.totalShipments} color={ACCENT.blue} delay={0.05} />
+        <KpiCard icon={Ship} label="In Transit" value={kpis.inTransit} total={kpis.totalShipments} color={ACCENT.orange} delay={0.1} />
+        <KpiCard icon={AlertCircle} label="Pending Payments" value={kpis.pendingPayments} total={kpis.totalShipments} color={ACCENT.red} delay={0.15} />
+        <KpiCard icon={Clock} label="Overdue Payments" value={kpis.overduePayments} total={kpis.totalShipments} color={ACCENT.red} delay={0.2} pulsing />
       </div>
 
       {/* ── ROW 2: Payment Calendar + Payment Status Donut ── */}

@@ -1,19 +1,33 @@
-import {
-  Shipment,
-  PaymentTermType,
-} from '../types/shipment';
+/* ─────────────────────────────────────────────────────────────────────────────
+   shipmentData.ts – Seed data and helper functions for import shipments.
+   Fully supports:
+   - Mode of Shipment: Sea, Air, Others
+   - Payment Types: LC (bank ref mandatory) vs Others (credit days from Invoice/BL/PO date)
+   - Dynamic due date calculation from custom credit days & base date
+   - Material statuses with Delivered date or ETD/ETA
+   - Helpers: formatDMY, formatEtdEta, getPaymentDueDate, getDaysUntilDue,
+              getModeLabel, getPaymentPeriod, getPaymentTermsLabel, isPaymentOverdue,
+              addDaysToISO, getPaymentBaseISO, getDocumentRemark, nextShipmentId, toISODate
+───────────────────────────────────────────────────────────────────────────── */
 
+import { Shipment, ShipmentMode, DocumentStatus, MaterialStatus, PaymentStatus } from '../types/shipment';
+
+/* ─── Seed Data ─── */
 export const shipmentData: Shipment[] = [
   {
     id: 'SHP-001',
     supplier: 'Bosch GmbH',
     poNo: 'PO/2026/04-0187',
+    poDate: '2026-06-05',
+    poDocument: { name: 'PO_04_0187_Signed.pdf', url: '#', type: 'pdf' },
     material: 'Hydraulic Actuators',
     invoiceNo: 'INV-BOSCH-2026-0412',
     invoiceDate: '2026-06-10',
+    invoiceDocument: { name: 'INV_BOSCH_0412.pdf', url: '#', type: 'pdf' },
     portOfLoading: 'Hamburg, Germany',
     blNo: 'MAEU726491835',
     blDate: '2026-06-15',
+    blDocument: { name: 'BL_MAEU726491835.pdf', url: '#', type: 'pdf' },
     mawb: '',
     hawb: '',
     cha: 'Kuehne + Nagel India',
@@ -21,14 +35,18 @@ export const shipmentData: Shipment[] = [
     modeOfShipment: 'Sea',
     boeNo: 'BOE/2026/3847291',
     boeDate: '2026-07-22',
+    boeDocument: { name: 'BOE_3847291_Stamped.pdf', url: '#', type: 'pdf' },
     country: 'Germany',
-    paymentTerms: '60 Days from BL',
+    paymentType: 'Others',
+    creditDays: 60,
+    creditDaysFrom: 'BL Date',
     paymentStatus: 'PAID',
+    bankReferenceNo: 'ICICI/FX/2026/08142',
     materialStatus: 'Delivered',
+    deliveredDate: '2026-07-20',
     etd: '2026-06-15',
     eta: '2026-07-18',
-    link: 'https://tracking.maersk.com/MAEU726491835',
-    bankReferenceNo: 'ICICI/FX/2026/08142',
+    link: 'https://docs.cumi.internal/shipments/SHP-001.pdf',
     leadTime: 45,
     createdAt: '2026-06-05',
   },
@@ -36,6 +54,7 @@ export const shipmentData: Shipment[] = [
     id: 'SHP-002',
     supplier: 'Siemens AG',
     poNo: 'PO/2026/05-0203',
+    poDate: '2026-06-25',
     material: 'PLC Controllers S7-1500',
     invoiceNo: 'INV-SIE-2026-07831',
     invoiceDate: '2026-07-01',
@@ -50,13 +69,16 @@ export const shipmentData: Shipment[] = [
     boeNo: 'BOE/2026/4012836',
     boeDate: '2026-08-12',
     country: 'Germany',
-    paymentTerms: '60 Days from BL',
+    paymentType: 'Others',
+    creditDays: 60,
+    creditDaysFrom: 'BL Date',
     paymentStatus: 'NOT PAID',
+    bankReferenceNo: '',
     materialStatus: 'Delivered',
+    deliveredDate: '2026-08-10',
     etd: '2026-07-05',
     eta: '2026-08-08',
-    link: 'https://tracking.hapag-lloyd.com/HLCU835720194',
-    bankReferenceNo: '',
+    link: 'https://docs.cumi.internal/shipments/SHP-002.pdf',
     leadTime: 38,
     createdAt: '2026-06-25',
   },
@@ -64,6 +86,7 @@ export const shipmentData: Shipment[] = [
     id: 'SHP-003',
     supplier: 'ABB Ltd',
     poNo: 'PO/2026/05-0219',
+    poDate: '2026-07-10',
     material: 'Variable Frequency Drives',
     invoiceNo: 'INV-ABB-2026-5521',
     invoiceDate: '2026-07-15',
@@ -78,13 +101,16 @@ export const shipmentData: Shipment[] = [
     boeNo: 'BOE/2026/4185723',
     boeDate: '2026-07-23',
     country: 'Switzerland',
-    paymentTerms: '60 Days from Invoice',
+    paymentType: 'Others',
+    creditDays: 60,
+    creditDaysFrom: 'Invoice Date',
     paymentStatus: 'PAID',
+    bankReferenceNo: 'SBI/FX/2026/09285',
     materialStatus: 'Delivered',
+    deliveredDate: '2026-07-24',
     etd: '2026-07-18',
     eta: '2026-07-22',
-    link: 'https://www.track-trace.com/724-48291056',
-    bankReferenceNo: 'SBI/FX/2026/09285',
+    link: 'https://docs.cumi.internal/shipments/SHP-003.pdf',
     leadTime: 30,
     createdAt: '2026-07-10',
   },
@@ -92,6 +118,7 @@ export const shipmentData: Shipment[] = [
     id: 'SHP-004',
     supplier: 'Schneider Electric',
     poNo: 'PO/2026/06-0241',
+    poDate: '2026-07-14',
     material: 'Circuit Breakers & Switchgear',
     invoiceNo: 'INV-SCH-2026-3345',
     invoiceDate: '2026-07-20',
@@ -106,13 +133,16 @@ export const shipmentData: Shipment[] = [
     boeNo: 'BOE/2026/4293018',
     boeDate: '2026-08-30',
     country: 'France',
-    paymentTerms: '60 Days from BL',
+    paymentType: 'Others',
+    creditDays: 60,
+    creditDaysFrom: 'BL Date',
     paymentStatus: 'NOT PAID',
+    bankReferenceNo: '',
     materialStatus: 'Delivered',
+    deliveredDate: '2026-08-28',
     etd: '2026-07-25',
     eta: '2026-08-27',
-    link: 'https://tracking.cma-cgm.com/CMAU491028376',
-    bankReferenceNo: '',
+    link: 'https://docs.cumi.internal/shipments/SHP-004.pdf',
     leadTime: 40,
     createdAt: '2026-07-14',
   },
@@ -120,6 +150,7 @@ export const shipmentData: Shipment[] = [
     id: 'SHP-005',
     supplier: 'Mitsubishi Electric',
     poNo: 'PO/2026/06-0258',
+    poDate: '2026-07-28',
     material: 'Servo Motors & Amplifiers',
     invoiceNo: 'INV-MIT-2026-8812',
     invoiceDate: '2026-08-01',
@@ -134,13 +165,16 @@ export const shipmentData: Shipment[] = [
     boeNo: 'BOE/2026/4510294',
     boeDate: '2026-09-08',
     country: 'Japan',
-    paymentTerms: '60 Days from BL',
+    paymentType: 'Others',
+    creditDays: 60,
+    creditDaysFrom: 'BL Date',
     paymentStatus: 'NOT PAID',
+    bankReferenceNo: '',
     materialStatus: 'Delivered',
+    deliveredDate: '2026-09-06',
     etd: '2026-08-05',
     eta: '2026-09-05',
-    link: 'https://tracking.one-line.com/ONEU582047193',
-    bankReferenceNo: '',
+    link: 'https://docs.cumi.internal/shipments/SHP-005.pdf',
     leadTime: 35,
     createdAt: '2026-07-28',
   },
@@ -148,6 +182,7 @@ export const shipmentData: Shipment[] = [
     id: 'SHP-006',
     supplier: 'Honeywell International',
     poNo: 'PO/2026/07-0275',
+    poDate: '2026-08-03',
     material: 'Industrial Sensors & Transmitters',
     invoiceNo: 'INV-HON-2026-4490',
     invoiceDate: '2026-08-10',
@@ -162,13 +197,16 @@ export const shipmentData: Shipment[] = [
     boeNo: 'BOE/2026/4628501',
     boeDate: '2026-08-18',
     country: 'United States',
-    paymentTerms: '60 Days from Invoice',
+    paymentType: 'Others',
+    creditDays: 60,
+    creditDaysFrom: 'Invoice Date',
     paymentStatus: 'NOT PAID',
+    bankReferenceNo: '',
     materialStatus: 'Delivered',
+    deliveredDate: '2026-08-19',
     etd: '2026-08-13',
     eta: '2026-08-17',
-    link: 'https://www.track-trace.com/176-93021487',
-    bankReferenceNo: '',
+    link: 'https://docs.cumi.internal/shipments/SHP-006.pdf',
     leadTime: 32,
     createdAt: '2026-08-03',
   },
@@ -176,147 +214,169 @@ export const shipmentData: Shipment[] = [
     id: 'SHP-007',
     supplier: 'Fanuc Corporation',
     poNo: 'PO/2026/07-0289',
-    material: 'CNC Control Units',
-    invoiceNo: 'INV-FAN-2026-2271',
+    poDate: '2026-08-15',
+    material: 'CNC Controller Units',
+    invoiceNo: 'INV-FAN-2026-1184',
     invoiceDate: '2026-08-20',
-    portOfLoading: 'Kobe, Japan',
-    blNo: 'NYKU739201485',
+    portOfLoading: 'Tokyo Port, Japan',
+    blNo: 'NYKU891024653',
     blDate: '2026-08-25',
     mawb: '',
     hawb: '',
-    cha: 'Nippon Express India',
+    cha: 'Kintetsu World Express',
     documentStatus: 'In Process',
     modeOfShipment: 'Sea',
-    boeNo: 'BOE/2026/4782019',
+    boeNo: 'BOE/2026/4789123',
     boeDate: '2026-09-28',
     country: 'Japan',
-    paymentTerms: 'LC',
+    paymentType: 'LC',
+    creditDays: null,
+    creditDaysFrom: null,
     paymentStatus: 'PAID',
-    materialStatus: 'Customs Clearance',
+    bankReferenceNo: 'HDFC/LC/2026/07231',
+    materialStatus: 'Delivered',
+    deliveredDate: '2026-09-26',
     etd: '2026-08-25',
     eta: '2026-09-25',
-    link: 'https://tracking.nykline.com/NYKU739201485',
-    bankReferenceNo: 'HDFC/LC/2026/11037',
+    link: 'https://docs.cumi.internal/shipments/SHP-007.pdf',
     leadTime: 42,
-    createdAt: '2026-08-12',
+    createdAt: '2026-08-15',
   },
   {
     id: 'SHP-008',
-    supplier: 'Emerson Electric',
-    poNo: 'PO/2026/08-0304',
-    material: 'Flow Meters & Control Valves',
-    invoiceNo: 'INV-EMR-2026-6683',
-    invoiceDate: '2026-09-01',
+    supplier: 'Emerson Electric Co.',
+    poNo: 'PO/2026/08-0302',
+    poDate: '2026-08-22',
+    material: 'Flowmeters & Control Valves',
+    invoiceNo: 'INV-EME-2026-7723',
+    invoiceDate: '2026-08-28',
     portOfLoading: 'Houston, USA',
-    blNo: 'MSCU462019837',
-    blDate: '2026-09-05',
+    blNo: 'MSCU719304825',
+    blDate: '2026-09-02',
     mawb: '',
     hawb: '',
-    cha: 'DHL Global Forwarding',
+    cha: 'Panalpina World Transport',
     documentStatus: 'In Process',
     modeOfShipment: 'Sea',
-    boeNo: '',
-    boeDate: '',
+    boeNo: 'BOE/2026/4901234',
+    boeDate: '2026-10-10',
     country: 'United States',
-    paymentTerms: '60 Days from BL',
+    paymentType: 'Others',
+    creditDays: 60,
+    creditDaysFrom: 'BL Date',
     paymentStatus: 'NOT PAID',
-    materialStatus: 'At Port',
-    etd: '2026-09-05',
-    eta: '2026-10-10',
-    link: 'https://tracking.msc.com/MSCU462019837',
     bankReferenceNo: '',
-    leadTime: 50,
-    createdAt: '2026-08-25',
+    materialStatus: 'At Port',
+    deliveredDate: undefined,
+    etd: '2026-09-02',
+    eta: '2026-10-08',
+    link: 'https://docs.cumi.internal/shipments/SHP-008.pdf',
+    leadTime: 48,
+    createdAt: '2026-08-22',
   },
   {
     id: 'SHP-009',
     supplier: 'Rockwell Automation',
     poNo: 'PO/2026/08-0318',
-    material: 'Allen-Bradley CompactLogix',
-    invoiceNo: 'INV-ROK-2026-1158',
-    invoiceDate: '2026-09-03',
-    portOfLoading: "O'Hare Airport, USA",
-    blNo: '',
-    blDate: '',
-    mawb: '157-12345678',
-    hawb: 'HWB-2026-009',
-    cha: 'UPS Supply Chain Solutions',
-    documentStatus: 'Received',
-    modeOfShipment: 'Air',
-    boeNo: 'BOE/2026/4901283',
-    boeDate: '2026-09-12',
+    poDate: '2026-08-28',
+    material: 'Allen-Bradley I/O Modules',
+    invoiceNo: 'INV-ROC-2026-9201',
+    invoiceDate: '2026-09-05',
+    portOfLoading: 'Chicago, USA',
+    blNo: 'OOCU481920375',
+    blDate: '2026-09-10',
+    mawb: '',
+    hawb: '',
+    cha: 'Ceva Logistics India',
+    documentStatus: 'In Process',
+    modeOfShipment: 'Others',
+    otherModeDetail: 'Multimodal Rail-Sea',
+    boeNo: 'BOE/2026/5012345',
+    boeDate: '2026-10-14',
     country: 'United States',
-    paymentTerms: 'PO',
+    paymentType: 'Others',
+    creditDays: 45,
+    creditDaysFrom: 'PO Date',
     paymentStatus: 'PARTIAL',
-    materialStatus: 'Delivered',
-    etd: '2026-09-08',
-    eta: '2026-09-12',
-    link: 'https://www.track-trace.com/157-12345678',
-    bankReferenceNo: 'AXIS/FX/2026/12490',
-    leadTime: 30,
+    bankReferenceNo: '',
+    materialStatus: 'Customs Clearance',
+    deliveredDate: undefined,
+    etd: '2026-09-10',
+    eta: '2026-10-12',
+    link: 'https://docs.cumi.internal/shipments/SHP-009.pdf',
+    leadTime: 50,
     createdAt: '2026-08-28',
   },
   {
     id: 'SHP-010',
-    supplier: 'KUKA AG',
-    poNo: 'PO/2026/08-0332',
-    material: 'Robotic Arm KR 60-3',
-    invoiceNo: 'INV-KUK-2026-0893',
-    invoiceDate: '2026-09-10',
-    portOfLoading: 'Antwerp, Belgium',
-    blNo: 'EGLV301948276',
-    blDate: '2026-09-15',
-    mawb: '',
-    hawb: '',
-    cha: 'Kuehne + Nagel India',
-    documentStatus: 'In Process',
-    modeOfShipment: 'Sea',
-    boeNo: '',
-    boeDate: '',
+    supplier: 'KUKA Robotics GmbH',
+    poNo: 'PO/2026/08-0335',
+    poDate: '2026-09-02',
+    material: 'Industrial Robot Arm Components',
+    invoiceNo: 'INV-KUK-2026-6641',
+    invoiceDate: '2026-09-12',
+    portOfLoading: 'Munich Airport, Germany',
+    blNo: '',
+    blDate: '',
+    mawb: '020-49102847',
+    hawb: 'HWB-2026-010',
+    cha: 'DHL Global Forwarding',
+    documentStatus: 'Received',
+    modeOfShipment: 'Air',
+    boeNo: 'BOE/2026/5123456',
+    boeDate: '2026-09-22',
     country: 'Germany',
-    paymentTerms: '60 Days from Invoice',
+    paymentType: 'Others',
+    creditDays: 60,
+    creditDaysFrom: 'Invoice Date',
     paymentStatus: 'NOT PAID',
-    materialStatus: 'In Transit',
-    etd: '2026-09-15',
-    eta: '2026-10-18',
-    link: 'https://tracking.evergreen-line.com/EGLV301948276',
     bankReferenceNo: '',
-    leadTime: 60,
+    materialStatus: 'At Port',
+    deliveredDate: undefined,
+    etd: '2026-09-15',
+    eta: '2026-09-20',
+    link: 'https://docs.cumi.internal/shipments/SHP-010.pdf',
+    leadTime: 28,
     createdAt: '2026-09-02',
   },
   {
     id: 'SHP-011',
-    supplier: 'Yokogawa Electric',
-    poNo: 'PO/2026/09-0347',
-    material: 'DCS System Components',
-    invoiceNo: 'INV-YOK-2026-7724',
-    invoiceDate: '2026-09-20',
-    portOfLoading: 'Tokyo, Japan',
-    blNo: 'KKFU581029374',
+    supplier: 'Yokogawa Electric Corp',
+    poNo: 'PO/2026/09-0349',
+    poDate: '2026-09-10',
+    material: 'DCS Controller Modules',
+    invoiceNo: 'INV-YOK-2026-3829',
+    invoiceDate: '2026-09-18',
+    portOfLoading: 'Kobe, Japan',
+    blNo: 'EGLV920184736',
     blDate: '2026-09-25',
     mawb: '',
     hawb: '',
-    cha: 'Nippon Express India',
+    cha: 'Yusen Logistics India',
     documentStatus: 'Received',
     modeOfShipment: 'Sea',
     boeNo: '',
     boeDate: '',
     country: 'Japan',
-    paymentTerms: '60 Days from BL',
+    paymentType: 'Others',
+    creditDays: 60,
+    creditDaysFrom: 'BL Date',
     paymentStatus: 'NOT PAID',
+    bankReferenceNo: '',
     materialStatus: 'In Transit',
+    deliveredDate: undefined,
     etd: '2026-09-25',
     eta: '2026-10-28',
-    link: 'https://tracking.kline.com/KKFU581029374',
-    bankReferenceNo: '',
-    leadTime: 45,
-    createdAt: '2026-09-12',
+    link: 'https://docs.cumi.internal/shipments/SHP-011.pdf',
+    leadTime: 40,
+    createdAt: '2026-09-10',
   },
   {
     id: 'SHP-012',
-    supplier: 'Endress+Hauser',
-    poNo: 'PO/2026/09-0361',
-    material: 'Level & Pressure Instruments',
+    supplier: 'Endress+Hauser AG',
+    poNo: 'PO/2026/09-0362',
+    poDate: '2026-09-18',
+    material: 'Level & Pressure Transmitters',
     invoiceNo: 'INV-EH-2026-5102',
     invoiceDate: '2026-09-25',
     portOfLoading: 'Zurich Airport, Switzerland',
@@ -330,13 +390,16 @@ export const shipmentData: Shipment[] = [
     boeNo: '',
     boeDate: '',
     country: 'Switzerland',
-    paymentTerms: '60 Days from Invoice',
+    paymentType: 'Others',
+    creditDays: 60,
+    creditDaysFrom: 'Invoice Date',
     paymentStatus: 'NOT PAID',
+    bankReferenceNo: '',
     materialStatus: 'Customs Clearance',
+    deliveredDate: undefined,
     etd: '2026-09-28',
     eta: '2026-10-02',
-    link: 'https://www.track-trace.com/724-67834921',
-    bankReferenceNo: '',
+    link: 'https://docs.cumi.internal/shipments/SHP-012.pdf',
     leadTime: 35,
     createdAt: '2026-09-18',
   },
@@ -344,6 +407,7 @@ export const shipmentData: Shipment[] = [
     id: 'SHP-013',
     supplier: 'Festo SE',
     poNo: 'PO/2026/09-0378',
+    poDate: '2026-09-25',
     material: 'Pneumatic Cylinders & Valves',
     invoiceNo: 'INV-FES-2026-3389',
     invoiceDate: '2026-10-01',
@@ -358,13 +422,16 @@ export const shipmentData: Shipment[] = [
     boeNo: '',
     boeDate: '',
     country: 'Germany',
-    paymentTerms: '60 Days from BL',
+    paymentType: 'Others',
+    creditDays: 60,
+    creditDaysFrom: 'BL Date',
     paymentStatus: 'NOT PAID',
+    bankReferenceNo: '',
     materialStatus: 'In Transit',
+    deliveredDate: undefined,
     etd: '2026-10-05',
     eta: '2026-11-08',
-    link: 'https://tracking.maersk.com/MAEU918240563',
-    bankReferenceNo: '',
+    link: 'https://docs.cumi.internal/shipments/SHP-013.pdf',
     leadTime: 55,
     createdAt: '2026-09-25',
   },
@@ -372,6 +439,7 @@ export const shipmentData: Shipment[] = [
     id: 'SHP-014',
     supplier: 'Phoenix Contact',
     poNo: 'PO/2026/10-0395',
+    poDate: '2026-10-05',
     material: 'Terminal Blocks & Connectors',
     invoiceNo: 'INV-PHX-2026-9047',
     invoiceDate: '2026-10-10',
@@ -386,13 +454,16 @@ export const shipmentData: Shipment[] = [
     boeNo: '',
     boeDate: '',
     country: 'Germany',
-    paymentTerms: 'LC',
+    paymentType: 'LC',
+    creditDays: null,
+    creditDaysFrom: null,
     paymentStatus: 'PAID',
+    bankReferenceNo: 'HDFC/LC/2026/14521',
     materialStatus: 'Pending Shipment',
+    deliveredDate: undefined,
     etd: '2026-10-20',
     eta: '2026-10-25',
-    link: '',
-    bankReferenceNo: 'HDFC/LC/2026/14521',
+    link: 'https://docs.cumi.internal/shipments/SHP-014.pdf',
     leadTime: 30,
     createdAt: '2026-10-05',
   },
@@ -400,6 +471,7 @@ export const shipmentData: Shipment[] = [
     id: 'SHP-015',
     supplier: 'Danfoss A/S',
     poNo: 'PO/2026/10-0412',
+    poDate: '2026-10-08',
     material: 'Hydraulic Power Units',
     invoiceNo: 'INV-DAN-2026-6215',
     invoiceDate: '2026-10-15',
@@ -414,86 +486,210 @@ export const shipmentData: Shipment[] = [
     boeNo: '',
     boeDate: '',
     country: 'Denmark',
-    paymentTerms: '60 Days from BL',
+    paymentType: 'Others',
+    creditDays: 60,
+    creditDaysFrom: 'BL Date',
     paymentStatus: 'NOT PAID',
+    bankReferenceNo: '',
     materialStatus: 'Pending Shipment',
+    deliveredDate: undefined,
     etd: '2026-10-20',
     eta: '2026-11-22',
-    link: 'https://tracking.maersk.com/MAEU204859173',
-    bankReferenceNo: '',
+    link: 'https://docs.cumi.internal/shipments/SHP-015.pdf',
     leadTime: 55,
     createdAt: '2026-10-08',
   },
 ];
 
-/**
- * Calculates the payment due date for a shipment based on its payment terms.
- * Returns null for LC and PO payment terms (no fixed due date).
- */
-export function getPaymentDueDate(shipment: Shipment): Date | null {
-  switch (shipment.paymentTerms) {
-    case '60 Days from BL': {
-      if (!shipment.blDate) return null;
-      const date = new Date(shipment.blDate);
-      date.setDate(date.getDate() + 60);
-      return date;
+/* ─── Date and Label Helpers ─── */
+
+/** Formats ISO string (YYYY-MM-DD) or Date object into DD/MM/YYYY */
+export function formatDMY(d: string | Date | undefined | null): string {
+  if (!d) return '';
+  if (typeof d === 'string') {
+    // If it's already an ISO string YYYY-MM-DD
+    const parts = d.split('T')[0].split('-');
+    if (parts.length === 3) {
+      return `${parts[2]}/${parts[1]}/${parts[0]}`;
     }
-    case '60 Days from Invoice': {
-      if (!shipment.invoiceDate) return null;
-      const date = new Date(shipment.invoiceDate);
-      date.setDate(date.getDate() + 60);
-      return date;
-    }
-    case 'LC':
-    case 'PO':
-    default:
-      return null;
   }
+  const date = typeof d === 'string' ? new Date(d) : d;
+  if (isNaN(date.getTime())) return '';
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const year = date.getFullYear();
+  return `${day}/${month}/${year}`;
+}
+
+/** Formats Date object into YYYY-MM-DD string */
+export function toISODate(d: Date | string | undefined | null): string {
+  if (!d) return '';
+  if (typeof d === 'string') return d.split('T')[0];
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+/** Adds N days to an ISO date string (YYYY-MM-DD) and returns new YYYY-MM-DD */
+export function addDaysToISO(isoDate: string | undefined | null, days: number): string | null {
+  if (!isoDate) return null;
+  const d = new Date(isoDate);
+  if (isNaN(d.getTime())) return null;
+  d.setDate(d.getDate() + days);
+  return toISODate(d);
+}
+
+/** Returns the display label for Mode of Shipment */
+export function getModeLabel(s: { modeOfShipment: ShipmentMode; otherModeDetail?: string }): string {
+  if (s.modeOfShipment === 'Others') {
+    return s.otherModeDetail?.trim() ? `Others (${s.otherModeDetail})` : 'Others';
+  }
+  return s.modeOfShipment;
 }
 
 /**
- * Checks if a shipment's payment is overdue (past due date and not fully paid).
+ * Returns the base ISO date string used for credit day calculation
+ * depending on creditDaysFrom ('Invoice Date', 'BL Date', 'PO Date')
  */
-export function isPaymentOverdue(shipment: Shipment): boolean {
-  if (shipment.paymentStatus === 'PAID') return false;
-  const dueDate = getPaymentDueDate(shipment);
-  if (!dueDate) return false;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return dueDate < today;
+export function getPaymentBaseISO(s: {
+  creditDaysFrom?: string | null;
+  invoiceDate?: string;
+  blDate?: string;
+  poDate?: string;
+}): string {
+  if (!s.creditDaysFrom) return '';
+  if (s.creditDaysFrom === 'Invoice Date') return s.invoiceDate || '';
+  if (s.creditDaysFrom === 'BL Date') return s.blDate || '';
+  if (s.creditDaysFrom === 'PO Date') return s.poDate || '';
+  return '';
 }
 
 /**
- * Returns the number of days until payment is due.
- * Negative values indicate overdue days.
- * Returns null for LC/PO terms or missing date info.
+ * Calculates the payment due date as a Date object.
+ * If paymentType is 'LC', there is no credit-day calculation (returns null).
+ * If creditDays and creditDaysFrom are set, computes: baseDate + creditDays.
+ * Supports backward-compatibility for legacy records if present.
  */
-export function getDaysUntilDue(shipment: Shipment): number | null {
-  const dueDate = getPaymentDueDate(shipment);
-  if (!dueDate) return null;
+export function getPaymentDueDate(s: any): Date | null {
+  if (!s) return null;
+
+  // New schema: paymentType 'LC' has no due date
+  if (s.paymentType === 'LC') return null;
+
+  // Day-based payment terms:
+  if (s.creditDays != null && s.creditDaysFrom) {
+    const baseISO = getPaymentBaseISO(s);
+    if (!baseISO) return null;
+    const dueISO = addDaysToISO(baseISO, Number(s.creditDays));
+    return dueISO ? new Date(dueISO) : null;
+  }
+
+  // Legacy fallback if old paymentTerms property exists
+  if (typeof s.paymentTerms === 'string') {
+    if (s.paymentTerms === '60 Days from BL' && s.blDate) {
+      return new Date(addDaysToISO(s.blDate, 60) || '');
+    }
+    if (s.paymentTerms === '60 Days from Invoice' && s.invoiceDate) {
+      return new Date(addDaysToISO(s.invoiceDate, 60) || '');
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Returns the payment period range ({ from: Date, to: Date })
+ * E.g., from PO Date to Due Date, or BL Date to Due Date.
+ */
+export function getPaymentPeriod(s: any): { from: Date; to: Date } | null {
+  const due = getPaymentDueDate(s);
+  if (!due) return null;
+  const baseISO = getPaymentBaseISO(s);
+  if (!baseISO) return null;
+  return {
+    from: new Date(baseISO),
+    to: due,
+  };
+}
+
+/** Returns a clean user-facing label for the payment terms */
+export function getPaymentTermsLabel(s: any): string {
+  if (s.paymentType === 'LC') {
+    return 'LC (Letter of Credit)';
+  }
+  if (s.creditDays != null && s.creditDaysFrom) {
+    return `${s.creditDays} days from ${s.creditDaysFrom}`;
+  }
+  if (typeof s.paymentTerms === 'string') {
+    return s.paymentTerms;
+  }
+  return 'Standard Payment';
+}
+
+/** Checks if a shipment's payment is overdue */
+export function isPaymentOverdue(s: any): boolean {
+  if (s.paymentStatus === 'PAID') return false;
+  const due = getPaymentDueDate(s);
+  if (!due) return false;
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  dueDate.setHours(0, 0, 0, 0);
-  const diffMs = dueDate.getTime() - today.getTime();
+  const d = new Date(due);
+  d.setHours(0, 0, 0, 0);
+  return d < today;
+}
+
+/** Returns the number of days until due (negative if overdue) */
+export function getDaysUntilDue(s: any): number | null {
+  const due = getPaymentDueDate(s);
+  if (!due) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const d = new Date(due);
+  d.setHours(0, 0, 0, 0);
+  const diffMs = d.getTime() - today.getTime();
   return Math.ceil(diffMs / (1000 * 60 * 60 * 24));
 }
 
-/**
- * Groups shipments by their payment due date string (YYYY-MM-DD).
- * Only includes shipments with calculable due dates.
- */
+/** Formats ETD vs ETA string (e.g. "ETD : 03/07/2026 - ETA : 02/08/2026" or "ETD : 17/07/2026 - ETA : ?") */
+export function formatEtdEta(s: { etd?: string; eta?: string }): string {
+  const etdStr = s.etd ? formatDMY(s.etd) : '?';
+  const etaStr = s.eta ? formatDMY(s.eta) : '?';
+  return `ETD : ${etdStr} - ETA : ${etaStr}`;
+}
+
+/** Returns document remark note for ETD/ETA */
+export function getDocumentRemark(status?: DocumentStatus): string {
+  if (status === 'Pending') return 'Yet to receive documents';
+  if (status === 'In Process') return 'Documents in process';
+  if (status === 'Received') return 'Documents received';
+  if (status === 'Completed') return 'Clearance completed';
+  return '';
+}
+
+/** Generates the next sequential shipment ID based on existing records */
+export function nextShipmentId(records: Shipment[]): string {
+  let maxNum = 0;
+  for (const r of records) {
+    const m = r.id.match(/SHP-(\d+)/);
+    if (m) {
+      const num = parseInt(m[1], 10);
+      if (num > maxNum) maxNum = num;
+    }
+  }
+  return `SHP-${String(maxNum + 1).padStart(3, '0')}`;
+}
+
+/** Groups shipments by due date string (YYYY-MM-DD) */
 export function getShipmentsByDueDate(): Map<string, Shipment[]> {
   const map = new Map<string, Shipment[]>();
-
   for (const shipment of shipmentData) {
     const dueDate = getPaymentDueDate(shipment);
     if (!dueDate) continue;
-
-    const key = dueDate.toISOString().split('T')[0];
+    const key = toISODate(dueDate);
     const existing = map.get(key) || [];
     existing.push(shipment);
     map.set(key, existing);
   }
-
   return map;
 }

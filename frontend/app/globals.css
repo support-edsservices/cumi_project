@@ -403,7 +403,24 @@ body {
 input {
   background-color: transparent !important;
   color: var(--text-primary) !important;
-  color-scheme: dark light;
+}
+
+[data-theme="light"] input[type="date"] {
+  color-scheme: light;
+}
+
+[data-theme="dark"] input[type="date"] {
+  color-scheme: dark;
+}
+
+[data-theme="light"] input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.2) sepia(0.1) !important;
+  cursor: pointer;
+}
+
+[data-theme="dark"] input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.8) !important;
+  cursor: pointer;
 }
 
 input:-webkit-autofill,
