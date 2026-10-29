@@ -38,7 +38,6 @@ export const navSections: NavSection[] = [
   {
     title: 'Supply Chain',
     items: [
-      { label: 'Shipment Dashboard', href: '/shipments', icon: Package },
       { label: 'New Entry', href: '/shipments/entry', icon: FilePlus },
     ],
   },

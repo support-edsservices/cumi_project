@@ -359,7 +359,7 @@ export default function ShipmentEntryAndHistoryPage() {
           gap: '1rem',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.875rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
           <Link
             href="/shipments"
             style={{
@@ -391,9 +391,6 @@ export default function ShipmentEntryAndHistoryPage() {
             >
               Shipment Management Portal
             </h1>
-            <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', marginTop: 2 }}>
-              Add new shipments, manage document tracking, browse complete entry history, and export reports
-            </p>
           </div>
         </div>
 
@@ -463,7 +460,7 @@ export default function ShipmentEntryAndHistoryPage() {
           TAB 1: NEW ENTRY FORM
       ═══════════════════════════════════════════════════════════════════════ */}
       {activeTab === 'entry' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.125rem' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
 
           {/* ── SECTION 1: Supplier & PO ── */}
           <div className="card fade-up" style={{ padding: '1.25rem' }}>
@@ -474,9 +471,6 @@ export default function ShipmentEntryAndHistoryPage() {
               <div>
                 <div style={{ fontSize: 'var(--font-size-body-large)', fontWeight: 700, color: 'var(--text-primary)' }}>
                   Supplier & Purchase Order
-                </div>
-                <div style={{ fontSize: 'var(--font-size-tiny)', color: 'var(--text-muted)' }}>
-                  Identify the vendor and associated commercial purchase authorization
                 </div>
               </div>
             </div>
@@ -528,9 +522,6 @@ export default function ShipmentEntryAndHistoryPage() {
               <div>
                 <div style={{ fontSize: 'var(--font-size-body-large)', fontWeight: 700, color: 'var(--text-primary)' }}>
                   Material Description & Commercial Invoice
-                </div>
-                <div style={{ fontSize: 'var(--font-size-tiny)', color: 'var(--text-muted)' }}>
-                  Invoice details, item specifications, and vendor billing document
                 </div>
               </div>
             </div>
@@ -590,9 +581,6 @@ export default function ShipmentEntryAndHistoryPage() {
               <div>
                 <div style={{ fontSize: 'var(--font-size-body-large)', fontWeight: 700, color: 'var(--text-primary)' }}>
                   Mode of Shipment & Freight Documents
-                </div>
-                <div style={{ fontSize: 'var(--font-size-tiny)', color: 'var(--text-muted)' }}>
-                  Bill of Lading (BL) for Sea or Master/House Air Waybill (MAWB/HAWB) for Air
                 </div>
               </div>
             </div>
@@ -722,9 +710,6 @@ export default function ShipmentEntryAndHistoryPage() {
                 <div style={{ fontSize: 'var(--font-size-body-large)', fontWeight: 700, color: 'var(--text-primary)' }}>
                   Customs Clearance, BOE & CHA
                 </div>
-                <div style={{ fontSize: 'var(--font-size-tiny)', color: 'var(--text-muted)' }}>
-                  Bill of Entry, Custom House Agent & documentation approval status
-                </div>
               </div>
             </div>
 
@@ -807,9 +792,6 @@ export default function ShipmentEntryAndHistoryPage() {
                 <div style={{ fontSize: 'var(--font-size-body-large)', fontWeight: 700, color: 'var(--text-primary)' }}>
                   Payment Terms & Material Status
                 </div>
-                <div style={{ fontSize: 'var(--font-size-tiny)', color: 'var(--text-muted)' }}>
-                  60 days from BL / Invoice calculation basis & payment settlement tag
-                </div>
               </div>
             </div>
 
@@ -888,9 +870,6 @@ export default function ShipmentEntryAndHistoryPage() {
               <div>
                 <div style={{ fontSize: 'var(--font-size-body-large)', fontWeight: 700, color: 'var(--text-primary)' }}>
                   ETD vs ETA & Lead Time Metrics
-                </div>
-                <div style={{ fontSize: 'var(--font-size-tiny)', color: 'var(--text-muted)' }}>
-                  Expected departure/arrival, banking references, and online container tracking URL
                 </div>
               </div>
             </div>
