@@ -47,3 +47,8 @@ CORS_ORIGINS_RAW = os.getenv(
     "http://localhost:3000,http://127.0.0.1:3000,http://localhost:8001,http://127.0.0.1:8001"
 )
 CORS_ORIGINS = [origin.strip() for origin in CORS_ORIGINS_RAW.split(",") if origin.strip()]
+
+# HttpOnly Cookie Configuration (auto-detects HTTP for dev and HTTPS for cloud)
+COOKIE_SECURE = os.getenv("COOKIE_SECURE", "auto")  # "auto", "true", or "false"
+COOKIE_SAMESITE = os.getenv("COOKIE_SAMESITE", "lax")  # "lax" or "none" (for cross-domain HTTPS)
+

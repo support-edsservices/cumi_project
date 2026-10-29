@@ -23,10 +23,9 @@ export interface SignupResult {
 interface AuthContextValue {
   user: AuthUser | null;
   accessToken: string | null;
-  refreshToken: string | null;
   isLoading: boolean;
   isAdminOrSuperAdmin: boolean;
-  login: (phone_number: string, password: string) => Promise<void>;
+  login: (identifier: string, password: string) => Promise<void>;
   signup: (
     phone_number: string,
     password: string,
@@ -63,7 +62,7 @@ function parseJwtPayload(token: string): { exp?: number; [key: string]: unknown 
 }
 
 /**
- * Checks if a token is expired or will expire within bufferSeconds.
+ * Checks if an access token is expired or will expire within bufferSeconds.
  */
 function isTokenExpired(token: string, bufferSeconds = 30): boolean {
   const payload = parseJwtPayload(token);
@@ -95,7 +94,6 @@ function formatApiError(data: any, fallback: string): string {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
-  const [refreshToken, setRefreshToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const pathname = usePathname();
@@ -105,43 +103,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const clearAuthSession = useCallback(() => {
     try {
       localStorage.removeItem(STORAGE_KEYS.ACCESS_TOKEN);
-      localStorage.removeItem(STORAGE_KEYS.REFRESH_TOKEN);
       localStorage.removeItem(STORAGE_KEYS.USER);
     } catch (e) {
       console.error('Error clearing localStorage auth items:', e);
     }
     setAccessToken(null);
-    setRefreshToken(null);
     setUser(null);
   }, []);
 
-  const logout = useCallback(() => {
-    clearAuthSession();
-    router.replace(ROUTES.LOGIN);
+  const logout = useCallback(async () => {
+    try {
+      // Clear HttpOnly refresh cookie on the server
+      await fetch(`${BASE_URL}${API_ENDPOINTS.LOGOUT}`, {
+        method: 'POST',
+        credentials: 'include',
+      }).catch(() => {});
+    } finally {
+      clearAuthSession();
+      router.replace(ROUTES.LOGIN);
+    }
   }, [clearAuthSession, router]);
 
   /**
-   * Refreshes the access token using the stored refresh token.
-   * Prevents multiple concurrent refresh requests.
+   * Refreshes access token using the browser's HttpOnly refresh cookie.
+   * Prevents duplicate concurrent requests.
    */
   const refreshAccessToken = useCallback(async (): Promise<string | null> => {
     if (isRefreshingRef.current) {
       return isRefreshingRef.current;
-    }
-
-    const currentRefreshToken =
-      refreshToken ||
-      (typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN) : null);
-
-    if (!currentRefreshToken) {
-      clearAuthSession();
-      return null;
-    }
-
-    if (isTokenExpired(currentRefreshToken, 5)) {
-      console.warn('Refresh token is expired. User must log in again.');
-      clearAuthSession();
-      return null;
     }
 
     const refreshPromise = (async () => {
@@ -149,7 +138,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const response = await fetch(`${BASE_URL}${API_ENDPOINTS.REFRESH}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ refresh_token: currentRefreshToken }),
+          credentials: 'include', // Automatically sends HttpOnly refresh_token cookie
         });
 
         if (!response.ok) {
@@ -173,7 +162,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(updatedUser);
         return newAccess;
       } catch (err) {
-        console.error('Failed to refresh access token:', err);
+        console.error('Failed to renew access token via HttpOnly cookie:', err);
         clearAuthSession();
         return null;
       } finally {
@@ -183,10 +172,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     isRefreshingRef.current = refreshPromise;
     return refreshPromise;
-  }, [refreshToken, clearAuthSession]);
+  }, [clearAuthSession]);
 
   /**
-   * Returns a valid access token, auto-refreshing if expired.
+   * Returns a valid access token, auto-refreshing via HttpOnly cookie if expired.
    */
   const getValidAccessToken = useCallback(async (): Promise<string | null> => {
     const currentAccess =
@@ -212,13 +201,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         headers.set('Authorization', `Bearer ${token}`);
       }
 
-      let response = await fetch(url, { ...init, headers });
+      let response = await fetch(url, {
+        ...init,
+        headers,
+        credentials: 'include', // Supports cross-origin cookies in dev & cloud
+      });
 
       if (response.status === 401) {
         token = await refreshAccessToken();
         if (token) {
           headers.set('Authorization', `Bearer ${token}`);
-          response = await fetch(url, { ...init, headers });
+          response = await fetch(url, {
+            ...init,
+            headers,
+            credentials: 'include',
+          });
         } else {
           logout();
         }
@@ -230,15 +227,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   /**
-   * User Login: Authenticates with phone_number & password.
-   * Checks isGranted approval status.
+   * User Login: Authenticates with phone_number/email & password.
+   * Access token is stored in localStorage & state.
+   * Refresh token is stored in secure HttpOnly cookie by the backend.
    */
   const login = useCallback(
-    async (phone_number: string, password: string) => {
+    async (identifier: string, password: string) => {
       const response = await fetch(`${BASE_URL}${API_ENDPOINTS.LOGIN}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone_number, password }),
+        credentials: 'include', // Receives HttpOnly refresh cookie
+        body: JSON.stringify({ phone_number: identifier, password }),
       });
 
       const data = await response.json().catch(() => ({}));
@@ -253,12 +252,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (typeof window !== 'undefined') {
         localStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, data.access_token);
-        localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, data.refresh_token);
         localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(loggedUser));
       }
 
       setAccessToken(data.access_token);
-      setRefreshToken(data.refresh_token);
       setUser(loggedUser);
 
       router.replace(ROUTES.HOME);
@@ -268,8 +265,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   /**
    * User Sign Up: Registers with phone_number, password, user_name, email, and role.
-   * Admin and SuperAdmin get automatic tokens.
-   * User and Manager get waiting list status.
+   * Admin/SuperAdmin get instant access token in state/localStorage, and HttpOnly refresh cookie.
+   * User/Manager get waiting list status.
    */
   const signup = useCallback(
     async (
@@ -282,6 +279,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const response = await fetch(`${BASE_URL}${API_ENDPOINTS.SIGNUP}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include', // Receives HttpOnly cookie if granted
         body: JSON.stringify({
           phone_number,
           password,
@@ -301,16 +299,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         name: data.user.user_name,
       };
 
-      // If granted (admin or superadmin), save tokens and navigate
       if (data.is_granted && data.access_token) {
         if (typeof window !== 'undefined') {
           localStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, data.access_token);
-          localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, data.refresh_token);
           localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(registeredUser));
         }
 
         setAccessToken(data.access_token);
-        setRefreshToken(data.refresh_token);
         setUser(registeredUser);
 
         router.replace(ROUTES.HOME);
@@ -327,7 +322,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   /**
-   * Session check on route change
+   * Session check on mount and route changes
    */
   useEffect(() => {
     let isMounted = true;
@@ -337,7 +332,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       const isPublicRoute = pathname === ROUTES.LOGIN || pathname === ROUTES.SIGNUP;
       const storedAccess = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
-      const storedRefresh = localStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN);
       const storedUserRaw = localStorage.getItem(STORAGE_KEYS.USER);
 
       let parsedUser: AuthUser | null = null;
@@ -349,23 +343,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      // No tokens found
-      if (!storedAccess && !storedRefresh) {
-        if (isMounted) {
-          clearAuthSession();
-          setIsLoading(false);
-        }
-        if (!isPublicRoute) {
-          router.replace(ROUTES.LOGIN);
-        }
-        return;
-      }
-
-      // Tokens exist: check if access token is valid
+      // Case 1: Valid access token exists in localStorage
       if (storedAccess && !isTokenExpired(storedAccess)) {
         if (isMounted) {
           setAccessToken(storedAccess);
-          setRefreshToken(storedRefresh);
           if (parsedUser) setUser(parsedUser);
           setIsLoading(false);
         }
@@ -375,26 +356,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      // Access token expired, attempt renewal via refresh token
-      if (storedRefresh && !isTokenExpired(storedRefresh, 5)) {
-        const newAccess = await refreshAccessToken();
-        if (isMounted) {
-          setIsLoading(false);
-        }
-        if (newAccess) {
-          if (isPublicRoute) {
-            router.replace(ROUTES.HOME);
-          }
-        } else {
-          if (!isPublicRoute) {
-            router.replace(ROUTES.LOGIN);
-          }
+      // Case 2: Access token is missing or expired, attempt renewal via HttpOnly cookie
+      const newAccess = await refreshAccessToken();
+      if (isMounted) {
+        setIsLoading(false);
+      }
+
+      if (newAccess) {
+        if (isPublicRoute) {
+          router.replace(ROUTES.HOME);
         }
       } else {
-        if (isMounted) {
-          clearAuthSession();
-          setIsLoading(false);
-        }
         if (!isPublicRoute) {
           router.replace(ROUTES.LOGIN);
         }
@@ -406,7 +378,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       isMounted = false;
     };
-  }, [pathname, refreshAccessToken, clearAuthSession, router]);
+  }, [pathname, refreshAccessToken, router]);
 
   const userRole = (user?.role || '').toLowerCase();
   const isAdminOrSuperAdmin = userRole === 'admin' || userRole === 'superadmin';
@@ -416,7 +388,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       value={{
         user,
         accessToken,
-        refreshToken,
         isLoading,
         isAdminOrSuperAdmin,
         login,

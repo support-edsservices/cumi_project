@@ -26,6 +26,7 @@ export const API_ENDPOINTS = {
   LOGIN: "/auth/login",
   SIGNUP: "/auth/signup",
   REFRESH: "/auth/refresh",
+  LOGOUT: "/auth/logout",
   ME: "/auth/me",
   AVAILABLE_ROLES: "/auth/available-roles",
   USERS: "/auth/users",
@@ -36,7 +37,6 @@ export const STORAGE_KEYS = {
   THEME: "em-theme",
   FONT_SCALE: "em-font-scale",
   ACCESS_TOKEN: "cumi_access_token",
-  REFRESH_TOKEN: "cumi_refresh_token",
   USER: "cumi_user",
   SIDEBAR: "ed_sidebar_collapsed",
 } as const;

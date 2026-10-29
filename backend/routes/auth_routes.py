@@ -1,5 +1,5 @@
 from typing import Optional, List, Dict, Any
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, HTTPException, status, Depends, Request, Response
 from pydantic import BaseModel, Field
 
 from config.db_config import get_connection
@@ -10,6 +10,9 @@ from config.settings import (
     SINGLETON_ROLES,
     AUTO_GRANTED_ROLES,
     DEFAULT_ROLE,
+    COOKIE_SECURE,
+    COOKIE_SAMESITE,
+    REFRESH_TOKEN_EXPIRE_DAYS,
 )
 from utils.auth_helper import (
     hash_password,
@@ -21,6 +24,62 @@ from utils.auth_helper import (
 )
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Cookie Helpers: Supports both HTTP (local dev) and HTTPS (cloud)
+# ─────────────────────────────────────────────────────────────────────────────
+def is_request_https(request: Request) -> bool:
+    """Check if the request came over HTTPS, accounting for cloud reverse proxies."""
+    if request.url.scheme == "https":
+        return True
+    proto = request.headers.get("x-forwarded-proto", "")
+    return proto.lower() == "https"
+
+
+def set_refresh_cookie(response: Response, refresh_token: str, request: Request):
+    """
+    Set HttpOnly refresh token cookie.
+    - httponly=True: Inaccessible via JS document.cookie (protects against XSS)
+    - secure=True only on HTTPS; secure=False on HTTP (permits local dev testing)
+    - samesite="lax" (or "none" if secure on cross-origin cloud)
+    """
+    https_active = is_request_https(request)
+    if COOKIE_SECURE == "auto":
+        secure_flag = https_active
+    else:
+        secure_flag = COOKIE_SECURE.lower() == "true"
+
+    samesite_flag = "none" if (secure_flag and COOKIE_SAMESITE == "none") else "lax"
+
+    response.set_cookie(
+        key="refresh_token",
+        value=refresh_token,
+        httponly=True,
+        secure=secure_flag,
+        samesite=samesite_flag,
+        path="/",
+        max_age=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
+    )
+
+
+def clear_refresh_cookie(response: Response, request: Request):
+    """Erase the HttpOnly refresh token cookie on logout."""
+    https_active = is_request_https(request)
+    if COOKIE_SECURE == "auto":
+        secure_flag = https_active
+    else:
+        secure_flag = COOKIE_SECURE.lower() == "true"
+
+    samesite_flag = "none" if (secure_flag and COOKIE_SAMESITE == "none") else "lax"
+
+    response.delete_cookie(
+        key="refresh_token",
+        path="/",
+        secure=secure_flag,
+        samesite=samesite_flag,
+        httponly=True,
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -40,7 +99,7 @@ class LoginRequest(BaseModel):
 
 
 class RefreshRequest(BaseModel):
-    refresh_token: str = Field(..., description="JWT Refresh token")
+    refresh_token: Optional[str] = Field(None, description="Optional fallback if not sent in HttpOnly cookie")
 
 
 class UserResponse(BaseModel):
@@ -83,14 +142,8 @@ class GrantAccessRequest(BaseModel):
 # ─────────────────────────────────────────────────────────────────────────────
 @router.get("/available-roles", response_model=AvailableRolesResponse)
 def get_available_roles():
-    """
-    Returns assignable roles.
-    If 'admin' or 'superadmin' already exists in the database,
-    it is dynamically excluded so no more than 1 can ever be registered.
-    """
     conn = get_connection(MASTER_DB)
     if conn is None:
-        # Fallback to normal roles if DB is temporarily unreachable
         return AvailableRolesResponse(
             available_roles=[r for r in ALL_ROLES if r not in SINGLETON_ROLES],
             all_roles=ALL_ROLES,
@@ -99,24 +152,19 @@ def get_available_roles():
     cursor = None
     try:
         cursor = conn.cursor(dictionary=True)
-        # Check existing singleton roles in DB
         format_strings = ','.join(['%s'] * len(SINGLETON_ROLES))
         query = f"SELECT DISTINCT role FROM {User_Table} WHERE role IN ({format_strings})"
         cursor.execute(query, tuple(SINGLETON_ROLES))
         existing_singleton_rows = cursor.fetchall()
         existing_singletons = {row["role"].lower() for row in existing_singleton_rows if row.get("role")}
 
-        # Exclude existing singleton roles from available list
-        available = [
-            r for r in ALL_ROLES
-            if r.lower() not in existing_singletons
-        ]
+        available = [r for r in ALL_ROLES if r.lower() not in existing_singletons]
 
         return AvailableRolesResponse(
             available_roles=available,
             all_roles=ALL_ROLES,
         )
-    except Exception as e:
+    except Exception:
         return AvailableRolesResponse(
             available_roles=[r for r in ALL_ROLES if r not in SINGLETON_ROLES],
             all_roles=ALL_ROLES,
@@ -132,17 +180,7 @@ def get_available_roles():
 # User Signup
 # ─────────────────────────────────────────────────────────────────────────────
 @router.post("/signup", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
-def signup(data: SignUpRequest):
-    """
-    Register a user:
-    - phone_number (mandatory)
-    - password (mandatory)
-    - user_name (mandatory)
-    - email (optional)
-    - role (admin, superadmin, manager, user)
-    Admin and superadmin are limited to at most 1 account and get isGranted = True.
-    Other roles get isGranted = False (placed on waiting list).
-    """
+def signup(data: SignUpRequest, response: Response, request: Request):
     conn = get_connection(MASTER_DB)
     if conn is None:
         raise HTTPException(
@@ -171,7 +209,6 @@ def signup(data: SignUpRequest):
     try:
         cursor = conn.cursor(dictionary=True)
 
-        # 1. Check if phone number is already registered
         query_check = f"SELECT phone_number FROM {User_Table} WHERE phone_number = %s"
         cursor.execute(query_check, (phone_clean,))
         if cursor.fetchone():
@@ -180,7 +217,6 @@ def signup(data: SignUpRequest):
                 detail="A user with this phone number is already registered"
             )
 
-        # 2. Enforce Singleton rule (at most 1 admin, at most 1 superadmin)
         if role_clean in [s.lower() for s in SINGLETON_ROLES]:
             cursor.execute(f"SELECT COUNT(*) as cnt FROM {User_Table} WHERE LOWER(role) = %s", (role_clean,))
             res = cursor.fetchone()
@@ -190,14 +226,10 @@ def signup(data: SignUpRequest):
                     detail=f"A '{role_clean}' account already exists. Only 1 {role_clean} is permitted."
                 )
 
-        # 3. Determine isGranted status:
-        # Admin and superadmin are default True; all others default to False (waiting list)
         is_granted = True if role_clean in [a.lower() for a in AUTO_GRANTED_ROLES] else False
 
-        # 4. Hash password with bcrypt
         hashed_pwd = hash_password(data.password)
 
-        # 5. Insert user into userDetails
         insert_query = (
             f"INSERT INTO {User_Table} (phone_number, password, user_name, email, role, isGranted) "
             f"VALUES (%s, %s, %s, %s, %s, %s)"
@@ -213,7 +245,6 @@ def signup(data: SignUpRequest):
             is_granted=is_granted,
         )
 
-        # If granted (admin/superadmin), return active tokens immediately
         if is_granted:
             token_payload = {
                 "sub": phone_clean,
@@ -229,16 +260,19 @@ def signup(data: SignUpRequest):
                 "phone_number": phone_clean,
                 "role": role_clean,
             })
+
+            # Store refresh token in secure HttpOnly cookie
+            set_refresh_cookie(response, refresh_token, request)
+
             return AuthResponse(
                 status="success",
                 message=f"Account created successfully with role '{role_clean}'",
                 access_token=access_token,
-                refresh_token=refresh_token,
+                refresh_token=None,  # Kept inside HttpOnly cookie
                 token_type="bearer",
                 user=user_info,
             )
 
-        # If waiting list (user / manager), do NOT issue login tokens yet
         return AuthResponse(
             status="waiting_approval",
             message="Registration successful! Your account is on the waiting list awaiting approval from an administrator.",
@@ -268,11 +302,7 @@ def signup(data: SignUpRequest):
 # User Login
 # ─────────────────────────────────────────────────────────────────────────────
 @router.post("/login", response_model=AuthResponse)
-def login(data: LoginRequest):
-    """
-    Authenticate user using phone_number and password.
-    Blocks login if isGranted is False (waiting list).
-    """
+def login(data: LoginRequest, response: Response, request: Request):
     conn = get_connection(MASTER_DB)
     if conn is None:
         raise HTTPException(
@@ -308,14 +338,12 @@ def login(data: LoginRequest):
         user_role = (user_row.get("role") or "user").lower()
         is_granted = bool(user_row.get("isGranted", False))
 
-        # Check approval status
         if not is_granted and user_role not in [a.lower() for a in AUTO_GRANTED_ROLES]:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Access not granted. Your account is on the waiting list awaiting approval from an administrator."
             )
 
-        # Generate tokens
         token_payload = {
             "sub": user_row["phone_number"],
             "phone_number": user_row["phone_number"],
@@ -331,11 +359,14 @@ def login(data: LoginRequest):
             "role": user_role,
         })
 
+        # Store refresh token in secure HttpOnly cookie
+        set_refresh_cookie(response, refresh_token, request)
+
         return AuthResponse(
             status="success",
             message="Login successful",
             access_token=access_token,
-            refresh_token=refresh_token,
+            refresh_token=None,  # Stored securely in HttpOnly cookie
             token_type="bearer",
             user=UserResponse(
                 phone_number=user_row["phone_number"],
@@ -361,15 +392,26 @@ def login(data: LoginRequest):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Token Renewal (Refresh)
+# Token Renewal (Refresh via HttpOnly Cookie)
 # ─────────────────────────────────────────────────────────────────────────────
 @router.post("/refresh", response_model=RefreshResponse)
-def refresh_token_endpoint(data: RefreshRequest):
+def refresh_token_endpoint(request: Request, response: Response, data: Optional[RefreshRequest] = None):
     """
-    Exchange a valid 3-day refresh token for a brand new 15-minute access token.
-    Also verifies the user is still granted access.
+    Exchanges the HttpOnly refresh token cookie for a brand new 15-minute access token.
+    Works automatically over both HTTP and HTTPS.
     """
-    payload = decode_refresh_token(data.refresh_token)
+    # 1. Retrieve refresh token from HttpOnly cookie (or fallback from body if provided)
+    refresh_token = request.cookies.get("refresh_token")
+    if not refresh_token and data and data.refresh_token:
+        refresh_token = data.refresh_token
+
+    if not refresh_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session expired: No refresh token found. Please log in again."
+        )
+
+    payload = decode_refresh_token(refresh_token)
     phone_number = payload.get("phone_number") or payload.get("sub")
 
     if not phone_number:
@@ -393,6 +435,7 @@ def refresh_token_endpoint(data: RefreshRequest):
         user_row = cursor.fetchone()
 
         if not user_row:
+            clear_refresh_cookie(response, request)
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="User account no longer exists"
@@ -402,6 +445,7 @@ def refresh_token_endpoint(data: RefreshRequest):
         is_granted = bool(user_row.get("isGranted", False))
 
         if not is_granted and user_role not in [a.lower() for a in AUTO_GRANTED_ROLES]:
+            clear_refresh_cookie(response, request)
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Access has been revoked or is pending approval."
@@ -415,6 +459,14 @@ def refresh_token_endpoint(data: RefreshRequest):
             "role": user_role,
             "is_granted": is_granted,
         })
+
+        # Rotate refresh token in HttpOnly cookie
+        new_refresh_token = create_refresh_token({
+            "sub": user_row["phone_number"],
+            "phone_number": user_row["phone_number"],
+            "role": user_role,
+        })
+        set_refresh_cookie(response, new_refresh_token, request)
 
         return RefreshResponse(
             status="success",
@@ -438,13 +490,20 @@ def refresh_token_endpoint(data: RefreshRequest):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# User Logout: Clears HttpOnly Cookie
+# ─────────────────────────────────────────────────────────────────────────────
+@router.post("/logout")
+def logout(response: Response, request: Request):
+    """Clear HttpOnly refresh cookie on server."""
+    clear_refresh_cookie(response, request)
+    return {"status": "success", "message": "Logged out successfully"}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # User Profile
 # ─────────────────────────────────────────────────────────────────────────────
 @router.get("/me", response_model=UserResponse)
 def get_profile(current_user: dict = Depends(get_current_user)):
-    """
-    Retrieve current authenticated user details using Bearer access token.
-    """
     return UserResponse(
         phone_number=current_user.get("phone_number", ""),
         user_name=current_user.get("user_name", ""),
@@ -458,7 +517,6 @@ def get_profile(current_user: dict = Depends(get_current_user)):
 # Admin / SuperAdmin Access Management Endpoints
 # ─────────────────────────────────────────────────────────────────────────────
 def require_admin(current_user: dict = Depends(get_current_user)):
-    """Ensure caller has 'admin' or 'superadmin' role."""
     role = (current_user.get("role") or "").lower()
     if role not in ["admin", "superadmin"]:
         raise HTTPException(
@@ -470,10 +528,6 @@ def require_admin(current_user: dict = Depends(get_current_user)):
 
 @router.get("/users", response_model=List[UserResponse])
 def list_all_users(admin_user: dict = Depends(require_admin)):
-    """
-    List all registered users with their grant status.
-    Accessible only by admin and superadmin.
-    """
     conn = get_connection(MASTER_DB)
     if conn is None:
         raise HTTPException(
@@ -510,10 +564,6 @@ def list_all_users(admin_user: dict = Depends(require_admin)):
 
 @router.post("/users/grant")
 def grant_user_access(data: GrantAccessRequest, admin_user: dict = Depends(require_admin)):
-    """
-    Grant or revoke user access.
-    Accessible only by admin and superadmin.
-    """
     conn = get_connection(MASTER_DB)
     if conn is None:
         raise HTTPException(
@@ -526,7 +576,6 @@ def grant_user_access(data: GrantAccessRequest, admin_user: dict = Depends(requi
     try:
         cursor = conn.cursor(dictionary=True)
 
-        # Check target user
         cursor.execute(f"SELECT phone_number, role, isGranted FROM {User_Table} WHERE phone_number = %s", (target_phone,))
         target_user = cursor.fetchone()
         if not target_user:
@@ -538,14 +587,12 @@ def grant_user_access(data: GrantAccessRequest, admin_user: dict = Depends(requi
         target_role = (target_user.get("role") or "").lower()
         admin_role = (admin_user.get("role") or "").lower()
 
-        # Protection: admin cannot revoke superadmin
         if target_role == "superadmin" and admin_role != "superadmin":
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Only a Superadmin can modify Superadmin permissions."
             )
 
-        # Update isGranted
         update_query = f"UPDATE {User_Table} SET isGranted = %s WHERE phone_number = %s"
         cursor.execute(update_query, (data.is_granted, target_phone))
         conn.commit()
@@ -573,10 +620,6 @@ def grant_user_access(data: GrantAccessRequest, admin_user: dict = Depends(requi
 
 @router.delete("/users/{phone_number}")
 def delete_user(phone_number: str, admin_user: dict = Depends(require_admin)):
-    """
-    Remove a user account from the system.
-    Accessible only by admin and superadmin.
-    """
     conn = get_connection(MASTER_DB)
     if conn is None:
         raise HTTPException(
