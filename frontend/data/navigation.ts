@@ -23,6 +23,7 @@ export interface NavItem {
 
 export interface NavSection {
   title: string;
+  adminOnly?: boolean;
   items: NavItem[];
 }
 
@@ -30,8 +31,14 @@ export const navSections: NavSection[] = [
   {
     title: 'Overview',
     items: [
-      { label: 'Dashboard',           href: '/',          icon: LayoutDashboard },
-      // { label: 'Real-time Monitoring',href: '/realtime',  icon: Activity, badge: 'Live', badgeColor: 'green' },
+      { label: 'Dashboard', href: '/', icon: LayoutDashboard },
+    ],
+  },
+  {
+    title: 'Administration',
+    adminOnly: true,
+    items: [
+      { label: 'User Approvals', href: '/admin/users', icon: Users },
     ],
   },
   {
@@ -40,7 +47,7 @@ export const navSections: NavSection[] = [
       {
         label: '110kV Reports', icon: Zap,
         children: [
-          { label: 'Plant Overview',          href: '/reports/110kv/plant-overview' },
+          { label: 'Plant Overview', href: '/reports/110kv/plant-overview' },
         ],
       },
       {
@@ -63,7 +70,6 @@ export const navSections: NavSection[] = [
       },
     ],
   },
-  
   {
     title: 'Analytics',
     items: [
@@ -88,5 +94,4 @@ export const navSections: NavSection[] = [
       },
     ],
   },
-  
 ];

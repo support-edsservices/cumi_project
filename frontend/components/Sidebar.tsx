@@ -130,7 +130,7 @@ function NavItemRow({ item }: { item: NavItem }) {
 
 /* ── Sidebar shell ── */
 export default function Sidebar() {
-  const { logout } = useAuth();
+  const { logout, isAdminOrSuperAdmin } = useAuth();
   const { collapsed, mobileOpen, toggleCollapsed, setMobileOpen } = useSidebar();
 
   return (
@@ -178,19 +178,20 @@ export default function Sidebar() {
         </button>
       </div>
 
-
       {/* Navigation */}
       <nav style={{ flex: 1, padding: '0 0.5rem', paddingBottom: '0.5rem' }}>
-        {navSections.map(section => (
-          <div key={section.title}>
-            <div className="nav-section" style={{ fontSize: FONT_SIZES.navSection }}>
-              {section.title}
+        {navSections
+          .filter(section => !section.adminOnly || isAdminOrSuperAdmin)
+          .map(section => (
+            <div key={section.title}>
+              <div className="nav-section" style={{ fontSize: FONT_SIZES.navSection }}>
+                {section.title}
+              </div>
+              {section.items.map(item => (
+                <NavItemRow key={item.label} item={item} />
+              ))}
             </div>
-            {section.items.map(item => (
-              <NavItemRow key={item.label} item={item} />
-            ))}
-          </div>
-        ))}
+          ))}
       </nav>
 
       {/* Footer */}
@@ -206,12 +207,12 @@ export default function Sidebar() {
           title={collapsed ? 'Logout' : undefined}
           aria-label="Logout"
           style={{
-          display: 'flex', alignItems: 'center', gap: '0.5rem',
-          width: '100%', padding: '0.45rem 0.625rem', borderRadius: 7,
-          background: 'transparent', border: 'none', cursor: 'pointer',
-          color: 'rgba(255,255,255,0.35)', fontSize: FONT_SIZES.body,
-          transition: 'color 0.12s, background 0.12s',
-        }}
+            display: 'flex', alignItems: 'center', gap: '0.5rem',
+            width: '100%', padding: '0.45rem 0.625rem', borderRadius: 7,
+            background: 'transparent', border: 'none', cursor: 'pointer',
+            color: 'rgba(255,255,255,0.35)', fontSize: FONT_SIZES.body,
+            transition: 'color 0.12s, background 0.12s',
+          }}
         >
           <LogOut size={14} /> <span className="sidebar-label">Logout</span>
         </button>

@@ -1,18 +1,43 @@
-// Central constants for the whole app.
-// Leave BASE_URL empty to run with the built-in mock auth (localStorage).
-// Set it (e.g. "https://api.yourdomain.com") to call your real backend.
-export const BASE_URL = "";
+// Central constants for the CUMI EnergyMeter Enterprise App.
+// Supports both HTTP (local dev) and HTTPS (cloud deployment).
+
+export const BASE_URL =
+  process.env.NEXT_PUBLIC_API_URL ||
+  (typeof window !== "undefined" && window.location.hostname !== "localhost"
+    ? `${window.location.protocol}//${window.location.hostname}:8001`
+    : "http://localhost:8001");
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Common Roles Configuration
+// ─────────────────────────────────────────────────────────────────────────────
+export const ALL_ROLES = ["admin", "superadmin", "manager", "user"] as const;
+export type UserRole = (typeof ALL_ROLES)[number];
+
+export const SINGLETON_ROLES = ["admin", "superadmin"] as const;
+
+export const ROLE_LABELS: Record<string, string> = {
+  admin: "Admin",
+  superadmin: "Super Admin",
+  manager: "Manager",
+  user: "User",
+};
 
 export const API_ENDPOINTS = {
   LOGIN: "/auth/login",
   SIGNUP: "/auth/signup",
+  REFRESH: "/auth/refresh",
+  ME: "/auth/me",
+  AVAILABLE_ROLES: "/auth/available-roles",
+  USERS: "/auth/users",
+  GRANT_USER: "/auth/users/grant",
 } as const;
 
 export const STORAGE_KEYS = {
-  THEME: "ed_theme",
-  FONT_SCALE: "ed_font_scale",
-  SESSION: "ed_session",
-  USERS: "ed_users",
+  THEME: "em-theme",
+  FONT_SCALE: "em-font-scale",
+  ACCESS_TOKEN: "cumi_access_token",
+  REFRESH_TOKEN: "cumi_refresh_token",
+  USER: "cumi_user",
   SIDEBAR: "ed_sidebar_collapsed",
 } as const;
 
@@ -20,7 +45,8 @@ export enum ROUTES {
   HOME = "/",
   LOGIN = "/login",
   SIGNUP = "/signup",
-  DASHBOARD = "/dashboard",
+  DASHBOARD = "/",
+  ADMIN_USERS = "/admin/users",
 }
 
 export enum METER_STATUS {
@@ -29,5 +55,3 @@ export enum METER_STATUS {
   COMM_LOST = "Comm. Lost",
   MAINTENANCE = "Maintenance",
 }
-
-export const DEMO_ACCOUNT = { email: "demo@energyhub.com", password: "Demo@123" };

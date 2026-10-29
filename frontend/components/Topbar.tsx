@@ -1,8 +1,9 @@
 'use client';
-import { Bell, Search, RefreshCw, Calendar, ChevronDown, Menu, Moon, Sun, User } from 'lucide-react';
+import { Bell, Menu, Moon, Sun, User } from 'lucide-react';
 import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
 import { useSidebar } from '@/context/SidebarContext';
+import { ROLE_LABELS } from '@/data/ENUM';
 
 interface TopbarProps {
   title: string;
@@ -14,6 +15,11 @@ export default function Topbar({ title, subtitle }: TopbarProps) {
   const { user } = useAuth();
   const { setMobileOpen } = useSidebar();
 
+  const displayName = user?.user_name || user?.name || 'Guest';
+  const displayRole = user?.role
+    ? ROLE_LABELS[user.role.toLowerCase()] || user.role.toUpperCase()
+    : 'Signed out';
+
   return (
     <header className="topbar">
       <button
@@ -24,6 +30,7 @@ export default function Topbar({ title, subtitle }: TopbarProps) {
       >
         <Menu size={18} />
       </button>
+
       {/* Page title */}
       <div className="topbar-title" style={{ flex: 1, minWidth: 0 }}>
         <h1 style={{
@@ -70,13 +77,16 @@ export default function Topbar({ title, subtitle }: TopbarProps) {
         {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
       </button>
 
-      {/* User avatar */}
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: '0.45rem',
-        padding: '0.275rem 0.6rem', borderRadius: 8,
-        background: 'var(--bg-secondary)', border: '1px solid var(--border)',
-        cursor: 'pointer', flexShrink: 0,
-      }}>
+      {/* User profile pill */}
+      <div
+        style={{
+          display: 'flex', alignItems: 'center', gap: '0.45rem',
+          padding: '0.275rem 0.6rem', borderRadius: 8,
+          background: 'var(--bg-secondary)', border: '1px solid var(--border)',
+          flexShrink: 0,
+        }}
+        title={`User: ${displayName} (${displayRole})`}
+      >
         <div style={{
           width: 26, height: 26, borderRadius: '50%', flexShrink: 0,
           background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
@@ -85,27 +95,17 @@ export default function Topbar({ title, subtitle }: TopbarProps) {
           <User size={13} color="#fff" />
         </div>
         <div className="topbar-user-details" style={{ lineHeight: 1.25 }}>
-          <div style={{ fontSize: 'var(--font-size-body-small)', fontWeight: 600, color: 'var(--text-primary)' }}>
-            {user?.name ?? 'Guest'}
+          <div style={{ fontSize: 'var(--font-size-body-small)', fontWeight: 700, color: 'var(--text-primary)' }}>
+            {displayName}
           </div>
           <div style={{ fontSize: 'var(--font-size-tiny)', color: 'var(--text-muted)' }}>
-            {user?.role ?? 'Signed out'}
+            {displayRole}
           </div>
         </div>
       </div>
     </header>
   );
 }
-
-/* ── Shared inline styles ── */
-const filterBtn: React.CSSProperties = {
-  display: 'flex', alignItems: 'center', gap: '0.35rem',
-  background: 'var(--bg-secondary)', border: '1px solid var(--border)',
-  borderRadius: 7, padding: '0.35rem 0.65rem',
-  color: 'var(--text-secondary)', fontSize: 'var(--font-size-body-compact)',
-  cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
-  fontFamily: 'inherit', fontWeight: 500,
-};
 
 function IconBtn({ children }: { children: React.ReactNode }) {
   return (

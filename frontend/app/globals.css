@@ -398,3 +398,49 @@ body {
   .dashboard-chart-grid,
   .dashboard-dual-grid { grid-template-columns: minmax(0, 1fr) !important; }
 }
+
+/* ── Form Inputs & Browser Autofill Fix ── */
+input {
+  background-color: transparent !important;
+  color: var(--text-primary) !important;
+  color-scheme: dark light;
+}
+
+input:-webkit-autofill,
+input:-webkit-autofill:hover, 
+input:-webkit-autofill:focus, 
+input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 1000px var(--bg-secondary) inset !important;
+  box-shadow: 0 0 0 1000px var(--bg-secondary) inset !important;
+  -webkit-text-fill-color: var(--text-primary) !important;
+  caret-color: var(--text-primary) !important;
+  transition: background-color 5000s ease-in-out 0s !important;
+}
+
+.auth-field-wrapper {
+  display: flex;
+  align-items: center;
+  background-color: var(--bg-secondary) !important;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0 0.75rem;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.auth-field-wrapper:focus-within {
+  border-color: var(--accent-blue) !important;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.25);
+}
+
+.auth-text-input {
+  width: 100%;
+  padding: 0.65rem 0;
+  background: transparent !important;
+  background-color: transparent !important;
+  border: none !important;
+  outline: none !important;
+  color: var(--text-primary) !important;
+  font-size: 0.9rem;
+  font-family: inherit;
+}
+
