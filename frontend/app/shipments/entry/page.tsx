@@ -1741,6 +1741,8 @@ function ShipmentDrawer({
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto', padding: '1.25rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          <TrackingProgress status={s.materialStatus} />
+
           <DetailGroup title="Supplier & Purchase Order">
             <Detail label="Supplier">{s.supplier}</Detail>
             <Detail label="Country of Origin">{s.country}</Detail>
@@ -1850,6 +1852,101 @@ function ShipmentDrawer({
         </div>
       </aside>
     </>
+  );
+}
+
+function TrackingProgress({ status }: { status: MaterialStatus }) {
+  const stages: MaterialStatus[] = [
+    'Pending Shipment',
+    'In Transit',
+    'At Port',
+    'Customs Clearance',
+    'Arrived',
+  ];
+  const currentIndex = stages.indexOf(status);
+
+  return (
+    <section
+      aria-label="Shipment tracking progress"
+      style={{
+        padding: '1rem',
+        border: '1px solid var(--border)',
+        borderRadius: 10,
+        background: 'var(--bg-secondary)',
+      }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+        <span style={{ fontSize: 'var(--font-size-label)', fontWeight: 800, letterSpacing: '0.06em', color: 'var(--accent-blue)', textTransform: 'uppercase' }}>
+          Tracking Status
+        </span>
+        <span style={{ fontSize: 'var(--font-size-compact)', fontWeight: 700, color: 'var(--text-primary)' }}>
+          {status}
+        </span>
+      </div>
+      <div style={{ overflowX: 'auto' }}>
+        <ol style={{ display: 'flex', listStyle: 'none', margin: 0, padding: '0 0 2px', minWidth: 460 }}>
+          {stages.map((stage, index) => {
+            const completed = index < currentIndex;
+            const current = index === currentIndex;
+            const color = completed ? 'var(--accent-green)' : current ? 'var(--accent-blue)' : 'var(--border)';
+
+            return (
+              <li
+                key={stage}
+                aria-current={current ? 'step' : undefined}
+                style={{ flex: 1, minWidth: 0, position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 7 }}
+              >
+                {index < stages.length - 1 && (
+                  <span
+                    aria-hidden="true"
+                    style={{
+                      position: 'absolute',
+                      top: 8,
+                      left: '50%',
+                      width: '100%',
+                      height: 3,
+                      background: index < currentIndex ? 'var(--accent-green)' : 'var(--border)',
+                    }}
+                  />
+                )}
+                <span
+                  aria-hidden="true"
+                  style={{
+                    zIndex: 1,
+                    width: 18,
+                    height: 18,
+                    boxSizing: 'border-box',
+                    borderRadius: '50%',
+                    border: `2px solid ${color}`,
+                    background: completed || current ? color : 'var(--bg-card)',
+                    color: '#fff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: 10,
+                    fontWeight: 800,
+                  }}
+                >
+                  {completed ? '✓' : current ? index + 1 : ''}
+                </span>
+                <span
+                  style={{
+                    maxWidth: 86,
+                    textAlign: 'center',
+                    fontSize: 'var(--font-size-tiny)',
+                    lineHeight: 1.25,
+                    fontWeight: current || completed ? 700 : 500,
+                    color: current ? 'var(--accent-blue)' : completed ? 'var(--text-primary)' : 'var(--text-muted)',
+                  }}
+                >
+                  {stage}
+                </span>
+              </li>
+            );
+          })}
+        </ol>
+      </div>
+    </section>
   );
 }
 
