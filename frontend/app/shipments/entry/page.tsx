@@ -3,14 +3,11 @@
 /* ─────────────────────────────────────────────────────────────────────────────
    Shipment Entry & History Portal
    - New Entry / Edit Entry form
-       • Mode of shipment: Sea, Air or Others (type the mode when Others)
-       • Payment: LC needs a bank reference; credit days counted from
-         Invoice Date, BL Date or PO Date, with the date range shown
-       • Material status: Arrived -> arrival date; otherwise optional ETD / ETA
-       • Link = PDF / document link (not a tracking link)
+       • Mode of shipment: Sea, Air or Others
+       • MAWB / HAWB document attachments added
+       • Action Buttons: Clear, Preview, Save (with confirmation dialog)
    - History & Records table with search, filters, Excel / CSV export
-   - Row details open in a right-side drawer (50% width, 100% height) with
-     Edit and Delete
+   - Row details open in a right-side drawer (50% width, 100% height)
 ───────────────────────────────────────────────────────────────────────────── */
 import React, { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
@@ -42,6 +39,7 @@ import {
   Paperclip,
   AlertTriangle,
   Truck,
+  RotateCcw,
 } from 'lucide-react';
 
 import {
@@ -87,7 +85,9 @@ const emptyForm = {
   blDate: '',
   blDocName: '',
   mawb: '',
+  mawbDocName: '',
   hawb: '',
+  hawbDocName: '',
   cha: '',
   documentStatus: 'Pending' as DocumentStatus,
   modeOfShipment: 'Sea' as ShipmentMode,
@@ -111,7 +111,7 @@ const emptyForm = {
 };
 type FormState = typeof emptyForm;
 
-function shipmentToForm(s: Shipment): FormState {
+function shipmentToForm(s: Shipment & { mawbDocument?: ShipmentDocument; hawbDocument?: ShipmentDocument }): FormState {
   return {
     supplier: s.supplier,
     poNo: s.poNo,
@@ -126,7 +126,9 @@ function shipmentToForm(s: Shipment): FormState {
     blDate: s.blDate,
     blDocName: s.blDocument?.name ?? '',
     mawb: s.mawb,
+    mawbDocName: s.mawbDocument?.name ?? '',
     hawb: s.hawb,
+    hawbDocName: s.hawbDocument?.name ?? '',
     cha: s.cha,
     documentStatus: s.documentStatus,
     modeOfShipment: s.modeOfShipment,
@@ -150,7 +152,12 @@ function shipmentToForm(s: Shipment): FormState {
   };
 }
 
-function formToShipment(f: FormState, id: string, createdAt: string, prev?: Shipment): Shipment {
+function formToShipment(
+  f: FormState,
+  id: string,
+  createdAt: string,
+  prev?: Shipment & { mawbDocument?: ShipmentDocument; hawbDocument?: ShipmentDocument }
+): Shipment & { mawbDocument?: ShipmentDocument; hawbDocument?: ShipmentDocument } {
   const doc = (name: string, existing?: ShipmentDocument): ShipmentDocument | undefined =>
     !name ? undefined : existing && existing.name === name ? existing : { name, url: '#', type: 'pdf' };
 
@@ -171,7 +178,9 @@ function formToShipment(f: FormState, id: string, createdAt: string, prev?: Ship
     blDate: f.blDate,
     blDocument: doc(f.blDocName, prev?.blDocument),
     mawb: f.mawb.trim(),
+    mawbDocument: doc(f.mawbDocName, prev?.mawbDocument),
     hawb: f.hawb.trim(),
+    hawbDocument: doc(f.hawbDocName, prev?.hawbDocument),
     cha: f.cha.trim() || 'In-House Clearance',
     documentStatus: f.documentStatus,
     modeOfShipment: f.modeOfShipment,
@@ -224,7 +233,7 @@ function validate(f: FormState): Record<string, string> {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   Page
+   Page Component
 ═══════════════════════════════════════════════════════════════════════════ */
 export default function ShipmentEntryAndHistoryPage() {
   const { shipments, addShipment, updateShipment, deleteShipment } = useShipments();
@@ -237,6 +246,8 @@ export default function ShipmentEntryAndHistoryPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [previewShipment, setPreviewShipment] = useState<Shipment | null>(null);
+  const [showSaveConfirm, setShowSaveConfirm] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Shipment | null>(null);
 
   // History filters
@@ -247,8 +258,8 @@ export default function ShipmentEntryAndHistoryPage() {
   const [filterMaterialStatus, setFilterMaterialStatus] = useState('all');
 
   const selectedShipment = useMemo(
-    () => shipments.find((s) => s.id === selectedId) ?? null,
-    [shipments, selectedId],
+    () => previewShipment ?? (shipments.find((s) => s.id === selectedId) ?? null),
+    [shipments, selectedId, previewShipment]
   );
 
   const errors = useMemo(() => (showErrors ? validate(formData) : {}), [showErrors, formData]);
@@ -261,11 +272,15 @@ export default function ShipmentEntryAndHistoryPage() {
   }, []);
 
   useEffect(() => {
-    if (!selectedId && !deleteTarget) return;
+    if (!selectedShipment && !deleteTarget && !showSaveConfirm) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
       if (deleteTarget) setDeleteTarget(null);
-      else setSelectedId(null);
+      else if (showSaveConfirm) setShowSaveConfirm(false);
+      else {
+        setSelectedId(null);
+        setPreviewShipment(null);
+      }
     };
     window.addEventListener('keydown', onKey);
     const prevOverflow = document.body.style.overflow;
@@ -274,7 +289,7 @@ export default function ShipmentEntryAndHistoryPage() {
       window.removeEventListener('keydown', onKey);
       document.body.style.overflow = prevOverflow;
     };
-  }, [selectedId, deleteTarget]);
+  }, [selectedShipment, deleteTarget, showSaveConfirm]);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -286,7 +301,7 @@ export default function ShipmentEntryAndHistoryPage() {
   };
 
   const handleFileSimulate = (
-    field: 'poDocName' | 'invoiceDocName' | 'blDocName' | 'boeDocName',
+    field: 'poDocName' | 'invoiceDocName' | 'blDocName' | 'boeDocName' | 'mawbDocName' | 'hawbDocName',
     e: React.ChangeEvent<HTMLInputElement>,
   ) => {
     if (e.target.files && e.target.files[0]) {
@@ -301,6 +316,7 @@ export default function ShipmentEntryAndHistoryPage() {
     setFormData(shipmentToForm(s));
     setShowErrors(false);
     setSelectedId(null);
+    setPreviewShipment(null);
     setActiveTab('entry');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -325,20 +341,38 @@ export default function ShipmentEntryAndHistoryPage() {
     showToast(`Shipment ${id} deleted`);
   };
 
-  const handleResetForm = () => {
+  const handleClearForm = () => {
     setFormData(emptyForm);
     setShowErrors(false);
+    showToast('Form fields cleared');
   };
 
-  const handleSubmit = (stayOnPage = false) => {
+  const validateFormAndScroll = () => {
     const errs = validate(formData);
     if (Object.keys(errs).length > 0) {
       setShowErrors(true);
       setTimeout(() => {
         document.querySelector('[data-error="true"]')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }, 50);
-      return;
+      return false;
     }
+    return true;
+  };
+
+  const handlePreview = () => {
+    if (!validateFormAndScroll()) return;
+    const currentId = editingId || nextShipmentId(shipments);
+    const mockPreview = formToShipment(formData, currentId, toISODate(new Date()));
+    setPreviewShipment(mockPreview);
+  };
+
+  const handleInitiateSave = () => {
+    if (!validateFormAndScroll()) return;
+    setShowSaveConfirm(true);
+  };
+
+  const handleConfirmSave = () => {
+    setShowSaveConfirm(false);
 
     if (editingId) {
       const prev = shipments.find((s) => s.id === editingId);
@@ -349,7 +383,7 @@ export default function ShipmentEntryAndHistoryPage() {
       }
       const updated = formToShipment(formData, prev.id, prev.createdAt, prev);
       updateShipment(updated);
-      showToast(`Shipment ${updated.id} updated`);
+      showToast(`Shipment ${updated.id} is saved`);
       setEditingId(null);
       setFormData(emptyForm);
       setShowErrors(false);
@@ -357,12 +391,13 @@ export default function ShipmentEntryAndHistoryPage() {
       return;
     }
 
-    const record = formToShipment(formData, nextShipmentId(shipments), toISODate(new Date()));
+    const nextId = nextShipmentId(shipments);
+    const record = formToShipment(formData, nextId, toISODate(new Date()));
     addShipment(record);
-    showToast(`Shipment ${record.id} recorded in history!`);
+    showToast(`Shipment ${record.id} is saved`);
     setFormData(emptyForm);
     setShowErrors(false);
-    if (!stayOnPage) setActiveTab('history');
+    setActiveTab('history');
   };
 
   const creditDaysNum = parseInt(formData.creditDays, 10);
@@ -503,7 +538,7 @@ export default function ShipmentEntryAndHistoryPage() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', maxWidth: "100%", margin: '0 auto', width: '100%' }}>
       <style>{PAGE_CSS}</style>
 
-      {/* ── Toast ── */}
+      {/* ── Top-Right Toast Notification ── */}
       {toastMessage && (
         <div
           style={{
@@ -536,7 +571,7 @@ export default function ShipmentEntryAndHistoryPage() {
         </div>
       )}
 
-      {/* ── Top header bar ── */}
+      {/* ── Header Bar ── */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
           <Link
@@ -795,6 +830,7 @@ export default function ShipmentEntryAndHistoryPage() {
                 />
               </Field>
 
+              {/* MAWB Field + Attachment */}
               <Field label="MAWB (Master Air Waybill)">
                 <input
                   type="text"
@@ -804,7 +840,15 @@ export default function ShipmentEntryAndHistoryPage() {
                   style={inputStyle}
                 />
               </Field>
+              <Field label="MAWB Document Attachment">
+                <FileUploadZone
+                  docName={formData.mawbDocName}
+                  onFileChange={(e) => handleFileSimulate('mawbDocName', e)}
+                  placeholder="Upload MAWB Attachment (PDF)"
+                />
+              </Field>
 
+              {/* HAWB Field + Attachment */}
               <Field label="HAWB (House Air Waybill)">
                 <input
                   type="text"
@@ -812,6 +856,13 @@ export default function ShipmentEntryAndHistoryPage() {
                   value={formData.hawb}
                   onChange={(e) => setField('hawb', e.target.value)}
                   style={inputStyle}
+                />
+              </Field>
+              <Field label="HAWB Document Attachment">
+                <FileUploadZone
+                  docName={formData.hawbDocName}
+                  onFileChange={(e) => handleFileSimulate('hawbDocName', e)}
+                  placeholder="Upload HAWB Attachment (PDF)"
                 />
               </Field>
             </div>
@@ -1086,6 +1137,7 @@ export default function ShipmentEntryAndHistoryPage() {
             </div>
           </Section>
 
+          {/* ── Updated Bottom Action Bar (Clear, Preview, Save) ── */}
           <div
             style={{
               display: 'flex',
@@ -1100,28 +1152,31 @@ export default function ShipmentEntryAndHistoryPage() {
               boxShadow: 'var(--card-shadow)',
             }}
           >
-            {isEditing ? (
-              <button type="button" onClick={cancelEdit} style={ghostButtonStyle}>
-                Cancel Edit
-              </button>
-            ) : (
-              <>
-                <button type="button" onClick={handleResetForm} style={ghostButtonStyle}>
-                  Reset Fields
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleSubmit(true)}
-                  style={{ ...ghostButtonStyle, background: 'var(--bg-secondary)', color: 'var(--text-primary)', fontWeight: 700 }}
-                >
-                  Save & Add Another
-                </button>
-              </>
-            )}
+            <button type="button" onClick={handleClearForm} style={ghostButtonStyle}>
+              <RotateCcw size={16} style={{ marginRight: 6, verticalAlign: 'middle' }} />
+              <span>Clear</span>
+            </button>
 
             <button
               type="button"
-              onClick={() => handleSubmit(false)}
+              onClick={handlePreview}
+              style={{
+                ...ghostButtonStyle,
+                background: 'var(--bg-secondary)',
+                color: 'var(--text-primary)',
+                fontWeight: 700,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.4rem',
+              }}
+            >
+              <Eye size={18} color="var(--accent-blue)" />
+              <span>Preview</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleInitiateSave}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -1139,7 +1194,7 @@ export default function ShipmentEntryAndHistoryPage() {
               }}
             >
               <Save size={18} />
-              <span>{isEditing ? 'Update Shipment' : 'Save & View History'}</span>
+              <span>{isEditing ? 'Update' : 'Save'}</span>
             </button>
           </div>
         </div>
@@ -1150,7 +1205,6 @@ export default function ShipmentEntryAndHistoryPage() {
       ═══════════════════════════════════════════════════════════════════ */}
       {activeTab === 'history' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          {/* Search + export + filters */}
           <div className="card fade-up" style={{ padding: '1.125rem', display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
               <div
@@ -1297,7 +1351,6 @@ export default function ShipmentEntryAndHistoryPage() {
             </div>
           </div>
 
-          {/* Table Container - Fixed 800px Height & Fixed Layout Alignment */}
           <div className="card fade-up delay-1" style={{ padding: '1.125rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
               <div style={{ fontSize: 'var(--font-size-heading)', fontWeight: 700, color: 'var(--text-primary)' }}>
@@ -1306,7 +1359,6 @@ export default function ShipmentEntryAndHistoryPage() {
               <div style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)' }}>Click View to open the full details</div>
             </div>
 
-            {/* Scroll Container: Fixed 800px Height */}
             <div
               style={{
                 height: '800px',
@@ -1341,7 +1393,6 @@ export default function ShipmentEntryAndHistoryPage() {
 
                 <thead>
                   <tr>
-                    {/* Fixed First Column Header */}
                     <th
                       style={{
                         position: 'sticky',
@@ -1387,7 +1438,6 @@ export default function ShipmentEntryAndHistoryPage() {
                       </th>
                     ))}
 
-                    {/* Fixed Actions Header */}
                     <th
                       style={{
                         position: 'sticky',
@@ -1439,7 +1489,6 @@ export default function ShipmentEntryAndHistoryPage() {
                             transition: 'background 0.15s ease',
                           }}
                         >
-                          {/* Fixed First Column: ID & Mode */}
                           <td
                             style={{
                               position: 'sticky',
@@ -1460,7 +1509,6 @@ export default function ShipmentEntryAndHistoryPage() {
                             </div>
                           </td>
 
-                          {/* Supplier & Country */}
                           <td style={{ padding: '0.75rem 0.85rem', borderBottom: '1px solid var(--border)', verticalAlign: 'top' }}>
                             <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: 'var(--font-size-body-compact)' }}>{item.supplier}</div>
                             <div style={{ fontSize: 'var(--font-size-tiny)', color: 'var(--text-muted)', marginTop: 2 }}>
@@ -1468,7 +1516,6 @@ export default function ShipmentEntryAndHistoryPage() {
                             </div>
                           </td>
 
-                          {/* PO & Invoice */}
                           <td style={{ padding: '0.75rem 0.85rem', borderBottom: '1px solid var(--border)', verticalAlign: 'top' }}>
                             <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 'var(--font-size-compact)' }}>{item.invoiceNo}</div>
                             <div style={{ fontSize: 'var(--font-size-tiny)', color: 'var(--text-muted)', marginTop: 2 }}>
@@ -1477,7 +1524,6 @@ export default function ShipmentEntryAndHistoryPage() {
                             </div>
                           </td>
 
-                          {/* BL / MAWB */}
                           <td style={{ padding: '0.75rem 0.85rem', borderBottom: '1px solid var(--border)', verticalAlign: 'top' }}>
                             <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 'var(--font-size-compact)' }}>
                               {item.blNo || item.mawb || '-'}
@@ -1487,13 +1533,11 @@ export default function ShipmentEntryAndHistoryPage() {
                             </div>
                           </td>
 
-                          {/* BOE / CHA */}
                           <td style={{ padding: '0.75rem 0.85rem', borderBottom: '1px solid var(--border)', verticalAlign: 'top' }}>
                             <div style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-primary)', fontWeight: 600 }}>{item.boeNo || '-'}</div>
                             <div style={{ fontSize: 'var(--font-size-tiny)', color: 'var(--text-muted)', marginTop: 2 }}>CHA: {item.cha}</div>
                           </td>
 
-                          {/* Payment */}
                           <td style={{ padding: '0.75rem 0.85rem', borderBottom: '1px solid var(--border)', verticalAlign: 'top' }}>
                             <PaymentBadge status={item.paymentStatus} />
                             <div style={{ fontSize: 'var(--font-size-tiny)', color: 'var(--text-primary)', fontWeight: 600, marginTop: 4 }}>
@@ -1507,7 +1551,6 @@ export default function ShipmentEntryAndHistoryPage() {
                             )}
                           </td>
 
-                          {/* Material Status */}
                           <td style={{ padding: '0.75rem 0.85rem', borderBottom: '1px solid var(--border)', verticalAlign: 'top' }}>
                             <span
                               style={{
@@ -1535,7 +1578,6 @@ export default function ShipmentEntryAndHistoryPage() {
                             </div>
                           </td>
 
-                          {/* Fixed Actions Column */}
                           <td
                             style={{
                               position: 'sticky',
@@ -1598,25 +1640,48 @@ export default function ShipmentEntryAndHistoryPage() {
       )}
 
       {/* ═══════════════════════════════════════════════════════════════════
-          RIGHT-SIDE DETAILS DRAWER (50% width, 100% height)
+          RIGHT-SIDE DETAILS DRAWER (Used for View & Preview)
       ═══════════════════════════════════════════════════════════════════ */}
       {selectedShipment && (
         <ShipmentDrawer
           s={selectedShipment}
-          onClose={() => setSelectedId(null)}
-          onEdit={() => startEdit(selectedShipment)}
+          isPreview={!!previewShipment}
+          onClose={() => {
+            setSelectedId(null);
+            setPreviewShipment(null);
+          }}
+          onEdit={() => {
+            if (previewShipment) {
+              setPreviewShipment(null);
+            } else {
+              startEdit(selectedShipment);
+            }
+          }}
           onDelete={() => setDeleteTarget(selectedShipment)}
         />
       )}
 
-      {/* Delete confirmation */}
+      {/* Save Confirmation Dialog */}
+      {showSaveConfirm && (
+        <ConfirmDialog
+          title={isEditing ? `Update Shipment ${editingId}?` : `Save Shipment ${nextShipmentId(shipments)}?`}
+          message={`Are you sure you want to save this shipment record for ${formData.supplier || 'this supplier'}?`}
+          confirmLabel={isEditing ? 'Confirm Update' : 'Confirm Save'}
+          onCancel={() => setShowSaveConfirm(false)}
+          onConfirm={handleConfirmSave}
+          accentColor="var(--accent-blue)"
+        />
+      )}
+
+      {/* Delete Confirmation Dialog */}
       {deleteTarget && (
         <ConfirmDialog
           title={`Delete ${deleteTarget.id}?`}
-          message={`${deleteTarget.supplier} • ${deleteTarget.poNo} will be removed from the history and the dashboard. This cannot be undone.`}
+          message={`${deleteTarget.supplier} • ${deleteTarget.poNo} will be removed from history. This cannot be undone.`}
           confirmLabel="Delete"
           onCancel={() => setDeleteTarget(null)}
           onConfirm={confirmDelete}
+          accentColor="var(--accent-red)"
         />
       )}
     </div>
@@ -1624,15 +1689,17 @@ export default function ShipmentEntryAndHistoryPage() {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   Drawer
+   Drawer Component
 ═══════════════════════════════════════════════════════════════════════════ */
 function ShipmentDrawer({
   s,
+  isPreview,
   onClose,
   onEdit,
   onDelete,
 }: {
-  s: Shipment;
+  s: Shipment & { mawbDocument?: ShipmentDocument; hawbDocument?: ShipmentDocument };
+  isPreview?: boolean;
   onClose: () => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -1645,6 +1712,8 @@ function ShipmentDrawer({
     { label: 'PO', doc: s.poDocument },
     { label: 'Invoice', doc: s.invoiceDocument },
     { label: 'BL', doc: s.blDocument },
+    { label: 'MAWB', doc: s.mawbDocument },
+    { label: 'HAWB', doc: s.hawbDocument },
     { label: 'BOE', doc: s.boeDocument },
   ];
   const attached = docs.filter((d) => d.doc);
@@ -1688,39 +1757,43 @@ function ShipmentDrawer({
         >
           <div style={{ minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <h2 style={{ fontSize: 'var(--font-size-section-heading)', fontWeight: 800, color: 'var(--text-primary)' }}>{s.supplier}</h2>
+              <h2 style={{ fontSize: 'var(--font-size-section-heading)', fontWeight: 800, color: 'var(--text-primary)' }}>{s.supplier || 'Unspecified Supplier'}</h2>
               <span style={{ fontSize: 'var(--font-size-compact)', background: 'var(--accent-blue)', color: '#fff', padding: '2px 8px', borderRadius: 6, fontWeight: 700 }}>
-                {s.id}
+                {isPreview ? `PREVIEW (${s.id})` : s.id}
               </span>
             </div>
             <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', marginTop: 4 }}>
-              {s.material} • {getModeLabel(s)}
+              {s.material || 'No Material Specified'} • {getModeLabel(s)}
             </div>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-            <button
-              type="button"
-              onClick={onEdit}
-              style={{ ...rowButtonStyle, padding: '0.45rem 0.85rem', fontSize: 'var(--font-size-compact)', color: 'var(--text-primary)' }}
-            >
-              <Pencil size={14} color="var(--accent-orange)" />
-              <span>Edit</span>
-            </button>
-            <button
-              type="button"
-              onClick={onDelete}
-              style={{
-                ...rowButtonStyle,
-                padding: '0.45rem 0.85rem',
-                fontSize: 'var(--font-size-compact)',
-                color: 'var(--accent-red)',
-                border: '1px solid var(--accent-red)',
-              }}
-            >
-              <Trash2 size={14} color="var(--accent-red)" />
-              <span>Delete</span>
-            </button>
+            {!isPreview && (
+              <>
+                <button
+                  type="button"
+                  onClick={onEdit}
+                  style={{ ...rowButtonStyle, padding: '0.45rem 0.85rem', fontSize: 'var(--font-size-compact)', color: 'var(--text-primary)' }}
+                >
+                  <Pencil size={14} color="var(--accent-orange)" />
+                  <span>Edit</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={onDelete}
+                  style={{
+                    ...rowButtonStyle,
+                    padding: '0.45rem 0.85rem',
+                    fontSize: 'var(--font-size-compact)',
+                    color: 'var(--accent-red)',
+                    border: '1px solid var(--accent-red)',
+                  }}
+                >
+                  <Trash2 size={14} color="var(--accent-red)" />
+                  <span>Delete</span>
+                </button>
+              </>
+            )}
             <button
               type="button"
               onClick={onClose}
@@ -1744,21 +1817,21 @@ function ShipmentDrawer({
           <TrackingProgress status={s.materialStatus} />
 
           <DetailGroup title="Supplier & Purchase Order">
-            <Detail label="Supplier">{s.supplier}</Detail>
-            <Detail label="Country of Origin">{s.country}</Detail>
-            <Detail label="PO Number">{s.poNo}</Detail>
+            <Detail label="Supplier">{s.supplier || '-'}</Detail>
+            <Detail label="Country of Origin">{s.country || '-'}</Detail>
+            <Detail label="PO Number">{s.poNo || '-'}</Detail>
             <Detail label="PO Date">{formatDMY(s.poDate) || '-'}</Detail>
-            <Detail label="Material">{s.material}</Detail>
+            <Detail label="Material">{s.material || '-'}</Detail>
           </DetailGroup>
 
           <DetailGroup title="Invoice">
-            <Detail label="Invoice Number">{s.invoiceNo}</Detail>
+            <Detail label="Invoice Number">{s.invoiceNo || '-'}</Detail>
             <Detail label="Invoice Date">{formatDMY(s.invoiceDate) || '-'}</Detail>
           </DetailGroup>
 
           <DetailGroup title="Shipping">
             <Detail label="Mode of Shipment">{getModeLabel(s)}</Detail>
-            <Detail label="Port of Loading">{s.portOfLoading}</Detail>
+            <Detail label="Port of Loading">{s.portOfLoading || '-'}</Detail>
             <Detail label="BL Number">{s.blNo || '-'}</Detail>
             <Detail label="BL Date">{formatDMY(s.blDate) || '-'}</Detail>
             <Detail label="MAWB">{s.mawb || '-'}</Detail>
@@ -1766,7 +1839,7 @@ function ShipmentDrawer({
           </DetailGroup>
 
           <DetailGroup title="Customs">
-            <Detail label="Custom House Agent">{s.cha}</Detail>
+            <Detail label="Custom House Agent">{s.cha || '-'}</Detail>
             <Detail label="Document Status">{s.documentStatus}</Detail>
             <Detail label="BOE Number">{s.boeNo || '-'}</Detail>
             <Detail label="BOE Date">{formatDMY(s.boeDate) || '-'}</Detail>
@@ -1816,7 +1889,7 @@ function ShipmentDrawer({
             <Detail label="Entered On">{formatDMY(s.createdAt) || '-'}</Detail>
           </DetailGroup>
 
-          <DetailGroup title="Documents">
+          <DetailGroup title="Documents & Attachments">
             <div style={{ gridColumn: '1 / -1', display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
               {attached.length === 0 && !s.link && <span style={{ color: 'var(--text-muted)' }}>No documents attached.</span>}
 
@@ -1982,7 +2055,7 @@ function Detail({ label, children, wide }: { label: string; children: React.Reac
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   Small shared components
+   Dialogs & UI Helpers
 ═══════════════════════════════════════════════════════════════════════════ */
 function ConfirmDialog({
   title,
@@ -1990,12 +2063,14 @@ function ConfirmDialog({
   confirmLabel,
   onConfirm,
   onCancel,
+  accentColor = 'var(--accent-blue)',
 }: {
   title: string;
   message: string;
   confirmLabel: string;
   onConfirm: () => void;
   onCancel: () => void;
+  accentColor?: string;
 }) {
   return (
     <div
@@ -2026,14 +2101,14 @@ function ConfirmDialog({
               width: 40,
               height: 40,
               borderRadius: 10,
-              background: 'rgba(239,68,68,0.15)',
+              background: `${accentColor}20`,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               flexShrink: 0,
             }}
           >
-            <Trash2 size={18} color="var(--accent-red)" />
+            <Save size={18} color={accentColor} />
           </div>
           <div>
             <div style={{ fontSize: 'var(--font-size-heading)', fontWeight: 800, color: 'var(--text-primary)' }}>{title}</div>
@@ -2050,7 +2125,7 @@ function ConfirmDialog({
             style={{
               padding: '0.65rem 1.25rem',
               borderRadius: 8,
-              background: 'var(--accent-red)',
+              background: accentColor,
               border: 'none',
               color: '#fff',
               fontSize: 'var(--font-size-body)',

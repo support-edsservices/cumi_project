@@ -21,7 +21,8 @@ export default function Topbar({ title, subtitle }: TopbarProps) {
     : 'Signed out';
 
   return (
-    <header className="topbar">
+    <header className="topbar" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.5rem 1rem' }}>
+      {/* Mobile menu button */}
       <button
         type="button"
         className="mobile-menu-button"
@@ -30,6 +31,15 @@ export default function Topbar({ title, subtitle }: TopbarProps) {
       >
         <Menu size={18} />
       </button>
+
+      {/* ── LEFT IMAGE LOGO ── */}
+      <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+        <img
+          src="/images/logo-left.png" // Replace with your left image path
+          alt="Company Logo"
+          style={{ height: 36, width: 'auto', objectFit: 'contain', borderRadius: 4 }}
+        />
+      </div>
 
       {/* Page title */}
       <div className="topbar-title" style={{ flex: 1, minWidth: 0 }}>
@@ -76,6 +86,15 @@ export default function Topbar({ title, subtitle }: TopbarProps) {
       >
         {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
       </button>
+
+      {/* ── RIGHT IMAGE LOGO ── */}
+      <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+        <img
+          src="/images/logo-right.png" // Replace with your right image path
+          alt="Group Logo"
+          style={{ height: 36, width: 'auto', objectFit: 'contain', borderRadius: 4 }}
+        />
+      </div>
 
       {/* User profile pill */}
       <div
