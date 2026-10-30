@@ -6,7 +6,7 @@
        • Mode of shipment: Sea, Air or Others (type the mode when Others)
        • Payment: LC needs a bank reference; credit days counted from
          Invoice Date, BL Date or PO Date, with the date range shown
-       • Material status: Delivered -> delivered date; otherwise optional ETD / ETA
+       • Material status: Arrived -> arrival date; otherwise optional ETD / ETA
        • Link = PDF / document link (not a tracking link)
    - History & Records table with search, filters, Excel / CSV export
    - Row details open in a right-side drawer (50% width, 100% height) with
@@ -103,7 +103,7 @@ const emptyForm = {
   creditDaysFrom: 'Invoice Date' as CreditDaysFrom,
   paymentStatus: 'NOT PAID' as PaymentStatus,
   materialStatus: 'In Transit' as MaterialStatus,
-  deliveredDate: '',
+  arrivedDate: '',
   etd: '',
   eta: '',
   link: '',
@@ -142,7 +142,7 @@ function shipmentToForm(s: Shipment): FormState {
     creditDaysFrom: s.creditDaysFrom ?? 'Invoice Date',
     paymentStatus: s.paymentStatus,
     materialStatus: s.materialStatus,
-    deliveredDate: s.deliveredDate ?? '',
+    arrivedDate: s.arrivedDate ?? '',
     etd: s.etd,
     eta: s.eta,
     link: s.link,
@@ -186,7 +186,7 @@ function formToShipment(f: FormState, id: string, createdAt: string, prev?: Ship
     paymentStatus: f.paymentStatus,
     bankReferenceNo: f.bankReferenceNo.trim(),
     materialStatus: f.materialStatus,
-    deliveredDate: f.materialStatus === 'Delivered' ? f.deliveredDate : undefined,
+    arrivedDate: f.materialStatus === 'Arrived' ? f.arrivedDate : undefined,
     etd: f.etd,
     eta: f.eta,
     link: f.link.trim(),
@@ -217,8 +217,8 @@ function validate(f: FormState): Record<string, string> {
     }
   }
 
-  if (f.materialStatus === 'Delivered' && !f.deliveredDate) {
-    e.deliveredDate = 'Select the delivered date';
+  if (f.materialStatus === 'Arrived' && !f.arrivedDate) {
+    e.arrivedDate = 'Select the arrival date';
   }
   return e;
 }
@@ -427,7 +427,7 @@ export default function ShipmentEntryAndHistoryPage() {
         'Payment Due Date': due ? toISODate(due) : 'N/A',
         'Bank Reference': s.bankReferenceNo || '-',
         'Material Status': s.materialStatus,
-        'Delivered Date': s.deliveredDate || '',
+        'Arrival Date': s.arrivedDate || '',
         'ETD': s.etd || '',
         'ETA': s.eta || '',
         'Lead Time (Days)': s.leadTime,
@@ -475,7 +475,7 @@ export default function ShipmentEntryAndHistoryPage() {
         'Payment Due Date': due ? toISODate(due) : 'N/A',
         'Bank Reference': s.bankReferenceNo || '',
         'Material Status': s.materialStatus,
-        'Delivered Date': s.deliveredDate || '',
+        'Arrival Date': s.arrivedDate || '',
         'ETD': s.etd || '',
         'ETA': s.eta || '',
         'Lead Time': s.leadTime,
@@ -1018,7 +1018,7 @@ export default function ShipmentEntryAndHistoryPage() {
             </div>
           </Section>
 
-          <Section icon={<Calendar size={16} color="var(--accent-blue)" />} tint="#3b82f618" title="Material Status, Delivery Dates & Documents Link" delay={5}>
+          <Section icon={<Calendar size={16} color="var(--accent-blue)" />} tint="#3b82f618" title="Material Status, Arrival Date & Documents Link" delay={5}>
             <div style={gridStyle}>
               <Field label="Material Status">
                 <select
@@ -1030,16 +1030,16 @@ export default function ShipmentEntryAndHistoryPage() {
                   <option value="In Transit">In Transit</option>
                   <option value="At Port">At Port</option>
                   <option value="Customs Clearance">Customs Clearance</option>
-                  <option value="Delivered">Delivered</option>
+                  <option value="Arrived">Arrived</option>
                 </select>
               </Field>
 
-              {formData.materialStatus === 'Delivered' ? (
-                <Field label="Delivered Date" required id="deliveredDate" error={errors.deliveredDate}>
+              {formData.materialStatus === 'Arrived' ? (
+                <Field label="Arrival Date" required id="arrivedDate" error={errors.arrivedDate}>
                   <DateField
-                    value={formData.deliveredDate}
-                    onChange={(v) => setField('deliveredDate', v)}
-                    invalid={!!errors.deliveredDate}
+                    value={formData.arrivedDate}
+                    onChange={(v) => setField('arrivedDate', v)}
+                    invalid={!!errors.arrivedDate}
                   />
                 </Field>
               ) : (
@@ -1291,7 +1291,7 @@ export default function ShipmentEntryAndHistoryPage() {
                   <option value="In Transit">In Transit</option>
                   <option value="At Port">At Port</option>
                   <option value="Customs Clearance">Customs Clearance</option>
-                  <option value="Delivered">Delivered</option>
+                  <option value="Arrived">Arrived</option>
                 </select>
               </div>
             </div>
@@ -1524,8 +1524,8 @@ export default function ShipmentEntryAndHistoryPage() {
                               {item.materialStatus}
                             </span>
                             <div style={{ fontSize: 'var(--font-size-tiny)', color: 'var(--text-muted)', marginTop: 4 }}>
-                              {item.materialStatus === 'Delivered' ? (
-                                <>Delivered : {formatDMY(item.deliveredDate) || '?'}</>
+                              {item.materialStatus === 'Arrived' ? (
+                                <>Arrived : {formatDMY(item.arrivedDate) || '?'}</>
                               ) : (
                                 <>
                                   {formatEtdEta(item)}
@@ -1800,8 +1800,8 @@ function ShipmentDrawer({
 
           <DetailGroup title="Material Status">
             <Detail label="Status">{s.materialStatus}</Detail>
-            {s.materialStatus === 'Delivered' ? (
-              <Detail label="Delivered Date">{formatDMY(s.deliveredDate) || '-'}</Detail>
+            {s.materialStatus === 'Arrived' ? (
+              <Detail label="Arrival Date">{formatDMY(s.arrivedDate) || '-'}</Detail>
             ) : (
               <Detail label="ETD / ETA" wide>
                 <div>{formatEtdEta(s)}</div>

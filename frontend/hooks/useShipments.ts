@@ -19,8 +19,23 @@ function read(): Shipment[] {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return seed;
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? (parsed as Shipment[]) : seed;
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return seed;
+    return parsed.map((item): Shipment => {
+      const shipment = item as Omit<Shipment, 'materialStatus'> & {
+        materialStatus: string;
+        deliveredDate?: string;
+      };
+      const { materialStatus, deliveredDate, ...rest } = shipment;
+      if (materialStatus === 'Delivered') {
+        return {
+          ...rest,
+          materialStatus: 'Arrived',
+          arrivedDate: shipment.arrivedDate ?? deliveredDate,
+        };
+      }
+      return { ...rest, materialStatus: materialStatus as Shipment['materialStatus'] };
+    });
   } catch {
     return seed;
   }

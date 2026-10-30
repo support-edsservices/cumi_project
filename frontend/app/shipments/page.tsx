@@ -45,7 +45,7 @@ const MATERIAL_STATUS_COLOR: Record<MaterialStatus, string> = {
   'In Transit': ACCENT.blue,
   'At Port': ACCENT.orange,
   'Customs Clearance': ACCENT.purple,
-  Delivered: ACCENT.green,
+  Arrived: ACCENT.green,
   'Pending Shipment': ACCENT.teal,
 };
 
@@ -469,7 +469,7 @@ function MaterialStatusBreakdown({ data }: { data: Shipment[] }) {
     data.forEach(s => {
       map[s.materialStatus] = (map[s.materialStatus] || 0) + 1;
     });
-    const statuses: MaterialStatus[] = ['In Transit', 'At Port', 'Customs Clearance', 'Delivered', 'Pending Shipment'];
+    const statuses: MaterialStatus[] = ['In Transit', 'At Port', 'Customs Clearance', 'Arrived', 'Pending Shipment'];
     return statuses.map(st => ({
       status: st,
       count: map[st] || 0,

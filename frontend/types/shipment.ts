@@ -20,7 +20,7 @@ export type MaterialStatus =
   | 'In Transit'
   | 'At Port'
   | 'Customs Clearance'
-  | 'Delivered';
+  | 'Arrived';
 
 export interface ShipmentDocument {
   name: string;
@@ -72,8 +72,8 @@ export interface Shipment {
 
   /* Material status */
   materialStatus: MaterialStatus;
-  /** Only used when materialStatus === 'Delivered'. */
-  deliveredDate?: string;
+  /** Only used when materialStatus === 'Arrived'. */
+  arrivedDate?: string;
   /** Expected to depart / arrive. Both optional; '' means unknown. */
   etd: string;
   eta: string;
