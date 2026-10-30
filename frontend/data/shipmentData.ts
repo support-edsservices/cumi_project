@@ -12,6 +12,35 @@
 
 import { Shipment, ShipmentMode, DocumentStatus, MaterialStatus, PaymentStatus } from '../types/shipment';
 
+export const PAYMENT_TERM_OPTIONS = [
+  '2 Way',
+  '15 Days from Date of Invoice',
+  '20% Advance Against PI & Balance 80% Against Documents Through Bank 30 Days from Bill of Lading',
+  '30 Days from Date of Invoice',
+  '30 Days from BL',
+  '30 Days from Date of Receipt',
+  '50% Advance Against Proforma Invoice and 50% Before Dispatch',
+  '50% Advance + 40% Before Shipment + 10% T/T within 1 Month after Delivery',
+  '60 Days from BL',
+  '90 Days from BL',
+  '90 Days from Invoice Date',
+  '100% Against PI',
+  '100% Against Proforma Invoice',
+  '100% Against Your Proforma Invoice',
+  '100% Against Delivery',
+  '100% Against Dispatch Documents',
+  '100% Proforma Invoice',
+  '100% Advance',
+  '100% In Advance',
+  '100% Payment in Advance',
+  '30% Advance Payment by T/T, 70% T/T Before Loading',
+  'LC',
+  'No Payment',
+  'Service',
+  'Sample',
+  'Free Sample',
+] as const;
+
 /* ─── Seed Data ─── */
 export const shipmentData: Shipment[] = [
   {
@@ -549,26 +578,50 @@ export function getModeLabel(s: { modeOfShipment: ShipmentMode; otherModeDetail?
 }
 
 /**
- * Returns the base ISO date string used for credit day calculation
- * depending on creditDaysFrom ('Invoice Date', 'BL Date', 'PO Date')
+ * Returns the base ISO date string used for credit-day calculations.
  */
 export function getPaymentBaseISO(s: {
   creditDaysFrom?: string | null;
+  paymentTerms?: string;
   invoiceDate?: string;
   blDate?: string;
   poDate?: string;
+  receiptDate?: string;
 }): string {
-  if (!s.creditDaysFrom) return '';
-  if (s.creditDaysFrom === 'Invoice Date') return s.invoiceDate || '';
-  if (s.creditDaysFrom === 'BL Date') return s.blDate || '';
-  if (s.creditDaysFrom === 'PO Date') return s.poDate || '';
+  const creditDaysFrom = s.creditDaysFrom ?? getPaymentTermRule(s.paymentTerms)?.from;
+  if (!creditDaysFrom) return '';
+  if (creditDaysFrom === 'Invoice Date') return s.invoiceDate || '';
+  if (creditDaysFrom === 'BL Date') return s.blDate || '';
+  if (creditDaysFrom === 'PO Date') return s.poDate || '';
+  if (creditDaysFrom === 'Receipt Date') return s.receiptDate || '';
   return '';
+}
+
+function getPaymentTermRule(terms?: string): { days: number; from: 'BL Date' | 'Invoice Date' | 'PO Date' | 'Receipt Date' } | null {
+  const match = terms?.match(/\b(\d+)\s*days?\s+from\s+(?:the\s+)?(?:(?:date\s+of\s+)?(invoice|receipt)|(bill\s+of\s+lading|bl)|(po))\b/i);
+  if (!match) return null;
+  const days = Number(match[1]);
+  if (!Number.isInteger(days) || days <= 0) return null;
+  const dateBasis = match[2]?.toLowerCase();
+  const from = dateBasis === 'receipt'
+    ? 'Receipt Date'
+    : dateBasis
+      ? 'Invoice Date'
+      : match[3]
+        ? 'BL Date'
+        : 'PO Date';
+  return { days, from };
+}
+
+export function getPaymentTermDateBasis(terms?: string): 'BL Date' | 'Invoice Date' | 'PO Date' | 'Receipt Date' | null {
+  return getPaymentTermRule(terms)?.from ?? null;
 }
 
 /**
  * Calculates the payment due date as a Date object.
  * If paymentType is 'LC', there is no credit-day calculation (returns null).
  * If creditDays and creditDaysFrom are set, computes: baseDate + creditDays.
+ * Date-based payment-term presets are also calculated from their named date.
  * Supports backward-compatibility for legacy records if present.
  */
 export function getPaymentDueDate(s: any): Date | null {
@@ -582,6 +635,13 @@ export function getPaymentDueDate(s: any): Date | null {
     const baseISO = getPaymentBaseISO(s);
     if (!baseISO) return null;
     const dueISO = addDaysToISO(baseISO, Number(s.creditDays));
+    return dueISO ? new Date(dueISO) : null;
+  }
+
+  const termRule = getPaymentTermRule(s.paymentTerms);
+  if (termRule) {
+    const baseISO = getPaymentBaseISO({ ...s, creditDaysFrom: termRule.from });
+    const dueISO = baseISO ? addDaysToISO(baseISO, termRule.days) : null;
     return dueISO ? new Date(dueISO) : null;
   }
 
@@ -615,6 +675,9 @@ export function getPaymentPeriod(s: any): { from: Date; to: Date } | null {
 
 /** Returns a clean user-facing label for the payment terms */
 export function getPaymentTermsLabel(s: any): string {
+  if (typeof s.paymentTerms === 'string' && s.paymentTerms.trim()) {
+    return s.paymentTerms;
+  }
   if (s.paymentType === 'LC') {
     return 'LC (Letter of Credit)';
   }
@@ -629,7 +692,7 @@ export function getPaymentTermsLabel(s: any): string {
 
 /** Checks if a shipment's payment is overdue */
 export function isPaymentOverdue(s: any): boolean {
-  if (s.paymentStatus === 'PAID') return false;
+  if (s.paymentStatus !== 'NOT PAID') return false;
   const due = getPaymentDueDate(s);
   if (!due) return false;
   const today = new Date();
@@ -637,6 +700,10 @@ export function isPaymentOverdue(s: any): boolean {
   const d = new Date(due);
   d.setHours(0, 0, 0, 0);
   return d < today;
+}
+
+export function isPaymentCalendarEligible(s: Pick<Shipment, 'paymentStatus'>): boolean {
+  return s.paymentStatus === 'PAID' || s.paymentStatus === 'NOT PAID';
 }
 
 /** Returns the number of days until due (negative if overdue) */

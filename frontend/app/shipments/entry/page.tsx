@@ -48,12 +48,11 @@ import {
   ShipmentMode,
   PaymentType,
   PaymentStatus,
-  CreditDaysFrom,
   DocumentStatus,
   MaterialStatus,
+  PAYMENT_STATUSES,
 } from '@/types/shipment';
 import {
-  addDaysToISO,
   formatDMY,
   formatEtdEta,
   getDaysUntilDue,
@@ -61,8 +60,10 @@ import {
   getModeLabel,
   getPaymentBaseISO,
   getPaymentDueDate,
-  getPaymentPeriod,
+  getPaymentTermDateBasis,
   getPaymentTermsLabel,
+  getPaymentPeriod,
+  PAYMENT_TERM_OPTIONS,
   nextShipmentId,
   toISODate,
 } from '@/data/shipmentData';
@@ -97,10 +98,10 @@ const emptyForm = {
   boeDocName: '',
   country: '',
   paymentType: 'Others' as PaymentType,
+  paymentTermChoice: '',
+  customPaymentTerms: '',
   bankReferenceNo: '',
-  useCreditDays: false,
-  creditDays: '',
-  creditDaysFrom: 'Invoice Date' as CreditDaysFrom,
+  receiptDate: '',
   paymentStatus: 'NOT PAID' as PaymentStatus,
   materialStatus: 'In Transit' as MaterialStatus,
   arrivedDate: '',
@@ -112,6 +113,9 @@ const emptyForm = {
 type FormState = typeof emptyForm;
 
 function shipmentToForm(s: Shipment & { mawbDocument?: ShipmentDocument; hawbDocument?: ShipmentDocument }): FormState {
+  const savedPaymentTerms = s.paymentTerms ?? getPaymentTermsLabel(s);
+  const isPresetPaymentTerm = (PAYMENT_TERM_OPTIONS as readonly string[]).includes(savedPaymentTerms);
+
   return {
     supplier: s.supplier,
     poNo: s.poNo,
@@ -138,10 +142,10 @@ function shipmentToForm(s: Shipment & { mawbDocument?: ShipmentDocument; hawbDoc
     boeDocName: s.boeDocument?.name ?? '',
     country: s.country,
     paymentType: s.paymentType,
+    paymentTermChoice: isPresetPaymentTerm ? savedPaymentTerms : '__custom__',
+    customPaymentTerms: isPresetPaymentTerm ? '' : savedPaymentTerms,
     bankReferenceNo: s.bankReferenceNo,
-    useCreditDays: s.creditDays != null,
-    creditDays: s.creditDays != null ? String(s.creditDays) : '',
-    creditDaysFrom: s.creditDaysFrom ?? 'Invoice Date',
+    receiptDate: s.receiptDate ?? '',
     paymentStatus: s.paymentStatus,
     materialStatus: s.materialStatus,
     arrivedDate: s.arrivedDate ?? '',
@@ -161,7 +165,9 @@ function formToShipment(
   const doc = (name: string, existing?: ShipmentDocument): ShipmentDocument | undefined =>
     !name ? undefined : existing && existing.name === name ? existing : { name, url: '#', type: 'pdf' };
 
-  const days = f.useCreditDays ? parseInt(f.creditDays, 10) : null;
+  const paymentTerms = f.paymentTermChoice === '__custom__'
+    ? f.customPaymentTerms.trim()
+    : f.paymentTermChoice;
 
   return {
     id,
@@ -190,10 +196,12 @@ function formToShipment(
     boeDocument: doc(f.boeDocName, prev?.boeDocument),
     country: f.country.trim() || 'International',
     paymentType: f.paymentType,
-    creditDays: days,
-    creditDaysFrom: days != null ? f.creditDaysFrom : null,
+    creditDays: null,
+    creditDaysFrom: null,
     paymentStatus: f.paymentStatus,
+    paymentTerms,
     bankReferenceNo: f.bankReferenceNo.trim(),
+    receiptDate: f.receiptDate || undefined,
     materialStatus: f.materialStatus,
     arrivedDate: f.materialStatus === 'Arrived' ? f.arrivedDate : undefined,
     etd: f.etd,
@@ -209,6 +217,8 @@ function validate(f: FormState): Record<string, string> {
   if (!f.supplier.trim()) e.supplier = 'Supplier name is required';
   if (!f.poNo.trim()) e.poNo = 'PO number is required';
   if (!f.invoiceNo.trim()) e.invoiceNo = 'Invoice number is required';
+  const paymentTerms = f.paymentTermChoice === '__custom__' ? f.customPaymentTerms.trim() : f.paymentTermChoice;
+  if (!paymentTerms) e.paymentTerms = 'Select or enter payment terms';
 
   if (f.modeOfShipment === 'Others' && !f.otherModeDetail.trim()) {
     e.otherModeDetail = 'Enter the mode of shipment';
@@ -218,11 +228,16 @@ function validate(f: FormState): Record<string, string> {
     e.bankReferenceNo = 'Bank reference is required for LC';
   }
 
-  if (f.useCreditDays) {
-    const n = Number(f.creditDays);
-    if (!Number.isInteger(n) || n <= 0) e.creditDays = 'Enter the number of days';
-    if (!getPaymentBaseISO(f)) {
-      e.creditDaysFrom = `Enter the ${f.creditDaysFrom} above to calculate the due date`;
+  if (f.paymentStatus === 'NOT PAID' && f.paymentType !== 'LC') {
+    const dateBasis = getPaymentTermDateBasis(paymentTerms);
+    if (dateBasis === 'Invoice Date' && !f.invoiceDate) {
+      e.invoiceDate = 'Enter the invoice date to calculate the payment due date';
+    } else if (dateBasis === 'BL Date' && !f.blDate) {
+      e.blDate = 'Enter the BL date to calculate the payment due date';
+    } else if (dateBasis === 'PO Date' && !f.poDate) {
+      e.poDate = 'Enter the PO date to calculate the payment due date';
+    } else if (dateBasis === 'Receipt Date' && !f.receiptDate) {
+      e.receiptDate = 'Select the date of receipt to calculate the payment due date';
     }
   }
 
@@ -400,9 +415,27 @@ export default function ShipmentEntryAndHistoryPage() {
     setActiveTab('history');
   };
 
-  const creditDaysNum = parseInt(formData.creditDays, 10);
-  const creditBaseISO = getPaymentBaseISO(formData);
-  const creditDue = creditDaysNum > 0 ? addDaysToISO(creditBaseISO, creditDaysNum) : null;
+  const selectedPaymentTerms = formData.paymentTermChoice === '__custom__'
+    ? formData.customPaymentTerms.trim()
+    : formData.paymentTermChoice;
+  const paymentDueDateBasis = formData.paymentStatus === 'NOT PAID' && formData.paymentType !== 'LC'
+    ? getPaymentTermDateBasis(selectedPaymentTerms)
+    : null;
+  const creditBaseISO = getPaymentBaseISO({
+    invoiceDate: formData.invoiceDate,
+    blDate: formData.blDate,
+    poDate: formData.poDate,
+    receiptDate: formData.receiptDate,
+    paymentTerms: selectedPaymentTerms,
+  });
+  const creditDue = getPaymentDueDate({
+    paymentType: formData.paymentType,
+    paymentTerms: selectedPaymentTerms,
+    invoiceDate: formData.invoiceDate,
+    blDate: formData.blDate,
+    poDate: formData.poDate,
+    receiptDate: formData.receiptDate,
+  });
 
   const filteredShipments = useMemo(() => {
     const q = searchTerm.toLowerCase();
@@ -458,10 +491,11 @@ export default function ShipmentEntryAndHistoryPage() {
         'Document Status': s.documentStatus,
         'Payment Type': s.paymentType,
         'Payment Terms': getPaymentTermsLabel(s),
-        'Payment Status': s.paymentStatus,
+        'PRW Status': s.paymentStatus,
         'Payment Due Date': due ? toISODate(due) : 'N/A',
         'Bank Reference': s.bankReferenceNo || '-',
         'Material Status': s.materialStatus,
+        'Date of Receipt': s.receiptDate || '',
         'Arrival Date': s.arrivedDate || '',
         'ETD': s.etd || '',
         'ETA': s.eta || '',
@@ -506,10 +540,11 @@ export default function ShipmentEntryAndHistoryPage() {
         'Country': s.country,
         'Document Status': s.documentStatus,
         'Payment Terms': getPaymentTermsLabel(s),
-        'Payment Status': s.paymentStatus,
+        'PRW Status': s.paymentStatus,
         'Payment Due Date': due ? toISODate(due) : 'N/A',
         'Bank Reference': s.bankReferenceNo || '',
         'Material Status': s.materialStatus,
+        'Date of Receipt': s.receiptDate || '',
         'Arrival Date': s.arrivedDate || '',
         'ETD': s.etd || '',
         'ETA': s.eta || '',
@@ -720,8 +755,8 @@ export default function ShipmentEntryAndHistoryPage() {
                 />
               </Field>
 
-              <Field label="PO Date" id="poDate">
-                <DateField value={formData.poDate} onChange={(v) => setField('poDate', v)} />
+              <Field label="PO Date" required={paymentDueDateBasis === 'PO Date'} id="poDate" error={errors.poDate}>
+                <DateField value={formData.poDate} onChange={(v) => setField('poDate', v)} invalid={!!errors.poDate} />
               </Field>
 
               <Field label="PO Document Attachment">
@@ -756,8 +791,8 @@ export default function ShipmentEntryAndHistoryPage() {
                 />
               </Field>
 
-              <Field label="Invoice Date">
-                <DateField value={formData.invoiceDate} onChange={(v) => setField('invoiceDate', v)} />
+              <Field label="Invoice Date" required={paymentDueDateBasis === 'Invoice Date'} id="invoiceDate" error={errors.invoiceDate}>
+                <DateField value={formData.invoiceDate} onChange={(v) => setField('invoiceDate', v)} invalid={!!errors.invoiceDate} />
               </Field>
 
               <Field label="Invoice Document File">
@@ -818,8 +853,8 @@ export default function ShipmentEntryAndHistoryPage() {
                 />
               </Field>
 
-              <Field label="BL Date">
-                <DateField value={formData.blDate} onChange={(v) => setField('blDate', v)} />
+              <Field label="BL Date" required={paymentDueDateBasis === 'BL Date'} id="blDate" error={errors.blDate}>
+                <DateField value={formData.blDate} onChange={(v) => setField('blDate', v)} invalid={!!errors.blDate} />
               </Field>
 
               <Field label="BL Document File">
@@ -941,6 +976,44 @@ export default function ShipmentEntryAndHistoryPage() {
                 />
               </div>
 
+              <Field label="Payment Terms" required id="paymentTerms" error={errors.paymentTerms}>
+                <select
+                  value={formData.paymentTermChoice}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setField('paymentTermChoice', value);
+                    if (value === 'LC') setField('paymentType', 'LC');
+                    else if (value && value !== '__custom__') setField('paymentType', 'Others');
+                  }}
+                  style={withError(selectStyle, errors.paymentTerms)}
+                >
+                  <option value="">Select payment terms</option>
+                  {PAYMENT_TERM_OPTIONS.map((term) => (
+                    <option key={term} value={term}>{term}</option>
+                  ))}
+                  <option value="__custom__">Other — enter custom terms</option>
+                </select>
+                {formData.paymentTermChoice === '__custom__' && (
+                  <input
+                    type="text"
+                    value={formData.customPaymentTerms}
+                    onChange={(e) => setField('customPaymentTerms', e.target.value)}
+                    placeholder="Enter customer-specific payment terms"
+                    style={{ ...withError(inputStyle, errors.paymentTerms), marginTop: 8 }}
+                  />
+                )}
+              </Field>
+
+              {paymentDueDateBasis === 'Receipt Date' && (
+                <Field label="Date of Receipt" required id="receiptDate" error={errors.receiptDate}>
+                  <DateField
+                    value={formData.receiptDate}
+                    onChange={(value) => setField('receiptDate', value)}
+                    invalid={!!errors.receiptDate}
+                  />
+                </Field>
+              )}
+
               <Field
                 label="Bank Reference Number"
                 required={formData.paymentType === 'LC'}
@@ -959,112 +1032,31 @@ export default function ShipmentEntryAndHistoryPage() {
                 </div>
               </Field>
 
-              <div>
-                <label style={labelStyle}>Payment Status (PRW / Settlement)</label>
-                <div style={{ display: 'flex', gap: '0.4rem', marginTop: 4 }}>
-                  {(
-                    [
-                      { id: 'PAID', label: 'PAID', color: 'var(--accent-green)' },
-                      { id: 'NOT PAID', label: 'NOT PAID', color: 'var(--accent-red)' },
-                      { id: 'PARTIAL', label: 'PARTIAL', color: 'var(--accent-orange)' },
-                    ] as const
-                  ).map((s) => {
-                    const active = formData.paymentStatus === s.id;
-                    return (
-                      <button
-                        key={s.id}
-                        type="button"
-                        onClick={() => setField('paymentStatus', s.id)}
-                        style={{
-                          flex: 1,
-                          padding: '0.55rem 0.6rem',
-                          borderRadius: 8,
-                          fontSize: 'var(--font-size-compact)',
-                          fontWeight: 700,
-                          border: active ? `2px solid ${s.color}` : '1px solid var(--border)',
-                          background: active ? `color-mix(in srgb, ${s.color} 15%, transparent)` : 'var(--bg-secondary)',
-                          color: active ? s.color : 'var(--text-secondary)',
-                          cursor: 'pointer',
-                          fontFamily: 'inherit',
-                          transition: 'all 0.15s ease',
-                        }}
-                      >
-                        {s.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div style={{ gridColumn: '1 / -1' }}>
-                <label
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '0.6rem',
-                    cursor: 'pointer',
-                    fontSize: 'var(--font-size-body)',
-                    fontWeight: 600,
-                    color: 'var(--text-primary)',
-                  }}
+              <Field label="PRW / Payment Status">
+                <select
+                  value={formData.paymentStatus}
+                  onChange={(e) => setField('paymentStatus', e.target.value as PaymentStatus)}
+                  style={selectStyle}
                 >
-                  <input
-                    type="checkbox"
-                    checked={formData.useCreditDays}
-                    onChange={(e) => setField('useCreditDays', e.target.checked)}
-                    style={{ width: 18, height: 18, accentColor: 'var(--accent-blue)', cursor: 'pointer' }}
-                  />
-                  <span>Payment is due after a number of days</span>
-                </label>
-              </div>
+                  {PAYMENT_STATUSES.map((status) => (
+                    <option key={status} value={status}>{status}</option>
+                  ))}
+                </select>
+              </Field>
 
-              {formData.useCreditDays && (
-                <>
-                  <Field label="Number of Days" required id="creditDays" error={errors.creditDays}>
-                    <input
-                      type="number"
-                      min={1}
-                      step={1}
-                      placeholder="e.g. 40"
-                      value={formData.creditDays}
-                      onChange={(e) => setField('creditDays', e.target.value)}
-                      style={withError(inputStyle, errors.creditDays)}
-                    />
-                  </Field>
-
-                  <Field label="Count Days From" id="creditDaysFrom" error={errors.creditDaysFrom}>
-                    <Segmented<CreditDaysFrom>
-                      value={formData.creditDaysFrom}
-                      onChange={(v) => setField('creditDaysFrom', v)}
-                      options={[
-                        { id: 'Invoice Date', label: 'Invoice Date', color: 'var(--accent-blue)' },
-                        { id: 'BL Date', label: 'BL Date', color: 'var(--accent-blue)' },
-                        { id: 'PO Date', label: 'PO Date', color: 'var(--accent-blue)' },
-                      ]}
-                    />
-                  </Field>
-
-                  <div style={{ gridColumn: '1 / -1' }}>
-                    <InfoBox>
-                      <div style={{ fontWeight: 800, color: 'var(--text-primary)', fontSize: 'var(--font-size-body)' }}>
-                        {creditDaysNum > 0 ? creditDaysNum : '—'} days from {formData.creditDaysFrom}
-                      </div>
-                      {creditDue ? (
-                        <div style={{ marginTop: 4, color: 'var(--text-secondary)', fontSize: 'var(--font-size-body-compact)' }}>
-                          {formData.creditDaysFrom}: <strong>{formatDMY(creditBaseISO)}</strong>
-                          {'  →  '}
-                          Due date: <strong>{formatDMY(creditDue)}</strong>
-                        </div>
-                      ) : (
-                        <div style={{ marginTop: 4, color: 'var(--text-muted)', fontSize: 'var(--font-size-compact)' }}>
-                          {creditBaseISO
-                            ? 'Enter the number of days to see the due date.'
-                            : `Enter the ${formData.creditDaysFrom} above to see the due date.`}
-                        </div>
-                      )}
-                    </InfoBox>
-                  </div>
-                </>
+              {paymentDueDateBasis && creditDue && selectedPaymentTerms && (
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <InfoBox>
+                    <div style={{ fontWeight: 800, color: 'var(--text-primary)', fontSize: 'var(--font-size-body)' }}>
+                      Calculated due date from payment terms
+                    </div>
+                    <div style={{ marginTop: 4, color: 'var(--text-secondary)', fontSize: 'var(--font-size-body-compact)' }}>
+                      {selectedPaymentTerms}: <strong>{formatDMY(creditBaseISO)}</strong>
+                      {'  →  '}
+                      Due date: <strong>{formatDMY(creditDue)}</strong>
+                    </div>
+                  </InfoBox>
+                </div>
               )}
             </div>
           </Section>
@@ -1317,12 +1309,12 @@ export default function ShipmentEntryAndHistoryPage() {
               </div>
 
               <div>
-                <label style={{ ...labelStyle, marginBottom: 2 }}>Payment Status</label>
+                <label style={{ ...labelStyle, marginBottom: 2 }}>PRW Status</label>
                 <select value={filterPayment} onChange={(e) => setFilterPayment(e.target.value)} style={filterSelectStyle}>
-                  <option value="all">All Payment Statuses</option>
-                  <option value="PAID">PAID</option>
-                  <option value="NOT PAID">NOT PAID</option>
-                  <option value="PARTIAL">PARTIAL</option>
+                  <option value="all">All PRW statuses</option>
+                  {PAYMENT_STATUSES.map((status) => (
+                    <option key={status} value={status}>{status}</option>
+                  ))}
                 </select>
               </div>
 
@@ -1415,7 +1407,7 @@ export default function ShipmentEntryAndHistoryPage() {
                       ID / Mode
                     </th>
 
-                    {['Supplier & Country', 'PO & Invoice', 'BL / MAWB', 'BOE / CHA', 'Payment', 'Material Status'].map((h) => (
+                    {['Supplier & Country', 'PO & Invoice', 'BL / MAWB', 'BOE / CHA', 'Payment Terms & PRW', 'Material Status'].map((h) => (
                       <th
                         key={h}
                         style={{
@@ -1472,7 +1464,7 @@ export default function ShipmentEntryAndHistoryPage() {
                     filteredShipments.map((item, idx) => {
                       const dueDate = getPaymentDueDate(item);
                       const period = getPaymentPeriod(item);
-                      const isOverdue = !!dueDate && item.paymentStatus !== 'PAID' && (getDaysUntilDue(item) ?? 0) < 0;
+                      const isOverdue = !!dueDate && item.paymentStatus === 'NOT PAID' && (getDaysUntilDue(item) ?? 0) < 0;
                       const isSelected = item.id === selectedId;
 
                       const rowBg = isSelected
@@ -1848,16 +1840,17 @@ function ShipmentDrawer({
           <DetailGroup title="Payment">
             <Detail label="Payment Type">{s.paymentType}</Detail>
             <Detail label="Payment Terms">{getPaymentTermsLabel(s)}</Detail>
-            <Detail label="Payment Status">
+            <Detail label="PRW Status">
               <PaymentBadge status={s.paymentStatus} />
             </Detail>
             <Detail label="Bank Reference">{s.bankReferenceNo || '-'}</Detail>
+            <Detail label="Date of Receipt">{formatDMY(s.receiptDate) || '-'}</Detail>
             {period && due && (
               <Detail label={`${s.creditDaysFrom} → Due Date`} wide>
                 <span>
                   {formatDMY(period.from)} → <strong>{formatDMY(due)}</strong>
                 </span>
-                {s.paymentStatus !== 'PAID' && daysLeft !== null && (
+                {s.paymentStatus === 'NOT PAID' && daysLeft !== null && (
                   <span
                     style={{
                       marginLeft: 10,
@@ -2304,8 +2297,28 @@ function ModeIcon({ mode, size }: { mode: ShipmentMode; size: number }) {
 }
 
 function PaymentBadge({ status }: { status: PaymentStatus }) {
-  const color = status === 'PAID' ? 'var(--accent-green)' : status === 'NOT PAID' ? 'var(--accent-red)' : 'var(--accent-orange)';
-  const bg = status === 'PAID' ? 'rgba(16,185,129,0.18)' : status === 'NOT PAID' ? 'rgba(239,68,68,0.18)' : 'rgba(245,158,11,0.18)';
+  const color = status === 'PAID'
+    ? 'var(--accent-green)'
+    : status === 'NOT PAID'
+      ? 'var(--accent-red)'
+      : status === 'ADVANCE'
+        ? 'var(--accent-blue)'
+        : status === '2 WAY'
+          ? 'var(--accent-purple)'
+          : status === 'SR DATE'
+            ? 'var(--accent-teal)'
+            : 'var(--accent-orange)';
+  const bg = status === 'PAID'
+    ? 'rgba(16,185,129,0.18)'
+    : status === 'NOT PAID'
+      ? 'rgba(239,68,68,0.18)'
+      : status === 'ADVANCE'
+        ? 'rgba(59,130,246,0.18)'
+        : status === '2 WAY'
+          ? 'rgba(139,92,246,0.18)'
+          : status === 'SR DATE'
+            ? 'rgba(6,182,212,0.18)'
+            : 'rgba(245,158,11,0.18)';
   return (
     <span style={{ fontSize: 'var(--font-size-tiny)', fontWeight: 800, padding: '2px 8px', borderRadius: 12, background: bg, color }}>
       {status}

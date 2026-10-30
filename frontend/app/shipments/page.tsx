@@ -14,10 +14,12 @@ import {
   ChevronLeft, ChevronRight, Anchor, Plane, ExternalLink,
 } from 'lucide-react';
 
-import { Shipment, MaterialStatus, PaymentStatus } from '@/types/shipment';
+import { Shipment, MaterialStatus, PaymentStatus, PAYMENT_STATUSES } from '@/types/shipment';
 import {
   shipmentData,
   getPaymentDueDate,
+  getPaymentTermsLabel,
+  isPaymentCalendarEligible,
   isPaymentOverdue,
   getDaysUntilDue,
 } from '@/data/shipmentData';
@@ -39,6 +41,9 @@ const PAYMENT_STATUS_COLOR: Record<PaymentStatus, string> = {
   PAID: ACCENT.green,
   'NOT PAID': ACCENT.red,
   PARTIAL: ACCENT.orange,
+  ADVANCE: ACCENT.blue,
+  '2 WAY': ACCENT.purple,
+  'SR DATE': ACCENT.teal,
 };
 
 const MATERIAL_STATUS_COLOR: Record<MaterialStatus, string> = {
@@ -159,6 +164,7 @@ function PaymentCalendar({ data }: { data: Shipment[] }) {
   const dayMap = useMemo(() => {
     const map = new Map<number, { shipment: Shipment; dueDate: Date }[]>();
     data.forEach(s => {
+      if (!isPaymentCalendarEligible(s)) return;
       const due = getPaymentDueDate(s);
       if (!due) return;
       if (due.getFullYear() === year && due.getMonth() === month) {
@@ -322,9 +328,9 @@ function PaymentCalendar({ data }: { data: Shipment[] }) {
         display: 'flex', gap: '0.875rem', marginTop: '0.75rem',
         fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)',
       }}>
-        {([['PAID', ACCENT.green], ['NOT PAID', ACCENT.red], ['PARTIAL', ACCENT.orange]] as const).map(([label, c]) => (
+        {([['PAID', ACCENT.green], ['NOT PAID', ACCENT.red]] as const).map(([label, color]) => (
           <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            <div style={{ width: 10, height: 4, borderRadius: 1, background: c }} />
+            <div style={{ width: 10, height: 4, borderRadius: 1, background: color }} />
             {label}
           </div>
         ))}
@@ -336,17 +342,17 @@ function PaymentCalendar({ data }: { data: Shipment[] }) {
 /* ── Payment Status Donut (pure SVG) ── */
 function PaymentDonut({ data }: { data: Shipment[] }) {
   const counts = useMemo(() => {
-    const map: Record<PaymentStatus, number> = { PAID: 0, 'NOT PAID': 0, PARTIAL: 0 };
-    data.forEach(s => { map[s.paymentStatus]++; });
+    const map = Object.fromEntries(PAYMENT_STATUSES.map((status) => [status, 0])) as Record<PaymentStatus, number>;
+    data.forEach(s => { map[s.paymentStatus] += 1; });
     return map;
   }, [data]);
 
   const total = data.length;
-  const slices: { name: string; value: number; color: string }[] = [
-    { name: 'Paid', value: counts.PAID, color: ACCENT.green },
-    { name: 'Not Paid', value: counts['NOT PAID'], color: ACCENT.red },
-    { name: 'Partial', value: counts.PARTIAL, color: ACCENT.orange },
-  ];
+  const slices: { name: string; value: number; color: string }[] = PAYMENT_STATUSES.map((status) => ({
+    name: status,
+    value: counts[status],
+    color: PAYMENT_STATUS_COLOR[status],
+  }));
 
   let startAngle = -90;
   const R = 56, r = 36, cx = 80, cy = 80;
@@ -374,7 +380,7 @@ function PaymentDonut({ data }: { data: Shipment[] }) {
       padding: '1.125rem', display: 'flex', flexDirection: 'column',
       alignItems: 'center', minWidth: 260,
     }}>
-      <div className="section-title" style={{ alignSelf: 'flex-start' }}>Payment Status</div>
+      <div className="section-title" style={{ alignSelf: 'flex-start' }}>PRW Status</div>
       <svg viewBox="0 0 160 160" style={{ width: 150, margin: '0.5rem 0' }}>
         {paths.map(s => (
           <path key={s.name} d={s.path} fill={s.color} opacity={0.88} />
@@ -531,7 +537,7 @@ function DuePaymentsTable({ data }: { data: Shipment[] }) {
         const daysLeft = getDaysUntilDue(s);
         return { shipment: s, dueDate, daysLeft };
       })
-      .filter(r => r.dueDate !== null)
+      .filter(r => r.dueDate !== null && isPaymentCalendarEligible(r.shipment))
       .sort((a, b) => {
         if (a.daysLeft === null) return 1;
         if (b.daysLeft === null) return -1;
@@ -547,7 +553,7 @@ function DuePaymentsTable({ data }: { data: Shipment[] }) {
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--font-size-body)' }}>
           <thead>
             <tr style={{ borderBottom: '2px solid var(--border)' }}>
-              {['Supplier', 'Invoice No', 'BL Date', 'Due Date', 'Days Left', 'Status', 'Action'].map(h => (
+              {['Supplier', 'Invoice No', 'Payment Terms', 'BL Date', 'Due Date', 'Days Left', 'PRW Status', 'Action'].map(h => (
                 <th key={h} style={{
                   padding: '0.55rem 0.875rem', textAlign: 'left',
                   fontWeight: 700, fontSize: 'var(--font-size-small)',
@@ -585,6 +591,12 @@ function DuePaymentsTable({ data }: { data: Shipment[] }) {
                     fontSize: 'var(--font-size-body-small)',
                   }}>
                     {s.invoiceNo}
+                  </td>
+                  <td style={{
+                    padding: '0.55rem 0.875rem', color: 'var(--text-secondary)',
+                    fontSize: 'var(--font-size-body-small)',
+                  }}>
+                    {getPaymentTermsLabel(s)}
                   </td>
                   <td style={{
                     padding: '0.55rem 0.875rem', color: 'var(--text-secondary)',

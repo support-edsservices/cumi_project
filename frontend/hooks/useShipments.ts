@@ -10,7 +10,7 @@
    your API calls when the backend is ready and nothing else needs to change.
 ───────────────────────────────────────────────────────────────────────────── */
 import { useCallback, useEffect, useState } from 'react';
-import { Shipment } from '@/types/shipment';
+import { PAYMENT_STATUSES, PaymentStatus, Shipment } from '@/types/shipment';
 import { shipmentData as seed } from '@/data/shipmentData';
 
 const STORAGE_KEY = 'cumi.shipments.v2';
@@ -22,21 +22,41 @@ function read(): Shipment[] {
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return seed;
     return parsed.map((item): Shipment => {
-      const shipment = item as Omit<Shipment, 'materialStatus'> & {
+      const shipment = item as Omit<Shipment, 'materialStatus' | 'paymentStatus'> & {
         materialStatus: string;
         deliveredDate?: string;
+        paymentStatus?: string;
       };
-      const { materialStatus, deliveredDate, ...rest } = shipment;
+      const { materialStatus, deliveredDate, paymentStatus, ...rest } = shipment;
+      const normalizedValue = paymentStatus?.trim().toUpperCase().replace(/[-_]+/g, ' ').replace(/\s+/g, ' ');
+      const normalizedPaymentStatus = !normalizedValue
+        ? 'NOT PAID'
+        : normalizedValue === 'UNPAID'
+          ? 'NOT PAID'
+          : normalizedValue === '2WAY'
+            ? '2 WAY'
+            : normalizedValue === 'PARTIALL'
+              ? 'PARTIAL'
+              : PAYMENT_STATUSES.find((status) => status === normalizedValue);
+      if (!normalizedPaymentStatus) {
+        throw new Error(`Unknown payment status "${paymentStatus}" in saved shipments.`);
+      }
       if (materialStatus === 'Delivered') {
         return {
           ...rest,
           materialStatus: 'Arrived',
+          paymentStatus: normalizedPaymentStatus,
           arrivedDate: shipment.arrivedDate ?? deliveredDate,
         };
       }
-      return { ...rest, materialStatus: materialStatus as Shipment['materialStatus'] };
+      return {
+        ...rest,
+        materialStatus: materialStatus as Shipment['materialStatus'],
+        paymentStatus: normalizedPaymentStatus as PaymentStatus,
+      };
     });
-  } catch {
+  } catch (error) {
+    console.error('Failed to read saved shipments from browser storage.', error);
     return seed;
   }
 }

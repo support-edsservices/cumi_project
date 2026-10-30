@@ -16,7 +16,7 @@ import {
   ChevronLeft, ChevronRight, Anchor, Plane, FileText, X, Calendar as CalendarIcon, Filter, Globe, AlertTriangle, PackageX, ExternalLink,
 } from 'lucide-react';
 
-import { Shipment, MaterialStatus, PaymentStatus } from '@/types/shipment';
+import { Shipment, MaterialStatus, PaymentStatus, PAYMENT_STATUSES } from '@/types/shipment';
 import {
   formatDMY,
   formatEtdEta,
@@ -25,6 +25,7 @@ import {
   getPaymentDueDate,
   getPaymentPeriod,
   getPaymentTermsLabel,
+  isPaymentCalendarEligible,
   isPaymentOverdue,
   toISODate,
 } from '@/data/shipmentData';
@@ -51,6 +52,9 @@ const PAYMENT_STATUS_COLOR: Record<PaymentStatus, string> = {
   PAID: ACCENT.green,
   'NOT PAID': ACCENT.red,
   PARTIAL: ACCENT.orange,
+  ADVANCE: ACCENT.blue,
+  '2 WAY': ACCENT.purple,
+  'SR DATE': ACCENT.teal,
 };
 
 const MATERIAL_STATUS_COLOR: Record<MaterialStatus, string> = {
@@ -206,6 +210,8 @@ function ShipmentListModal({
     invoiceDate: '',
     blDate: '',
     paymentTerms: '',
+    etdEta: '',
+    dueDate: '',
     paymentStatus: '',
     materialStatus: '',
   });
@@ -225,6 +231,9 @@ function ShipmentListModal({
       const paymentTermsStr = getPaymentTermsLabel(s).toLowerCase();
       const paymentStatusStr = s.paymentStatus.toLowerCase();
       const materialStatusStr = s.materialStatus.toLowerCase();
+      const etdEtaStr = `${s.etd ? formatDMY(s.etd) : ''} ${s.eta ? formatDMY(s.eta) : ''} ${s.arrivedDate ? formatDMY(s.arrivedDate) : ''}`.toLowerCase();
+      const dueDate = getPaymentDueDate(s);
+      const dueDateStr = dueDate ? formatDMY(dueDate).toLowerCase() : '';
 
       return (
         supplierCountryStr.includes(colFilters.supplierCountry) &&
@@ -232,6 +241,8 @@ function ShipmentListModal({
         invoiceDateStr.includes(colFilters.invoiceDate) &&
         blDateStr.includes(colFilters.blDate) &&
         paymentTermsStr.includes(colFilters.paymentTerms) &&
+        etdEtaStr.includes(colFilters.etdEta) &&
+        dueDateStr.includes(colFilters.dueDate) &&
         paymentStatusStr.includes(colFilters.paymentStatus) &&
         materialStatusStr.includes(colFilters.materialStatus)
       );
@@ -285,6 +296,8 @@ function ShipmentListModal({
                   invoiceDate: '',
                   blDate: '',
                   paymentTerms: '',
+                  etdEta: '',
+                  dueDate: '',
                   paymentStatus: '',
                   materialStatus: '',
                 })}
@@ -354,6 +367,16 @@ function ShipmentListModal({
                   />
                 </th>
                 <th style={{ padding: '0.625rem 0.75rem', fontWeight: 700, color: 'var(--text-muted)', fontSize: 'var(--font-size-label)', textTransform: 'uppercase' }}>
+                  ETD / ETA / Arrival
+                  <input
+                    type="text"
+                    placeholder="Search..."
+                    value={colFilters.etdEta}
+                    onChange={e => handleFilterChange('etdEta', e.target.value)}
+                    style={inputFilterStyle}
+                  />
+                </th>
+                <th style={{ padding: '0.625rem 0.75rem', fontWeight: 700, color: 'var(--text-muted)', fontSize: 'var(--font-size-label)', textTransform: 'uppercase' }}>
                   Payment Terms
                   <input
                     type="text"
@@ -364,7 +387,17 @@ function ShipmentListModal({
                   />
                 </th>
                 <th style={{ padding: '0.625rem 0.75rem', fontWeight: 700, color: 'var(--text-muted)', fontSize: 'var(--font-size-label)', textTransform: 'uppercase' }}>
-                  Payment Status
+                  Payment Due Date
+                  <input
+                    type="text"
+                    placeholder="Search..."
+                    value={colFilters.dueDate}
+                    onChange={e => handleFilterChange('dueDate', e.target.value)}
+                    style={inputFilterStyle}
+                  />
+                </th>
+                <th style={{ padding: '0.625rem 0.75rem', fontWeight: 700, color: 'var(--text-muted)', fontSize: 'var(--font-size-label)', textTransform: 'uppercase' }}>
+                  PRW Status
                   <input
                     type="text"
                     placeholder="Search..."
@@ -388,7 +421,7 @@ function ShipmentListModal({
             <tbody>
               {filteredModalShipments.length === 0 ? (
                 <tr>
-                  <td colSpan={7} style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: 'var(--font-size-body)' }}>
+                  <td colSpan={9} style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: 'var(--font-size-body)' }}>
                     {shipments.length === 0 
                       ? 'No shipments match this criteria.' 
                       : 'No shipments match the applied column search filters.'}
@@ -413,8 +446,16 @@ function ShipmentListModal({
                       <div>{s.blNo || '—'}</div>
                       <div style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)' }}>{s.blDate ? formatDMY(s.blDate) : '—'}</div>
                     </td>
+                    <td style={{ padding: '0.625rem 0.75rem', color: 'var(--text-secondary)' }}>
+                      <div>ETD: {s.etd ? formatDMY(s.etd) : '—'}</div>
+                      <div>ETA: {s.eta ? formatDMY(s.eta) : '—'}</div>
+                      {s.arrivedDate && <div>Arrived: {formatDMY(s.arrivedDate)}</div>}
+                    </td>
                     <td style={{ padding: '0.625rem 0.75rem', fontWeight: 600, color: 'var(--text-primary)' }}>
                       {getPaymentTermsLabel(s)}
+                    </td>
+                    <td style={{ padding: '0.625rem 0.75rem', color: 'var(--text-secondary)' }}>
+                      {getPaymentDueDate(s) ? formatDMY(getPaymentDueDate(s)) : '—'}
                     </td>
                     <td style={{ padding: '0.625rem 0.75rem' }}>
                       <span style={{
@@ -469,7 +510,7 @@ function PaymentCalendar({
     data.forEach(s => {
       // Due payments
       const due = getPaymentDueDate(s);
-      if (due && due.getFullYear() === year && due.getMonth() === month) {
+      if (isPaymentCalendarEligible(s) && due && due.getFullYear() === year && due.getMonth() === month) {
         const day = due.getDate();
         const existing = map.get(day) || { dueShipments: [], etaShipments: [] };
         existing.dueShipments.push(s);
@@ -639,9 +680,9 @@ function PaymentCalendar({
         fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)', flexWrap: 'wrap', gap: 8,
       }}>
         <div style={{ display: 'flex', gap: '0.875rem', flexWrap: 'wrap', alignItems: 'center' }}>
-          {([['PAID', ACCENT.green], ['NOT PAID', ACCENT.red], ['PARTIAL', ACCENT.orange]] as const).map(([label, c]) => (
+          {([['PAID', ACCENT.green], ['NOT PAID', ACCENT.red]] as const).map(([label, color]) => (
             <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <div style={{ width: 10, height: 4, borderRadius: 1, background: c }} />
+              <div style={{ width: 10, height: 4, borderRadius: 1, background: color }} />
               {label}
             </div>
           ))}
@@ -672,7 +713,7 @@ function DatePaymentDetails({
   const matchingShipments = useMemo(() => {
     return data.filter(s => {
       const due = getPaymentDueDate(s);
-      const dueMatches = due ? isSameDay(due, selectedDate) : false;
+      const dueMatches = isPaymentCalendarEligible(s) && due ? isSameDay(due, selectedDate) : false;
       const eta = s.eta ? toLocalDate(s.eta) : null;
       const etaMatches = eta ? isSameDay(eta, selectedDate) : false;
       return dueMatches || etaMatches;
@@ -710,6 +751,9 @@ function MonthlyPoAndPaymentAnalytics({
       paid: 0,
       unpaid: 0,
       partial: 0,
+      advance: 0,
+      twoWay: 0,
+      srDate: 0,
     }));
 
     data.forEach(s => {
@@ -720,6 +764,9 @@ function MonthlyPoAndPaymentAnalytics({
         if (s.paymentStatus === 'PAID') list[idx].paid += 1;
         else if (s.paymentStatus === 'NOT PAID') list[idx].unpaid += 1;
         else if (s.paymentStatus === 'PARTIAL') list[idx].partial += 1;
+        else if (s.paymentStatus === 'ADVANCE') list[idx].advance += 1;
+        else if (s.paymentStatus === '2 WAY') list[idx].twoWay += 1;
+        else if (s.paymentStatus === 'SR DATE') list[idx].srDate += 1;
       }
     });
 
@@ -805,6 +852,9 @@ function MonthlyPoAndPaymentAnalytics({
             <Bar dataKey="poRaised" name="PO Raised" stackId="po" fill={ACCENT.blue} radius={[4, 4, 0, 0]} cursor="pointer" />
             <Bar dataKey="paid" name="Paid" stackId="payments" fill={ACCENT.green} radius={[0, 0, 0, 0]} cursor="pointer" />
             <Bar dataKey="partial" name="Partial" stackId="payments" fill={ACCENT.orange} radius={[0, 0, 0, 0]} cursor="pointer" />
+            <Bar dataKey="advance" name="Advance" stackId="payments" fill={ACCENT.blue} radius={[0, 0, 0, 0]} cursor="pointer" />
+            <Bar dataKey="twoWay" name="2 Way" stackId="payments" fill={ACCENT.purple} radius={[0, 0, 0, 0]} cursor="pointer" />
+            <Bar dataKey="srDate" name="SR Date" stackId="payments" fill={ACCENT.teal} radius={[0, 0, 0, 0]} cursor="pointer" />
             <Bar dataKey="unpaid" name="Unpaid" stackId="payments" fill={ACCENT.red} radius={[4, 4, 0, 0]} cursor="pointer" />
           </BarChart>
         </ResponsiveContainer>
@@ -1010,24 +1060,24 @@ function ShipmentsByCountry({ data }: { data: Shipment[] }) {
 /* ── Payment Status Donut ── */
 function PaymentDonut({ data }: { data: Shipment[] }) {
   const counts = useMemo(() => {
-    const map: Record<PaymentStatus, number> = { PAID: 0, 'NOT PAID': 0, PARTIAL: 0 };
-    data.forEach(s => { map[s.paymentStatus]++; });
+    const map = Object.fromEntries(PAYMENT_STATUSES.map((status) => [status, 0])) as Record<PaymentStatus, number>;
+    data.forEach(s => { map[s.paymentStatus] += 1; });
     return map;
   }, [data]);
 
   const total = data.length;
-  const slices = [
-    { name: 'Paid', value: counts.PAID, color: ACCENT.green },
-    { name: 'Not Paid', value: counts['NOT PAID'], color: ACCENT.red },
-    { name: 'Partial', value: counts.PARTIAL, color: ACCENT.orange },
-  ];
+  const slices = PAYMENT_STATUSES.map((status) => ({
+    name: status,
+    value: counts[status],
+    color: PAYMENT_STATUS_COLOR[status],
+  }));
 
   return (
     <div className="card fade-up delay-3" style={{
       padding: '1.125rem', display: 'flex', flexDirection: 'column',
       alignItems: 'center', minWidth: 0, width: '100%',
     }}>
-      <div className="section-title" style={{ alignSelf: 'flex-start' }}>Payment Status</div>
+      <div className="section-title" style={{ alignSelf: 'flex-start' }}>PRW Status</div>
       <ResponsiveContainer width="100%" height={160}>
         <PieChart style={{ outline: 'none' }}>
           <Pie
@@ -1220,7 +1270,7 @@ function DuePaymentsTable({ data }: { data: Shipment[] }) {
         daysLeft: getDaysUntilDue(s),
         period: getPaymentPeriod(s),
       }))
-      .filter(r => r.dueDate !== null)
+      .filter(r => r.dueDate !== null && isPaymentCalendarEligible(r.shipment))
       .sort((a, b) => {
         if (a.daysLeft === null) return 1;
         if (b.daysLeft === null) return -1;

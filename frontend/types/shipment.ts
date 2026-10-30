@@ -11,9 +11,17 @@ export type ShipmentMode = 'Sea' | 'Air' | 'Others';
 export type PaymentType = 'LC' | 'Others';
 
 /** Which date the credit days are counted from. */
-export type CreditDaysFrom = 'Invoice Date' | 'BL Date' | 'PO Date';
+export type CreditDaysFrom = 'Invoice Date' | 'BL Date' | 'PO Date' | 'Receipt Date';
 
-export type PaymentStatus = 'PAID' | 'NOT PAID' | 'PARTIAL';
+export type PaymentStatus = 'PAID' | 'NOT PAID' | 'PARTIAL' | 'ADVANCE' | '2 WAY' | 'SR DATE';
+export const PAYMENT_STATUSES: readonly PaymentStatus[] = [
+  'PAID',
+  'NOT PAID',
+  'ADVANCE',
+  '2 WAY',
+  'PARTIAL',
+  'SR DATE',
+];
 export type DocumentStatus = 'Pending' | 'Received' | 'In Process' | 'Completed';
 export type MaterialStatus =
   | 'Pending Shipment'
@@ -68,6 +76,9 @@ export interface Shipment {
   /** Date the credit days are counted from (null when creditDays is null). */
   creditDaysFrom: CreditDaysFrom | null;
   paymentStatus: PaymentStatus;
+  /** Selected payment-term preset or customer-entered term. */
+  paymentTerms?: string;
+  receiptDate?: string;
   bankReferenceNo: string;
 
   /* Material status */
