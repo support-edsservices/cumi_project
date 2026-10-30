@@ -188,7 +188,7 @@ function KpiCard({
   );
 }
 
-/* ── Generic Modal Dialog Box for KPI / Chart Details ── */
+/* ── Generic Modal Dialog Box (Dark Mode Suitable, 90% Width/Height, Fixed Header Search) ── */
 function ShipmentListModal({
   title,
   shipments,
@@ -200,103 +200,252 @@ function ShipmentListModal({
   onClose: () => void;
   color?: string;
 }) {
+  const [colFilters, setColFilters] = useState({
+    supplierCountry: '',
+    poDate: '',
+    invoiceDate: '',
+    blDate: '',
+    paymentTerms: '',
+    paymentStatus: '',
+    materialStatus: '',
+  });
+
+  const handleFilterChange = (col: keyof typeof colFilters, val: string) => {
+    setColFilters(prev => ({ ...prev, [col]: val.toLowerCase() }));
+  };
+
+  const hasActiveFilter = Object.values(colFilters).some(v => v.trim().length > 0);
+
+  const filteredModalShipments = useMemo(() => {
+    return shipments.filter(s => {
+      const supplierCountryStr = `${s.supplier} ${s.country || ''}`.toLowerCase();
+      const poDateStr = `${s.poNo} ${s.poDate ? formatDMY(s.poDate) : ''}`.toLowerCase();
+      const invoiceDateStr = `${s.invoiceNo} ${s.invoiceDate ? formatDMY(s.invoiceDate) : ''}`.toLowerCase();
+      const blDateStr = `${s.blNo || ''} ${s.blDate ? formatDMY(s.blDate) : ''}`.toLowerCase();
+      const paymentTermsStr = getPaymentTermsLabel(s).toLowerCase();
+      const paymentStatusStr = s.paymentStatus.toLowerCase();
+      const materialStatusStr = s.materialStatus.toLowerCase();
+
+      return (
+        supplierCountryStr.includes(colFilters.supplierCountry) &&
+        poDateStr.includes(colFilters.poDate) &&
+        invoiceDateStr.includes(colFilters.invoiceDate) &&
+        blDateStr.includes(colFilters.blDate) &&
+        paymentTermsStr.includes(colFilters.paymentTerms) &&
+        paymentStatusStr.includes(colFilters.paymentStatus) &&
+        materialStatusStr.includes(colFilters.materialStatus)
+      );
+    });
+  }, [shipments, colFilters]);
+
+  const inputFilterStyle: React.CSSProperties = {
+    width: '100%',
+    padding: '0.35rem 0.5rem',
+    marginTop: '0.35rem',
+    fontSize: 'var(--font-size-compact)',
+    background: 'var(--bg-card)',
+    border: '1px solid var(--border)',
+    borderRadius: 6,
+    color: 'var(--text-primary)',
+    outline: 'none',
+    boxSizing: 'border-box',
+  };
+
   return (
     <div style={{
       position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-      background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)',
+      background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
-      zIndex: 1000, padding: '0.75rem',
+      zIndex: 1000, padding: '1rem',
     }}>
       <div className="card fade-up" style={{
-        width: '100%', maxWidth: 900, maxHeight: '85vh', display: 'flex', flexDirection: 'column',
-        background: 'var(--bg-card)', borderLeft: `5px solid ${color}`,
-        boxShadow: '0 16px 40px rgba(0,0,0,0.3)', padding: '1rem',
+        width: '90vw', height: '90vh', display: 'flex', flexDirection: 'column',
+        background: 'var(--bg-card)', borderLeft: `6px solid ${color}`,
+        border: '1px solid var(--border)',
+        boxShadow: '0 20px 50px rgba(0,0,0,0.5)', padding: '1.25rem',
+        borderRadius: 12,
       }}>
-        {/* Header */}
+        {/* Modal Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
-            <h3 style={{ margin: 0, fontSize: 'var(--font-size-heading)', fontWeight: 800, color: 'var(--text-primary)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)' }}>
               {title}
             </h3>
             <span style={{
-              fontSize: 'var(--font-size-compact)', fontWeight: 800, padding: '2px 10px', borderRadius: 12,
-              background: `${color}18`, color: color,
+              fontSize: 'var(--font-size-compact)', fontWeight: 800, padding: '3px 12px', borderRadius: 12,
+              background: `${color}20`, color: color,
             }}>
-              {shipments.length} {shipments.length === 1 ? 'Shipment' : 'Shipments'}
+              {filteredModalShipments.length} / {shipments.length} {shipments.length === 1 ? 'Shipment' : 'Shipments'}
             </span>
+            {hasActiveFilter && (
+              <button
+                onClick={() => setColFilters({
+                  supplierCountry: '',
+                  poDate: '',
+                  invoiceDate: '',
+                  blDate: '',
+                  paymentTerms: '',
+                  paymentStatus: '',
+                  materialStatus: '',
+                })}
+                style={{
+                  background: 'var(--bg-secondary)', border: '1px solid var(--border)',
+                  borderRadius: 6, padding: '0.25rem 0.5rem', cursor: 'pointer',
+                  fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)',
+                  fontWeight: 600,
+                }}
+              >
+                Reset Column Search
+              </button>
+            )}
           </div>
           <button onClick={onClose} style={{
-            background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 4,
+            background: 'var(--bg-secondary)', border: '1px solid var(--border)',
+            borderRadius: 6, color: 'var(--text-muted)', cursor: 'pointer', padding: 6,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
             <X size={20} />
           </button>
         </div>
 
-        {/* Body Table */}
-        {shipments.length === 0 ? (
-          <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: 'var(--font-size-body)' }}>
-            No shipments match this criteria.
-          </div>
-        ) : (
-          <div style={{ overflowY: 'auto', flex: 1 }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 'var(--font-size-body-small)' }}>
-              <thead>
-                <tr style={{ borderBottom: '2px solid var(--border)' }}>
-                  {['ID', 'Supplier', 'PO No', 'Invoice No', 'ETD / ETA', 'Material Status', 'Payment', 'Docs'].map(h => (
-                    <th key={h} style={{
-                      padding: '0.5rem 0.75rem', fontWeight: 700, color: 'var(--text-muted)',
-                      fontSize: 'var(--font-size-label)', textTransform: 'uppercase', whiteSpace: 'nowrap',
-                    }}>
-                      {h}
-                    </th>
-                  ))}
+        {/* Modal Body Table with Always-Visible Header & Search Inputs */}
+        <div style={{ overflow: 'auto', flex: 1, border: '1px solid var(--border)', borderRadius: 8 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 'var(--font-size-body-small)' }}>
+            <thead>
+              <tr style={{ borderBottom: '2px solid var(--border)', background: 'var(--bg-secondary)', position: 'sticky', top: 0, zIndex: 2 }}>
+                <th style={{ padding: '0.625rem 0.75rem', fontWeight: 700, color: 'var(--text-muted)', fontSize: 'var(--font-size-label)', textTransform: 'uppercase' }}>
+                  Supplier & Country
+                  <input
+                    type="text"
+                    placeholder="Search..."
+                    value={colFilters.supplierCountry}
+                    onChange={e => handleFilterChange('supplierCountry', e.target.value)}
+                    style={inputFilterStyle}
+                  />
+                </th>
+                <th style={{ padding: '0.625rem 0.75rem', fontWeight: 700, color: 'var(--text-muted)', fontSize: 'var(--font-size-label)', textTransform: 'uppercase' }}>
+                  PO & Date
+                  <input
+                    type="text"
+                    placeholder="Search..."
+                    value={colFilters.poDate}
+                    onChange={e => handleFilterChange('poDate', e.target.value)}
+                    style={inputFilterStyle}
+                  />
+                </th>
+                <th style={{ padding: '0.625rem 0.75rem', fontWeight: 700, color: 'var(--text-muted)', fontSize: 'var(--font-size-label)', textTransform: 'uppercase' }}>
+                  Invoice & Date
+                  <input
+                    type="text"
+                    placeholder="Search..."
+                    value={colFilters.invoiceDate}
+                    onChange={e => handleFilterChange('invoiceDate', e.target.value)}
+                    style={inputFilterStyle}
+                  />
+                </th>
+                <th style={{ padding: '0.625rem 0.75rem', fontWeight: 700, color: 'var(--text-muted)', fontSize: 'var(--font-size-label)', textTransform: 'uppercase' }}>
+                  BL & Date
+                  <input
+                    type="text"
+                    placeholder="Search..."
+                    value={colFilters.blDate}
+                    onChange={e => handleFilterChange('blDate', e.target.value)}
+                    style={inputFilterStyle}
+                  />
+                </th>
+                <th style={{ padding: '0.625rem 0.75rem', fontWeight: 700, color: 'var(--text-muted)', fontSize: 'var(--font-size-label)', textTransform: 'uppercase' }}>
+                  Payment Terms
+                  <input
+                    type="text"
+                    placeholder="Search..."
+                    value={colFilters.paymentTerms}
+                    onChange={e => handleFilterChange('paymentTerms', e.target.value)}
+                    style={inputFilterStyle}
+                  />
+                </th>
+                <th style={{ padding: '0.625rem 0.75rem', fontWeight: 700, color: 'var(--text-muted)', fontSize: 'var(--font-size-label)', textTransform: 'uppercase' }}>
+                  Payment Status
+                  <input
+                    type="text"
+                    placeholder="Search..."
+                    value={colFilters.paymentStatus}
+                    onChange={e => handleFilterChange('paymentStatus', e.target.value)}
+                    style={inputFilterStyle}
+                  />
+                </th>
+                <th style={{ padding: '0.625rem 0.75rem', fontWeight: 700, color: 'var(--text-muted)', fontSize: 'var(--font-size-label)', textTransform: 'uppercase' }}>
+                  Status
+                  <input
+                    type="text"
+                    placeholder="Search..."
+                    value={colFilters.materialStatus}
+                    onChange={e => handleFilterChange('materialStatus', e.target.value)}
+                    style={inputFilterStyle}
+                  />
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredModalShipments.length === 0 ? (
+                <tr>
+                  <td colSpan={7} style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: 'var(--font-size-body)' }}>
+                    {shipments.length === 0 
+                      ? 'No shipments match this criteria.' 
+                      : 'No shipments match the applied column search filters.'}
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {shipments.map((s, idx) => (
+              ) : (
+                filteredModalShipments.map((s, idx) => (
                   <tr key={s.id} style={{ borderBottom: '1px solid var(--border)', background: idx % 2 === 1 ? 'var(--bg-secondary)' : 'transparent' }}>
-                    <td style={{ padding: '0.5rem 0.75rem', fontWeight: 800, color: ACCENT.blue }}>{s.id}</td>
-                    <td style={{ padding: '0.5rem 0.75rem', fontWeight: 700, color: 'var(--text-primary)' }}>{s.supplier}</td>
-                    <td style={{ padding: '0.5rem 0.75rem', color: 'var(--text-secondary)' }}>{s.poNo}</td>
-                    <td style={{ padding: '0.5rem 0.75rem', color: 'var(--text-secondary)' }}>{s.invoiceNo}</td>
-                    <td style={{ padding: '0.5rem 0.75rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{formatEtdEta(s)}</td>
-                    <td style={{ padding: '0.5rem 0.75rem' }}>
-                      <span style={{
-                        display: 'inline-block', padding: '2px 8px', borderRadius: 8,
-                        background: `${MATERIAL_STATUS_COLOR[s.materialStatus]}18`, color: MATERIAL_STATUS_COLOR[s.materialStatus],
-                        fontWeight: 800, fontSize: 'var(--font-size-tiny)',
-                      }}>
-                        {s.materialStatus}
-                      </span>
+                    <td style={{ padding: '0.625rem 0.75rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                      <div>{s.supplier}</div>
+                      <div style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)', fontWeight: 500 }}>{s.country || '—'}</div>
                     </td>
-                    <td style={{ padding: '0.5rem 0.75rem' }}>
+                    <td style={{ padding: '0.625rem 0.75rem', color: 'var(--text-secondary)' }}>
+                      <div>{s.poNo}</div>
+                      <div style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)' }}>{s.poDate ? formatDMY(s.poDate) : '—'}</div>
+                    </td>
+                    <td style={{ padding: '0.625rem 0.75rem', color: 'var(--text-secondary)' }}>
+                      <div>{s.invoiceNo}</div>
+                      <div style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)' }}>{s.invoiceDate ? formatDMY(s.invoiceDate) : '—'}</div>
+                    </td>
+                    <td style={{ padding: '0.625rem 0.75rem', color: 'var(--text-secondary)' }}>
+                      <div>{s.blNo || '—'}</div>
+                      <div style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)' }}>{s.blDate ? formatDMY(s.blDate) : '—'}</div>
+                    </td>
+                    <td style={{ padding: '0.625rem 0.75rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                      {getPaymentTermsLabel(s)}
+                    </td>
+                    <td style={{ padding: '0.625rem 0.75rem' }}>
                       <span style={{
-                        display: 'inline-block', padding: '2px 8px', borderRadius: 8,
+                        display: 'inline-block', padding: '3px 8px', borderRadius: 8,
                         background: `${PAYMENT_STATUS_COLOR[s.paymentStatus]}18`, color: PAYMENT_STATUS_COLOR[s.paymentStatus],
                         fontWeight: 800, fontSize: 'var(--font-size-tiny)',
                       }}>
                         {s.paymentStatus}
                       </span>
                     </td>
-                    <td style={{ padding: '0.5rem 0.75rem' }}>
-                      {s.link ? (
-                        <a href={s.link} target="_blank" rel="noopener noreferrer" style={{ color: ACCENT.blue, textDecoration: 'none', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                          <FileText size={12} /> View
-                        </a>
-                      ) : '-'}
+                    <td style={{ padding: '0.625rem 0.75rem' }}>
+                      <span style={{
+                        display: 'inline-block', padding: '3px 8px', borderRadius: 8,
+                        background: `${MATERIAL_STATUS_COLOR[s.materialStatus]}18`, color: MATERIAL_STATUS_COLOR[s.materialStatus],
+                        fontWeight: 800, fontSize: 'var(--font-size-tiny)',
+                      }}>
+                        {s.materialStatus}
+                      </span>
                     </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
 }
 
-/* ── Interactive Payment Calendar ── */
+/* ── Interactive Calendar View (Due Payment Indicators + Side-by-Side Horizontal ETA Circles) ── */
 function PaymentCalendar({
   data,
   selectedDate,
@@ -313,19 +462,30 @@ function PaymentCalendar({
   const firstDay = getFirstDayOfMonth(year, month);
   const today = new Date();
 
-  /* Build map: day → shipments due on that day */
+  /* Build map: day → due shipments & ETA shipments */
   const dayMap = useMemo(() => {
-    const map = new Map<number, { shipment: Shipment; dueDate: Date }[]>();
+    const map = new Map<number, { dueShipments: Shipment[]; etaShipments: Shipment[] }>();
+
     data.forEach(s => {
+      // Due payments
       const due = getPaymentDueDate(s);
-      if (!due) return;
-      if (due.getFullYear() === year && due.getMonth() === month) {
+      if (due && due.getFullYear() === year && due.getMonth() === month) {
         const day = due.getDate();
-        const existing = map.get(day) || [];
-        existing.push({ shipment: s, dueDate: due });
+        const existing = map.get(day) || { dueShipments: [], etaShipments: [] };
+        existing.dueShipments.push(s);
+        map.set(day, existing);
+      }
+
+      // ETA (Estimated Time of Arrival)
+      const etaDate = s.eta ? toLocalDate(s.eta) : null;
+      if (etaDate && etaDate.getFullYear() === year && etaDate.getMonth() === month) {
+        const day = etaDate.getDate();
+        const existing = map.get(day) || { dueShipments: [], etaShipments: [] };
+        existing.etaShipments.push(s);
         map.set(day, existing);
       }
     });
+
     return map;
   }, [data, year, month]);
 
@@ -344,7 +504,7 @@ function PaymentCalendar({
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         marginBottom: '0.75rem',
       }}>
-        <div className="section-title" style={{ margin: 0 }}>Payment Calendar</div>
+        <div className="section-title" style={{ margin: 0 }}>Calendar View (Payments & ETA)</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <button onClick={prevMonth} aria-label="Previous month" style={{
             background: 'var(--bg-secondary)', border: '1px solid var(--border)',
@@ -388,7 +548,7 @@ function PaymentCalendar({
         {cells.map((day, idx) => {
           if (day === null) return <div key={`empty-${idx}`} />;
 
-          const entries = dayMap.get(day);
+          const cellData = dayMap.get(day);
           const cellDate = new Date(year, month, day);
           const isToday = isSameDay(today, cellDate);
           const isSelected = selectedDate ? isSameDay(selectedDate, cellDate) : false;
@@ -399,8 +559,9 @@ function PaymentCalendar({
               onClick={() => onSelectDate(cellDate)}
               style={{
                 position: 'relative',
-                minHeight: 38,
+                minHeight: 46,
                 borderRadius: 6,
+                padding: '2px',
                 border: isSelected
                   ? `2px solid ${ACCENT.purple}`
                   : isToday
@@ -408,11 +569,11 @@ function PaymentCalendar({
                   : '1px solid transparent',
                 background: isSelected
                   ? 'rgba(139, 92, 246, 0.15)'
-                  : entries
+                  : cellData
                   ? 'var(--bg-secondary)'
                   : 'transparent',
                 display: 'flex', flexDirection: 'column',
-                alignItems: 'center', justifyContent: 'center',
+                alignItems: 'center', justifyContent: 'flex-start',
                 cursor: 'pointer',
                 transition: 'all 0.15s ease',
               }}
@@ -425,15 +586,43 @@ function PaymentCalendar({
                 {day}
               </span>
 
-              {/* Mini colored blocks for shipments on this day */}
-              {entries && (
+              {/* Side-by-Side ETA Circles Container */}
+              {cellData?.etaShipments && cellData.etaShipments.length > 0 && (
                 <div style={{
-                  display: 'flex', gap: 2, marginTop: 2,
-                  flexWrap: 'wrap', justifyContent: 'center',
+                  display: 'flex',
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 3,
+                  marginTop: 2,
+                  flexWrap: 'nowrap',
                 }}>
-                  {entries.map(({ shipment: s }) => (
-                    <div key={s.id} style={{
-                      width: 8, height: 4, borderRadius: 1,
+                  {cellData.etaShipments.map(s => {
+                    const isArrived = s.materialStatus === 'Arrived';
+                    return (
+                      <span
+                        key={`eta-dot-${s.id}`}
+                        title={`ETA Shipment ${s.id}: ${s.materialStatus}`}
+                        style={{
+                          width: 6,
+                          height: 6,
+                          borderRadius: '50%',
+                          background: isArrived ? ACCENT.green : ACCENT.red,
+                          display: 'inline-block',
+                          flexShrink: 0,
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Mini payment bars */}
+              {cellData?.dueShipments && cellData.dueShipments.length > 0 && (
+                <div style={{ display: 'flex', gap: 2, marginTop: 2, flexWrap: 'wrap', justifyContent: 'center' }}>
+                  {cellData.dueShipments.map(s => (
+                    <div key={`due-${s.id}`} style={{
+                      width: 8, height: 3, borderRadius: 1,
                       background: PAYMENT_STATUS_COLOR[s.paymentStatus],
                     }} />
                   ))}
@@ -449,13 +638,21 @@ function PaymentCalendar({
         display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.75rem',
         fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)', flexWrap: 'wrap', gap: 8,
       }}>
-        <div style={{ display: 'flex', gap: '0.875rem' }}>
+        <div style={{ display: 'flex', gap: '0.875rem', flexWrap: 'wrap', alignItems: 'center' }}>
           {([['PAID', ACCENT.green], ['NOT PAID', ACCENT.red], ['PARTIAL', ACCENT.orange]] as const).map(([label, c]) => (
             <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
               <div style={{ width: 10, height: 4, borderRadius: 1, background: c }} />
               {label}
             </div>
           ))}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: ACCENT.green, display: 'inline-block' }} />
+            ETA Arrived
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: ACCENT.red, display: 'inline-block' }} />
+            ETA Pending
+          </div>
         </div>
       </div>
     </div>
@@ -475,13 +672,16 @@ function DatePaymentDetails({
   const matchingShipments = useMemo(() => {
     return data.filter(s => {
       const due = getPaymentDueDate(s);
-      return due ? isSameDay(due, selectedDate) : false;
+      const dueMatches = due ? isSameDay(due, selectedDate) : false;
+      const eta = s.eta ? toLocalDate(s.eta) : null;
+      const etaMatches = eta ? isSameDay(eta, selectedDate) : false;
+      return dueMatches || etaMatches;
     });
   }, [data, selectedDate]);
 
   return (
     <ShipmentListModal
-      title={`Payment Details for ${formatDMY(selectedDate)}`}
+      title={`Shipment & Payment Details for ${formatDMY(selectedDate)}`}
       shipments={matchingShipments}
       onClose={onClose}
       color={ACCENT.purple}

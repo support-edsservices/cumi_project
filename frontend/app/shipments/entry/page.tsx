@@ -500,7 +500,7 @@ export default function ShipmentEntryAndHistoryPage() {
   const isEditing = editingId !== null;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', maxWidth: 1400, margin: '0 auto', width: '100%' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', maxWidth: "100%", margin: '0 auto', width: '100%' }}>
       <style>{PAGE_CSS}</style>
 
       {/* ── Toast ── */}
