@@ -9,7 +9,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useSidebar } from '@/context/SidebarContext';
 import { FONT_SIZES } from '@/context/ThemeContext';
 
-/* ── Keyframe animations for marquee and drawer elements ── */
+/* ── Keyframe animations for marquee ── */
 const MARQUEE_CSS = `
 @keyframes sidebarMarquee {
   0% { transform: translateX(100%); }
@@ -155,31 +155,35 @@ export default function Sidebar() {
       />
       <aside className={`sidebar${collapsed ? ' collapsed' : ''}${mobileOpen ? ' mobile-open' : ''}`}>
         
-        {/* Top Header: Image + Project Name */}
+        {/* Top Header: Full Width & Height Logo Container */}
         <div style={{
           position: 'relative',
-          padding: '0.875rem 0.85rem',
+          padding: '0.75rem 0.5rem',
           borderBottom: '1px solid rgba(255,255,255,0.05)',
-          display: 'flex', alignItems: 'center', gap: '0.625rem',flexDirection:'column',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
           flexShrink: 0,
+          width:"100%"
         }}>
-          {/* Header Image Container */}
+          {/* Full Width & Height Image Box */}
           <div style={{
-            width: 36, height: 36, borderRadius: 10, flexShrink: 0,
-            overflow: 'hidden', background: 'rgba(255,255,255,0.08)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            width: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
           }}>
             <img
-              src="/assets/projectLogo.png" // Replace with your top image path
+              src="/assets/projectLogo.png"
               alt="Project Logo"
-              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              style={{
+                width: 'auto',
+                height: 80,
+                maxWidth: '100%',
+                objectFit: 'contain',
+                display: 'block',
+              }}
             />
-          </div>
-
-          <div className="sidebar-brand-copy" style={{ minWidth: 0, flex: 1 }}>
-            <div style={{ fontSize: FONT_SIZES.brand, fontWeight: 700, color: '#fff', lineHeight: 1.2 }}>
-              DSR
-            </div>
           </div>
 
           <button
@@ -188,6 +192,7 @@ export default function Sidebar() {
             onClick={toggleCollapsed}
             aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            style={{ position: 'absolute', right: '0.5rem', top: '0.5rem' }}
           >
             {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
           </button>
@@ -228,23 +233,23 @@ export default function Sidebar() {
               borderRadius: 8,
               background: 'rgba(255,255,255,0.03)',
               overflow: 'hidden',
-              flexDirection:"column"
+              flexDirection: 'column',
             }}>
               {/* Rounded Image Above Logout */}
               <div style={{
-                width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
+                width: 42, height: 42, borderRadius: '50%', flexShrink: 0,
                 overflow: 'hidden', background: 'rgba(255,255,255,0.1)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center'
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}>
                 <img
-                  src="/images/company-logo.png" // Replace with your company image path
+                  src="/assets/EDS.png" // Replace with your company image path
                   alt="Company Logo"
-                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  style={{ width: '100%', height: '100%', objectFit: 'contain' }}
                 />
               </div>
 
               {/* Moving Company Name Container */}
-              <div style={{ flex: 1, overflow: 'hidden', whiteSpace: 'nowrap' }}>
+              <div style={{ flex: 1, overflow: 'hidden', whiteSpace: 'nowrap', width: '100%' }}>
                 <div className="moving-company-name" style={{ fontSize: FONT_SIZES.bodySmall, fontWeight: 700, color: '#fff' }}>
                   Expert Digital Support
                 </div>
@@ -270,8 +275,6 @@ export default function Sidebar() {
             <LogOut size={15} /> 
             <span className="sidebar-label">Logout</span>
           </button>
-
-          
         </div>
 
       </aside>

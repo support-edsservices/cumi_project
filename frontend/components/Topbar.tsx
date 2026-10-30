@@ -35,9 +35,9 @@ export default function Topbar({ title, subtitle }: TopbarProps) {
       {/* ── LEFT IMAGE LOGO ── */}
       <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
         <img
-          src="/images/logo-left.png" // Replace with your left image path
-          alt="Company Logo"
-          style={{ height: 36, width: 'auto', objectFit: 'contain', borderRadius: 4 }}
+          src="/assets/cumi_svg.jpeg"
+          alt="DSR System logo"
+          style={{ height: 50, width: 'auto', maxWidth: 48, objectFit: 'contain', borderRadius: 4 }}
         />
       </div>
 
@@ -90,9 +90,9 @@ export default function Topbar({ title, subtitle }: TopbarProps) {
       {/* ── RIGHT IMAGE LOGO ── */}
       <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
         <img
-          src="/images/logo-right.png" // Replace with your right image path
+          src="/assets/murugappa.jpeg" // Replace with your right image path
           alt="Group Logo"
-          style={{ height: 36, width: 'auto', objectFit: 'contain', borderRadius: 4 }}
+          style={{ height: 50, width: 'auto', objectFit: 'contain', borderRadius: 4 }}
         />
       </div>
 
