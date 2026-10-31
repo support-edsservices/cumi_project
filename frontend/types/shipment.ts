@@ -51,6 +51,7 @@ export interface Shipment {
   invoiceDocument?: ShipmentDocument;
 
   portOfLoading: string;
+  portOfLanding?: string;
   blNo: string;
   blDate: string; // YYYY-MM-DD or ''
   blDocument?: ShipmentDocument;
@@ -83,6 +84,8 @@ export interface Shipment {
 
   /* Material status */
   materialStatus: MaterialStatus;
+  /** Warehouse where the shipment arrived. */
+  warehouseName?: string;
   /** Only used when materialStatus === 'Arrived'. */
   arrivedDate?: string;
   /** Expected to depart / arrive. Both optional; '' means unknown. */

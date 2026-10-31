@@ -82,6 +82,7 @@ const emptyForm = {
   invoiceDate: '',
   invoiceDocName: '',
   portOfLoading: '',
+  portOfLanding: '',
   blNo: '',
   blDate: '',
   blDocName: '',
@@ -104,6 +105,7 @@ const emptyForm = {
   receiptDate: '',
   paymentStatus: 'NOT PAID' as PaymentStatus,
   materialStatus: 'In Transit' as MaterialStatus,
+  warehouseName: '',
   arrivedDate: '',
   etd: '',
   eta: '',
@@ -126,6 +128,7 @@ function shipmentToForm(s: Shipment & { mawbDocument?: ShipmentDocument; hawbDoc
     invoiceDate: s.invoiceDate,
     invoiceDocName: s.invoiceDocument?.name ?? '',
     portOfLoading: s.portOfLoading,
+    portOfLanding: s.portOfLanding ?? '',
     blNo: s.blNo,
     blDate: s.blDate,
     blDocName: s.blDocument?.name ?? '',
@@ -148,6 +151,7 @@ function shipmentToForm(s: Shipment & { mawbDocument?: ShipmentDocument; hawbDoc
     receiptDate: s.receiptDate ?? '',
     paymentStatus: s.paymentStatus,
     materialStatus: s.materialStatus,
+    warehouseName: s.warehouseName ?? '',
     arrivedDate: s.arrivedDate ?? '',
     etd: s.etd,
     eta: s.eta,
@@ -180,6 +184,7 @@ function formToShipment(
     invoiceDate: f.invoiceDate,
     invoiceDocument: doc(f.invoiceDocName, prev?.invoiceDocument),
     portOfLoading: f.portOfLoading.trim() || 'Origin Port',
+    portOfLanding: f.portOfLanding.trim() || undefined,
     blNo: f.blNo.trim() || 'BL-PENDING',
     blDate: f.blDate,
     blDocument: doc(f.blDocName, prev?.blDocument),
@@ -203,6 +208,7 @@ function formToShipment(
     bankReferenceNo: f.bankReferenceNo.trim(),
     receiptDate: f.receiptDate || undefined,
     materialStatus: f.materialStatus,
+    warehouseName: f.warehouseName.trim() || undefined,
     arrivedDate: f.materialStatus === 'Arrived' ? f.arrivedDate : undefined,
     etd: f.etd,
     eta: f.eta,
@@ -482,6 +488,7 @@ export default function ShipmentEntryAndHistoryPage() {
         'BL Number': s.blNo,
         'BL Date': s.blDate,
         'Port of Loading': s.portOfLoading,
+        'Port of Landing': s.portOfLanding || '',
         'MAWB': s.mawb || '-',
         'HAWB': s.hawb || '-',
         'CHA Agent': s.cha,
@@ -495,6 +502,7 @@ export default function ShipmentEntryAndHistoryPage() {
         'Payment Due Date': due ? toISODate(due) : 'N/A',
         'Bank Reference': s.bankReferenceNo || '-',
         'Material Status': s.materialStatus,
+        'Warehouse': s.warehouseName || '',
         'Date of Receipt': s.receiptDate || '',
         'Arrival Date': s.arrivedDate || '',
         'ETD': s.etd || '',
@@ -536,6 +544,7 @@ export default function ShipmentEntryAndHistoryPage() {
         'BOE No': s.boeNo,
         'BOE Date': s.boeDate,
         'Port': s.portOfLoading,
+        'Port of Landing': s.portOfLanding || '',
         'CHA': s.cha,
         'Country': s.country,
         'Document Status': s.documentStatus,
@@ -544,6 +553,7 @@ export default function ShipmentEntryAndHistoryPage() {
         'Payment Due Date': due ? toISODate(due) : 'N/A',
         'Bank Reference': s.bankReferenceNo || '',
         'Material Status': s.materialStatus,
+        'Warehouse': s.warehouseName || '',
         'Date of Receipt': s.receiptDate || '',
         'Arrival Date': s.arrivedDate || '',
         'ETD': s.etd || '',
@@ -843,6 +853,16 @@ export default function ShipmentEntryAndHistoryPage() {
                 />
               </Field>
 
+              <Field label="Port of Landing">
+                <input
+                  type="text"
+                  placeholder="e.g. Chennai Port, Nhava Sheva"
+                  value={formData.portOfLanding}
+                  onChange={(e) => setField('portOfLanding', e.target.value)}
+                  style={inputStyle}
+                />
+              </Field>
+
               <Field label="Bill of Lading (BL) No">
                 <input
                   type="text"
@@ -1075,6 +1095,16 @@ export default function ShipmentEntryAndHistoryPage() {
                   <option value="Customs Clearance">Customs Clearance</option>
                   <option value="Arrived">Arrived</option>
                 </select>
+              </Field>
+
+              <Field label="Warehouse Name">
+                <input
+                  type="text"
+                  placeholder="Enter the warehouse where the shipment will arrive"
+                  value={formData.warehouseName}
+                  onChange={(e) => setField('warehouseName', e.target.value)}
+                  style={inputStyle}
+                />
               </Field>
 
               {formData.materialStatus === 'Arrived' ? (
@@ -1806,7 +1836,7 @@ function ShipmentDrawer({
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto', padding: '1.25rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-          <TrackingProgress status={s.materialStatus} />
+          <TrackingProgress shipment={s} />
 
           <DetailGroup title="Supplier & Purchase Order">
             <Detail label="Supplier">{s.supplier || '-'}</Detail>
@@ -1824,6 +1854,7 @@ function ShipmentDrawer({
           <DetailGroup title="Shipping">
             <Detail label="Mode of Shipment">{getModeLabel(s)}</Detail>
             <Detail label="Port of Loading">{s.portOfLoading || '-'}</Detail>
+            <Detail label="Port of Landing">{s.portOfLanding || '-'}</Detail>
             <Detail label="BL Number">{s.blNo || '-'}</Detail>
             <Detail label="BL Date">{formatDMY(s.blDate) || '-'}</Detail>
             <Detail label="MAWB">{s.mawb || '-'}</Detail>
@@ -1869,7 +1900,10 @@ function ShipmentDrawer({
           <DetailGroup title="Material Status">
             <Detail label="Status">{s.materialStatus}</Detail>
             {s.materialStatus === 'Arrived' ? (
-              <Detail label="Arrival Date">{formatDMY(s.arrivedDate) || '-'}</Detail>
+              <>
+                <Detail label="Arrival Date">{formatDMY(s.arrivedDate) || '-'}</Detail>
+                <Detail label="Warehouse Name">{s.warehouseName || '-'}</Detail>
+              </>
             ) : (
               <Detail label="ETD / ETA" wide>
                 <div>{formatEtdEta(s)}</div>
@@ -1921,15 +1955,15 @@ function ShipmentDrawer({
   );
 }
 
-function TrackingProgress({ status }: { status: MaterialStatus }) {
-  const stages: MaterialStatus[] = [
-    'Pending Shipment',
-    'In Transit',
-    'At Port',
-    'Customs Clearance',
-    'Arrived',
+function TrackingProgress({ shipment }: { shipment: Shipment }) {
+  const stages: { status: MaterialStatus; detail: string }[] = [
+    { status: 'Pending Shipment', detail: shipment.portOfLoading || '—' },
+    { status: 'In Transit', detail: getModeLabel(shipment) },
+    { status: 'At Port', detail: shipment.portOfLanding || '—' },
+    { status: 'Customs Clearance', detail: shipment.cha || '—' },
+    { status: 'Arrived', detail: shipment.warehouseName || '—' },
   ];
-  const currentIndex = stages.indexOf(status);
+  const currentIndex = stages.findIndex(({ status }) => status === shipment.materialStatus);
 
   return (
     <section
@@ -1946,19 +1980,19 @@ function TrackingProgress({ status }: { status: MaterialStatus }) {
           Tracking Status
         </span>
         <span style={{ fontSize: 'var(--font-size-compact)', fontWeight: 700, color: 'var(--text-primary)' }}>
-          {status}
+          {shipment.materialStatus}
         </span>
       </div>
       <div style={{ overflowX: 'auto' }}>
         <ol style={{ display: 'flex', listStyle: 'none', margin: 0, padding: '0 0 2px', minWidth: 460 }}>
-          {stages.map((stage, index) => {
+          {stages.map(({ status, detail }, index) => {
             const completed = index < currentIndex;
             const current = index === currentIndex;
             const color = completed ? 'var(--accent-green)' : current ? 'var(--accent-blue)' : 'var(--border)';
 
             return (
               <li
-                key={stage}
+                key={status}
                 aria-current={current ? 'step' : undefined}
                 style={{ flex: 1, minWidth: 0, position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 7 }}
               >
@@ -2005,7 +2039,20 @@ function TrackingProgress({ status }: { status: MaterialStatus }) {
                     color: current ? 'var(--accent-blue)' : completed ? 'var(--text-primary)' : 'var(--text-muted)',
                   }}
                 >
-                  {stage}
+                  {status}
+                </span>
+                <span
+                  title={detail}
+                  style={{
+                    maxWidth: 86,
+                    textAlign: 'center',
+                    fontSize: 'var(--font-size-tiny)',
+                    lineHeight: 1.25,
+                    color: 'var(--text-secondary)',
+                    overflowWrap: 'anywhere',
+                  }}
+                >
+                  {detail}
                 </span>
               </li>
             );
