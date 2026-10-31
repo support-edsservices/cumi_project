@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { AuthProvider } from "@/context/AuthContext";
 import { SidebarProvider } from "@/context/SidebarContext";
+import { NotificationProvider } from "@/context/NotificationContext";
 import AppShell from "@/components/AppShell";
 import './globals.css';
 
@@ -22,7 +23,9 @@ export default function RootLayout({
         <ThemeProvider>
           <AuthProvider>
             <SidebarProvider>
-              <AppShell>{children}</AppShell>
+              <NotificationProvider>
+                <AppShell>{children}</AppShell>
+              </NotificationProvider>
             </SidebarProvider>
           </AuthProvider>
         </ThemeProvider>

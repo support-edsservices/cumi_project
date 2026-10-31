@@ -3,14 +3,18 @@
 import React from 'react';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
+import { useNotifications } from '@/context/NotificationContext';
 import Sidebar from '@/components/Sidebar';
 import Topbar from '@/components/Topbar';
+import ShipmentDetailModal from '@/components/ShipmentDetailModal';
 import { Zap, Loader2 } from 'lucide-react';
 import { ROUTES } from '@/data/ENUM';
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { isLoading, user } = useAuth();
+  const { overduePayments, etaArrived } = useNotifications();
+  const [selectedShipment, setSelectedShipment] = React.useState<import('@/types/shipment').Shipment | null>(null);
 
   const isAuthPage = pathname === ROUTES.LOGIN || pathname === ROUTES.SIGNUP;
 
@@ -56,8 +60,20 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <>
       <Sidebar />
-      <Topbar title="Dashboard" subtitle="" />
+      <Topbar
+        title="Dashboard"
+        subtitle=""
+        overduePayments={overduePayments}
+        etaArrived={etaArrived}
+        onShipmentClick={setSelectedShipment}
+      />
       <main className="main-content">{children}</main>
+      {selectedShipment && (
+        <ShipmentDetailModal
+          shipment={selectedShipment}
+          onClose={() => setSelectedShipment(null)}
+        />
+      )}
     </>
   );
 }

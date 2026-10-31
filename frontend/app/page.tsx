@@ -5,7 +5,7 @@
    Reads from the shared store (useShipments), so entries added, edited or
    deleted on the entry / history page show up here straight away.
 ───────────────────────────────────────────────────────────────────────────── */
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -33,6 +33,7 @@ import {
 } from '@/data/shipmentData';
 import { useShipments } from '@/hooks/useShipments';
 import { FONT_SIZES } from '@/context/ThemeContext';
+import { useNotifications } from '@/context/NotificationContext';
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Helper constants
@@ -129,10 +130,10 @@ function KpiCard({
 }) {
   const pct = Math.min((value / Math.max(total, 1)) * 100, 100);
   return (
-    <div 
-      className={`stat-card fade-up`} 
+    <div
+      className={`stat-card fade-up`}
       onClick={onClick}
-      style={{ 
+      style={{
         animationDelay: `${delay}s`,
         cursor: onClick ? 'pointer' : 'default',
         transition: 'transform 0.15s ease, box-shadow 0.15s ease',
@@ -207,6 +208,7 @@ function ShipmentListModal({
   color?: string;
 }) {
   const [colFilters, setColFilters] = useState({
+    shipmentId: '',
     supplierCountry: '',
     poDate: '',
     invoiceDate: '',
@@ -226,6 +228,7 @@ function ShipmentListModal({
 
   const filteredModalShipments = useMemo(() => {
     return shipments.filter(s => {
+      const shipmentIdStr = s.id.toLowerCase();
       const supplierCountryStr = `${s.supplier} ${s.country || ''}`.toLowerCase();
       const poDateStr = `${s.poNo} ${s.poDate ? formatDMY(s.poDate) : ''}`.toLowerCase();
       const invoiceDateStr = (
@@ -241,6 +244,7 @@ function ShipmentListModal({
       const dueDateStr = dueDate ? formatDMY(dueDate).toLowerCase() : '';
 
       return (
+        shipmentIdStr.includes(colFilters.shipmentId) &&
         supplierCountryStr.includes(colFilters.supplierCountry) &&
         poDateStr.includes(colFilters.poDate) &&
         invoiceDateStr.includes(colFilters.invoiceDate) &&
@@ -296,6 +300,7 @@ function ShipmentListModal({
             {hasActiveFilter && (
               <button
                 onClick={() => setColFilters({
+                  shipmentId: '',
                   supplierCountry: '',
                   poDate: '',
                   invoiceDate: '',
@@ -332,12 +337,12 @@ function ShipmentListModal({
             <thead>
               <tr style={{ borderBottom: '2px solid var(--border)', background: 'var(--bg-secondary)', position: 'sticky', top: 0, zIndex: 2 }}>
                 <th style={{ padding: '0.625rem 0.75rem', fontWeight: 700, color: 'var(--text-muted)', fontSize: 'var(--font-size-label)', textTransform: 'uppercase' }}>
-                  Supplier & Country
+                  Shipment ID
                   <input
                     type="text"
                     placeholder="Search..."
-                    value={colFilters.supplierCountry}
-                    onChange={e => handleFilterChange('supplierCountry', e.target.value)}
+                    value={colFilters.shipmentId}
+                    onChange={e => handleFilterChange('shipmentId', e.target.value)}
                     style={inputFilterStyle}
                   />
                 </th>
@@ -426,15 +431,18 @@ function ShipmentListModal({
             <tbody>
               {filteredModalShipments.length === 0 ? (
                 <tr>
-                  <td colSpan={9} style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: 'var(--font-size-body)' }}>
-                    {shipments.length === 0 
-                      ? 'No shipments match this criteria.' 
+                  <td colSpan={10} style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: 'var(--font-size-body)' }}>
+                    {shipments.length === 0
+                      ? 'No shipments match this criteria.'
                       : 'No shipments match the applied column search filters.'}
                   </td>
                 </tr>
               ) : (
                 filteredModalShipments.map((s, idx) => (
                   <tr key={s.id} style={{ borderBottom: '1px solid var(--border)', background: idx % 2 === 1 ? 'var(--bg-secondary)' : 'transparent' }}>
+                    <td style={{ padding: '0.625rem 0.75rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                      {s.id}
+                    </td>
                     <td style={{ padding: '0.625rem 0.75rem', fontWeight: 700, color: 'var(--text-primary)' }}>
                       <div>{s.supplier}</div>
                       <div style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)', fontWeight: 500 }}>{s.country || '—'}</div>
@@ -492,7 +500,7 @@ function ShipmentListModal({
           </table>
         </div>
       </div>
-    </div>
+    </div >
   );
 }
 
@@ -616,13 +624,13 @@ function PaymentCalendar({
                 border: isSelected
                   ? `2px solid ${ACCENT.purple}`
                   : isToday
-                  ? `2px solid ${ACCENT.blue}`
-                  : '1px solid transparent',
+                    ? `2px solid ${ACCENT.blue}`
+                    : '1px solid transparent',
                 background: isSelected
                   ? 'rgba(139, 92, 246, 0.15)'
                   : cellData
-                  ? 'var(--bg-secondary)'
-                  : 'transparent',
+                    ? 'var(--bg-secondary)'
+                    : 'transparent',
                 display: 'flex', flexDirection: 'column',
                 alignItems: 'center', justifyContent: 'flex-start',
                 cursor: 'pointer',
@@ -836,9 +844,9 @@ function MonthlyPoAndPaymentAnalytics({
 
         {/* Chart */}
         <ResponsiveContainer width="100%" height={260}>
-          <BarChart 
+          <BarChart
             accessibilityLayer={false}
-            data={monthlyData} 
+            data={monthlyData}
             barSize={18}
             margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
             style={{ outline: 'none' }}
@@ -851,14 +859,14 @@ function MonthlyPoAndPaymentAnalytics({
           >
             <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
             <XAxis dataKey="month" tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} />
-            <YAxis 
-              width={35} 
-              allowDecimals={false} 
-              tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} 
+            <YAxis
+              width={35}
+              allowDecimals={false}
+              tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }}
             />
             <Tooltip content={<ChartTooltip />} />
             <Legend wrapperStyle={{ fontSize: FONT_SIZES.chartLabel, paddingTop: 10 }} />
-            
+
             <Bar dataKey="poRaised" name="PO Raised" stackId="po" fill={ACCENT.blue} radius={[4, 4, 0, 0]} cursor="pointer" />
             <Bar dataKey="paid" name="Paid" stackId="payments" fill={ACCENT.green} radius={[0, 0, 0, 0]} cursor="pointer" />
             <Bar dataKey="partial" name="Partial" stackId="payments" fill={ACCENT.orange} radius={[0, 0, 0, 0]} cursor="pointer" />
@@ -922,10 +930,10 @@ function SupplierAndProductAnalytics({ data }: { data: Shipment[] }) {
           <div style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)' }}>Tap bar to choose supplier</div>
         </div>
         <ResponsiveContainer width="100%" height={240}>
-          <BarChart 
+          <BarChart
             accessibilityLayer={false}
-            data={supplierData} 
-            barSize={28} 
+            data={supplierData}
+            barSize={28}
             margin={{ top: 10, right: 10, left: 0, bottom: 25 }}
             style={{ outline: 'none' }}
             onClick={(state: any) => {
@@ -935,17 +943,17 @@ function SupplierAndProductAnalytics({ data }: { data: Shipment[] }) {
             }}
           >
             <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-            <XAxis 
-              dataKey="supplier" 
-              tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} 
-              interval={0} 
-              angle={-20} 
-              textAnchor="end" 
+            <XAxis
+              dataKey="supplier"
+              tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }}
+              interval={0}
+              angle={-20}
+              textAnchor="end"
             />
-            <YAxis 
-              width={35} 
-              allowDecimals={false} 
-              tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} 
+            <YAxis
+              width={35}
+              allowDecimals={false}
+              tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }}
             />
             <Tooltip content={<ChartTooltip />} />
             <Bar dataKey="count" name="Shipments" radius={[6, 6, 0, 0]} cursor="pointer">
@@ -965,7 +973,7 @@ function SupplierAndProductAnalytics({ data }: { data: Shipment[] }) {
       <div className="card fade-up delay-2" style={{ padding: '1.125rem', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.5rem' }}>
           <div className="section-title" style={{ margin: 0 }}>Product Breakdown</div>
-          
+
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
             <label style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)', fontWeight: 600 }}>Supplier:</label>
             <select
@@ -1043,17 +1051,17 @@ function ShipmentsByCountry({ data }: { data: Shipment[] }) {
       <ResponsiveContainer width="100%" height={210}>
         <BarChart accessibilityLayer={false} data={countryData} barSize={28} margin={{ top: 10, right: 10, left: 0, bottom: 20 }} style={{ outline: 'none' }}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-          <XAxis 
-            dataKey="country" 
-            tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} 
-            interval={0} 
-            angle={-15} 
-            textAnchor="end" 
+          <XAxis
+            dataKey="country"
+            tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }}
+            interval={0}
+            angle={-15}
+            textAnchor="end"
           />
-          <YAxis 
-            width={35} 
-            allowDecimals={false} 
-            tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} 
+          <YAxis
+            width={35}
+            allowDecimals={false}
+            tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }}
           />
           <Tooltip content={<ChartTooltip />} />
           <Bar dataKey="count" name="Shipments" radius={[6, 6, 0, 0]}>
@@ -1144,8 +1152,8 @@ function ShipmentsByMode({ data }: { data: Shipment[] }) {
 
   const modeIcon = (mode: string, color: string) =>
     mode === 'Sea' ? <Anchor size={14} color={color} />
-    : mode === 'Air' ? <Plane size={14} color={color} />
-    : <Package size={14} color={color} />;
+      : mode === 'Air' ? <Plane size={14} color={color} />
+        : <Package size={14} color={color} />;
 
   return (
     <div className="card fade-up delay-1" style={{ padding: '1.125rem', minWidth: 0, width: '100%' }}>
@@ -1154,10 +1162,10 @@ function ShipmentsByMode({ data }: { data: Shipment[] }) {
         <BarChart accessibilityLayer={false} data={modeData} barSize={36} barCategoryGap="40%" margin={{ top: 10, right: 10, left: 0, bottom: 0 }} style={{ outline: 'none' }}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
           <XAxis dataKey="mode" tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} />
-          <YAxis 
-            width={35} 
-            allowDecimals={false} 
-            tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} 
+          <YAxis
+            width={35}
+            allowDecimals={false}
+            tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }}
           />
           <Tooltip content={<ChartTooltip />} />
           <Bar dataKey="count" name="Shipments" radius={[6, 6, 0, 0]}>
@@ -1190,11 +1198,11 @@ function ShipmentsByMode({ data }: { data: Shipment[] }) {
 }
 
 /* ── Interactive Material Status Breakdown ── */
-function MaterialStatusBreakdown({ 
-  data, 
-  onSelectStatus 
-}: { 
-  data: Shipment[]; 
+function MaterialStatusBreakdown({
+  data,
+  onSelectStatus
+}: {
+  data: Shipment[];
   onSelectStatus: (status: MaterialStatus, shipments: Shipment[]) => void;
 }) {
   const statusCounts = useMemo(() => {
@@ -1202,7 +1210,7 @@ function MaterialStatusBreakdown({
     data.forEach(s => {
       map[s.materialStatus] = (map[s.materialStatus] || 0) + 1;
     });
-    const statuses: MaterialStatus[] = ['Pending Shipment','In Transit', 'At Port', 'Customs Clearance', 'Arrived'];
+    const statuses: MaterialStatus[] = ['Pending Shipment', 'In Transit', 'At Port', 'Customs Clearance', 'Arrived'];
     return statuses.map(st => ({
       status: st,
       count: map[st] || 0,
@@ -1221,8 +1229,8 @@ function MaterialStatusBreakdown({
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem', marginTop: '0.75rem' }}>
         {statusCounts.map(s => (
-          <div 
-            key={s.status} 
+          <div
+            key={s.status}
             onClick={() => onSelectStatus(s.status, s.shipments)}
             style={{ cursor: 'pointer', borderRadius: 6, padding: '2px 4px', transition: 'background 0.15s' }}
             onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-secondary)')}
@@ -1402,6 +1410,7 @@ function DuePaymentsTable({ data }: { data: Shipment[] }) {
 ═══════════════════════════════════════════════════════════════════════════ */
 export default function ShipmentDashboardPage() {
   const { shipments, ready } = useShipments();
+  const { setNotifications } = useNotifications();
   const [searchTerm, setSearchTerm] = useState('');
   const [dashboardPoDateRange, setDashboardPoDateRange] = useState(() => getDefaultPoDateRange('year'));
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<Date | null>(null);
@@ -1467,6 +1476,11 @@ export default function ShipmentDashboardPage() {
     };
   }, [filtered, today]);
 
+  /* Update notification context with overdue payments and ETA arrived */
+  useEffect(() => {
+    setNotifications(kpis.overduePayments, kpis.etaSurpassedNotArrived);
+  }, [kpis.overduePayments, kpis.etaSurpassedNotArrived, setNotifications]);
+
   if (!ready) {
     return (
       <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: 'var(--font-size-body)' }}>
@@ -1517,14 +1531,14 @@ export default function ShipmentDashboardPage() {
               boxShadow: `0 2px 8px ${ACCENT.blue}40`,
               transition: 'transform 0.15s, box-shadow 0.15s',
             }}
-            onMouseEnter={e => {
-              (e.currentTarget as HTMLElement).style.transform = 'translateY(-1px)';
-              (e.currentTarget as HTMLElement).style.boxShadow = `0 4px 16px ${ACCENT.blue}50`;
-            }}
-            onMouseLeave={e => {
-              (e.currentTarget as HTMLElement).style.transform = 'translateY(0)';
-              (e.currentTarget as HTMLElement).style.boxShadow = `0 2px 8px ${ACCENT.blue}40`;
-            }}
+              onMouseEnter={e => {
+                (e.currentTarget as HTMLElement).style.transform = 'translateY(-1px)';
+                (e.currentTarget as HTMLElement).style.boxShadow = `0 4px 16px ${ACCENT.blue}50`;
+              }}
+              onMouseLeave={e => {
+                (e.currentTarget as HTMLElement).style.transform = 'translateY(0)';
+                (e.currentTarget as HTMLElement).style.boxShadow = `0 2px 8px ${ACCENT.blue}40`;
+              }}
             >
               <Plus size={15} />
               New Entry
@@ -1615,61 +1629,61 @@ export default function ShipmentDashboardPage() {
       <div style={{
         display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.5rem',
       }}>
-        <KpiCard 
-          icon={Package} 
-          label="Total Shipments" 
-          value={kpis.total.length} 
-          total={kpis.total.length} 
-          color={ACCENT.blue} 
-          delay={0.05} 
+        <KpiCard
+          icon={Package}
+          label="Total Shipments"
+          value={kpis.total.length}
+          total={kpis.total.length}
+          color={ACCENT.blue}
+          delay={0.05}
           onClick={() => setActiveModal({ title: 'Total Shipments', color: ACCENT.blue, data: kpis.total })}
         />
-        <KpiCard 
-          icon={Ship} 
-          label="In Transit" 
-          value={kpis.inTransit.length} 
-          total={kpis.total.length} 
-          color={ACCENT.orange} 
-          delay={0.1} 
+        <KpiCard
+          icon={Ship}
+          label="In Transit"
+          value={kpis.inTransit.length}
+          total={kpis.total.length}
+          color={ACCENT.orange}
+          delay={0.1}
           onClick={() => setActiveModal({ title: 'In Transit Shipments', color: ACCENT.orange, data: kpis.inTransit })}
         />
-        <KpiCard 
-          icon={AlertCircle} 
-          label="Pending Payments" 
-          value={kpis.pendingPayments.length} 
-          total={kpis.total.length} 
-          color={ACCENT.red} 
-          delay={0.15} 
+        <KpiCard
+          icon={AlertCircle}
+          label="Pending Payments"
+          value={kpis.pendingPayments.length}
+          total={kpis.total.length}
+          color={ACCENT.red}
+          delay={0.15}
           onClick={() => setActiveModal({ title: 'Pending Payments', color: ACCENT.red, data: kpis.pendingPayments })}
         />
-        <KpiCard 
-          icon={Clock} 
-          label="Overdue Payments" 
-          value={kpis.overduePayments.length} 
-          total={kpis.total.length} 
-          color={ACCENT.red} 
-          delay={0.2} 
-          pulsing={kpis.overduePayments.length > 0} 
+        <KpiCard
+          icon={Clock}
+          label="Overdue Payments"
+          value={kpis.overduePayments.length}
+          total={kpis.total.length}
+          color={ACCENT.red}
+          delay={0.2}
+          pulsing={kpis.overduePayments.length > 0}
           onClick={() => setActiveModal({ title: 'Overdue Payments', color: ACCENT.red, data: kpis.overduePayments })}
         />
-        <KpiCard 
-          icon={PackageX} 
-          label="ETD Passed – Not In Transit" 
-          value={kpis.etdSurpassedNotTransit.length} 
-          total={kpis.total.length} 
-          color={ACCENT.red} 
-          delay={0.25} 
-          pulsing={kpis.etdSurpassedNotTransit.length > 0} 
+        <KpiCard
+          icon={PackageX}
+          label="ETD Passed – Not In Transit"
+          value={kpis.etdSurpassedNotTransit.length}
+          total={kpis.total.length}
+          color={ACCENT.red}
+          delay={0.25}
+          pulsing={kpis.etdSurpassedNotTransit.length > 0}
           onClick={() => setActiveModal({ title: 'ETD Surpassed – Still Pending Shipment', color: ACCENT.red, data: kpis.etdSurpassedNotTransit })}
         />
-        <KpiCard 
-          icon={Anchor} 
-          label="ETA Passed – Not Arrived" 
-          value={kpis.etaSurpassedNotArrived.length} 
-          total={kpis.total.length} 
-          color={ACCENT.orange} 
-          delay={0.3} 
-          pulsing={kpis.etaSurpassedNotArrived.length > 0} 
+        <KpiCard
+          icon={Anchor}
+          label="ETA Passed – Not Arrived"
+          value={kpis.etaSurpassedNotArrived.length}
+          total={kpis.total.length}
+          color={ACCENT.orange}
+          delay={0.3}
+          pulsing={kpis.etaSurpassedNotArrived.length > 0}
           onClick={() => setActiveModal({ title: 'ETA Surpassed – Still In Transit', color: ACCENT.orange, data: kpis.etaSurpassedNotArrived })}
         />
       </div>
@@ -1694,8 +1708,8 @@ export default function ShipmentDashboardPage() {
           onSelectDate={(d) => setSelectedCalendarDate(d)}
         />
         <PaymentDonut data={filtered} />
-        <MaterialStatusBreakdown 
-          data={filtered} 
+        <MaterialStatusBreakdown
+          data={filtered}
           onSelectStatus={(status, items) => {
             setActiveModal({
               title: `Shipments in ${status}`,

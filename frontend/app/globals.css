@@ -3,13 +3,13 @@
 /* ── CSS custom properties (light & dark) ── */
 :root {
   --font-family: Calibri;
-  --font-size-micro: 0.6rem;
-  --font-size-tiny: 0.62rem;
-  --font-size-tiny-plus: 0.63rem;
-  --font-size-compact: 0.67rem;
-  --font-size-small: 0.68rem;
-  --font-size-small-plus: 0.7rem;
-  --font-size-label: 0.72rem;
+  --font-size-micro: 0.8rem;
+  --font-size-tiny: 0.82rem;
+  --font-size-tiny-plus: 0.83rem;
+  --font-size-compact: 0.87rem;
+  --font-size-small: 0.88rem;
+  --font-size-small-plus: 0.85rem;
+  --font-size-label: 0.82rem;
   --font-size-body-small: 0.75rem;
   --font-size-body-compact: 0.76rem;
   --font-size-body: 0.8rem;
@@ -21,8 +21,8 @@
   --font-size-metric: 1.35rem;
   --font-size-metric-large: 1.4rem;
   --font-size-display: 1.5rem;
-  --font-size-chart-label: 10px;
-  --font-size-chart-legend: 11px;
+  --font-size-chart-label: 12px;
+  --font-size-chart-legend: 14px;
   --font-size-chart-tooltip: 12px;
   --font-size-svg-tiny: 8px;
   --font-size-svg-small: 9px;
