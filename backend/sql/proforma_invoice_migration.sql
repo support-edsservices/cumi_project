@@ -6,12 +6,19 @@ ALTER TABLE shipment_invoices
     ADD COLUMN IF NOT EXISTS proforma_invoice_no VARCHAR(80) NULL AFTER invoice_date,
     ADD COLUMN IF NOT EXISTS proforma_invoice_date DATE NULL AFTER proforma_invoice_no;
 
+UPDATE payment_term_master
+SET credit_basis = NULL
+WHERE credit_basis = 'RECEIPT_DATE';
+
+UPDATE shipments
+SET credit_basis = NULL
+WHERE credit_basis = 'RECEIPT_DATE';
+
 ALTER TABLE payment_term_master
     MODIFY COLUMN credit_basis ENUM(
         'INVOICE_DATE',
         'BL_DATE',
         'PO_DATE',
-        'RECEIPT_DATE',
         'PROFORMA_INVOICE_DATE'
     ) DEFAULT NULL;
 
@@ -20,7 +27,6 @@ ALTER TABLE shipments
         'INVOICE_DATE',
         'BL_DATE',
         'PO_DATE',
-        'RECEIPT_DATE',
         'PROFORMA_INVOICE_DATE'
     ) DEFAULT NULL COMMENT 'the date the credit days are counted from';
 
@@ -108,7 +114,6 @@ FROM (
                     po.po_date,
                     (SELECT MIN(y.po_date) FROM shipment_pos y WHERE y.sh_no = i.sh_no)
                 )
-                WHEN 'RECEIPT_DATE' THEN s.arrived_date
             END AS base_date,
             COALESCE(
                 (SELECT SUM(p.amount) FROM invoice_payments p WHERE p.invoice_id = i.id),

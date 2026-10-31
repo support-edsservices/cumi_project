@@ -18,7 +18,6 @@ export const PAYMENT_TERM_OPTIONS = [
   '20% Advance Against PI & Balance 80% Against Documents Through Bank 30 Days from Bill of Lading',
   '30 Days from Date of Invoice',
   '30 Days from BL',
-  '30 Days from Date of Receipt',
   '50% Advance Against Proforma Invoice and 50% Before Dispatch',
   '50% Advance + 40% Before Shipment + 10% T/T within 1 Month after Delivery',
   '60 Days from BL',
@@ -612,7 +611,6 @@ export function getPaymentBaseISO(s: {
   proformaInvoiceDate?: string;
   blDate?: string;
   poDate?: string;
-  receiptDate?: string;
 }): string {
   const creditDaysFrom = s.creditDaysFrom ?? getPaymentTermRule(s.paymentTerms)?.from;
   if (!creditDaysFrom) return '';
@@ -620,11 +618,10 @@ export function getPaymentBaseISO(s: {
   if (creditDaysFrom === 'Proforma Invoice Date') return s.proformaInvoiceDate?.split('_')[0] || '';
   if (creditDaysFrom === 'BL Date') return s.blDate?.split('_')[0] || '';
   if (creditDaysFrom === 'PO Date') return s.poDate?.split('_')[0] || '';
-  if (creditDaysFrom === 'Receipt Date') return s.receiptDate?.split('_')[0] || '';
   return '';
 }
 
-type PaymentDateBasis = 'BL Date' | 'Invoice Date' | 'PO Date' | 'Receipt Date' | 'Proforma Invoice Date';
+type PaymentDateBasis = 'BL Date' | 'Invoice Date' | 'PO Date' | 'Proforma Invoice Date';
 
 function getPaymentTermRule(terms?: string): { days: number; from: PaymentDateBasis } | null {
   const proformaDays = terms?.match(
@@ -637,18 +634,16 @@ function getPaymentTermRule(terms?: string): { days: number; from: PaymentDateBa
     return { days: 0, from: 'Proforma Invoice Date' };
   }
 
-  const match = terms?.match(/\b(\d+)\s*days?\s+from\s+(?:the\s+)?(?:(?:date\s+of\s+)?(invoice|receipt)|(bill\s+of\s+lading|bl)|(po))\b/i);
+  const match = terms?.match(/\b(\d+)\s*days?\s+from\s+(?:the\s+)?(?:(?:date\s+of\s+)?(invoice)|(bill\s+of\s+lading|bl)|(po))\b/i);
   if (!match) return null;
   const days = Number(match[1]);
   if (!Number.isInteger(days) || days <= 0) return null;
   const dateBasis = match[2]?.toLowerCase();
-  const from = dateBasis === 'receipt'
-    ? 'Receipt Date'
-    : dateBasis
-      ? 'Invoice Date'
-      : match[3]
-        ? 'BL Date'
-        : 'PO Date';
+  const from = dateBasis
+    ? 'Invoice Date'
+    : match[3]
+      ? 'BL Date'
+      : 'PO Date';
   return { days, from };
 }
 

@@ -1492,7 +1492,7 @@ export default function ShipmentDashboardPage() {
           </h2>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
-          <Link href="/shipments/entry?tab=history" style={{ textDecoration: 'none' }}>
+          <Link href="/shipments?tab=history" style={{ textDecoration: 'none' }}>
             <button style={{
               display: 'flex', alignItems: 'center', gap: 6,
               padding: '0.5rem 1rem', borderRadius: 8,

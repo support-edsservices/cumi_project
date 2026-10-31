@@ -61,7 +61,6 @@ class ShipmentInput(BaseModel):
     paymentStatus: str = "NOT PAID"
     paymentTerms: str | None = Field(default=None, max_length=255)
     bankReferenceNo: str = Field(default="", max_length=100)
-    receiptDate: str | None = None
     materialStatus: str = "Pending Shipment"
     warehouseName: str | None = Field(default=None, max_length=120)
     arrivedDate: str | None = None
@@ -342,7 +341,6 @@ def _shipment_input_values(cursor, data: ShipmentInput, *, creating: bool, actor
         "document status",
     )
     arrived_date = _clean_date(data.arrivedDate, "Arrival date")
-    receipt_date = _clean_date(data.receiptDate, "Receipt date")
     etd = _clean_date(data.etd, "ETD")
     eta = _clean_date(data.eta, "ETA")
     if etd and eta and eta < etd:
@@ -421,7 +419,7 @@ def _shipment_input_values(cursor, data: ShipmentInput, *, creating: bool, actor
         "material_status": material_status,
         "etd": etd,
         "eta": eta,
-        "arrived_date": arrived_date or receipt_date,
+        "arrived_date": arrived_date,
         "created_by": actor if creating else None,
         "updated_by": actor,
         "child_rows": child_rows,
@@ -590,13 +588,11 @@ def _shape_shipment(row: dict[str, Any], attachments: list[dict[str, Any]]) -> d
             "INVOICE_DATE": "Invoice Date",
             "BL_DATE": "BL Date",
             "PO_DATE": "PO Date",
-            "RECEIPT_DATE": "Receipt Date",
             "PROFORMA_INVOICE_DATE": "Proforma Invoice Date",
         }.get(str(row.get("credit_basis") or "")),
         "paymentStatus": _payment_status_for_ui(row),
         "paymentTerms": row.get("payment_terms_text") or "",
         "bankReferenceNo": row.get("bank_reference_no") or "",
-        "receiptDate": _date_string(row.get("arrived_date")),
         "materialStatus": {
             "PENDING_SHIPMENT": "Pending Shipment",
             "IN_TRANSIT": "In Transit",

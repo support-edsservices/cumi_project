@@ -734,7 +734,6 @@ export default function ShipmentEntryAndHistoryPage() {
         'Bank Reference': s.bankReferenceNo || '-',
         'Material Status': s.materialStatus,
         'Warehouse': s.warehouseName || '',
-        'Date of Receipt': s.receiptDate || '',
         'Arrival Date': s.arrivedDate || '',
         'ETD': s.etd || '',
         'ETA': s.eta || '',
@@ -787,7 +786,6 @@ export default function ShipmentEntryAndHistoryPage() {
         'Bank Reference': s.bankReferenceNo || '',
         'Material Status': s.materialStatus,
         'Warehouse': s.warehouseName || '',
-        'Date of Receipt': s.receiptDate || '',
         'Arrival Date': s.arrivedDate || '',
         'ETD': s.etd || '',
         'ETA': s.eta || '',
@@ -2228,7 +2226,6 @@ function ShipmentDrawer({
               <PaymentBadge status={s.paymentStatus} />
             </Detail>
             <Detail label="Bank Reference">{s.bankReferenceNo || '-'}</Detail>
-            <Detail label="Date of Receipt">{formatDMY(s.receiptDate) || '-'}</Detail>
             {period && due && (
               <Detail label={`${s.creditDaysFrom} → Due Date`} wide>
                 <span>
@@ -2954,12 +2951,11 @@ function ModeIcon({ mode, size }: { mode: ShipmentMode; size: number }) {
 
 function creditBasisLabel(
   basis: string,
-): 'Invoice Date' | 'BL Date' | 'PO Date' | 'Receipt Date' | 'Proforma Invoice Date' | null {
-  const labels: Record<string, 'Invoice Date' | 'BL Date' | 'PO Date' | 'Receipt Date' | 'Proforma Invoice Date'> = {
+): 'Invoice Date' | 'BL Date' | 'PO Date' | 'Proforma Invoice Date' | null {
+  const labels: Record<string, 'Invoice Date' | 'BL Date' | 'PO Date' | 'Proforma Invoice Date'> = {
     INVOICE_DATE: 'Invoice Date',
     BL_DATE: 'BL Date',
     PO_DATE: 'PO Date',
-    RECEIPT_DATE: 'Receipt Date',
     PROFORMA_INVOICE_DATE: 'Proforma Invoice Date',
   };
   return labels[basis] ?? null;

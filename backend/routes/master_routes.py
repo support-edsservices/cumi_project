@@ -30,7 +30,6 @@ CREDIT_BASES = {
     "INVOICE_DATE",
     "BL_DATE",
     "PO_DATE",
-    "RECEIPT_DATE",
     "PROFORMA_INVOICE_DATE",
 }
 

@@ -260,7 +260,6 @@ export default function MasterEntryPage() {
                 <option value="INVOICE_DATE">Invoice date</option>
                 <option value="BL_DATE">BL date</option>
                 <option value="PO_DATE">PO date</option>
-                <option value="RECEIPT_DATE">Receipt date</option>
                 <option value="PROFORMA_INVOICE_DATE">Proforma invoice date</option>
               </select>
             </label>

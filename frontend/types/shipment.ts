@@ -15,7 +15,6 @@ export type CreditDaysFrom =
   | 'Invoice Date'
   | 'BL Date'
   | 'PO Date'
-  | 'Receipt Date'
   | 'Proforma Invoice Date';
 
 export type PaymentStatus = 'PAID' | 'NOT PAID' | 'PARTIAL' | 'ADVANCE' | '2 WAY' | 'SR DATE';
@@ -89,7 +88,6 @@ export interface Shipment {
   paymentStatus: PaymentStatus;
   /** Selected payment-term preset or customer-entered term. */
   paymentTerms?: string;
-  receiptDate?: string;
   bankReferenceNo: string;
 
   /* Material status */
