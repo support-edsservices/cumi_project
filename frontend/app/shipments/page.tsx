@@ -6,7 +6,7 @@
        • Mode of shipment: selected from maintained master data
        • MAWB / HAWB document attachments added
        • Action Buttons: Clear, Preview, Save (with confirmation dialog)
-       • Number of POs drives the number of Invoice / BL / BOE entries
+       • PO, invoice, BL and BOE entries can be added independently
    - History & Records table with search, filters, Excel / CSV export
    - Row details open in a right-side drawer (50% width, 100% height)
 ───────────────────────────────────────────────────────────────────────────── */
@@ -82,6 +82,8 @@ const emptyForm = {
   material: '',
   invoiceNo: '',
   invoiceDate: '',
+  proformaInvoiceNo: '',
+  proformaInvoiceDate: '',
   invoiceDocName: '',
   portOfLoading: '',
   portOfLanding: '',
@@ -102,7 +104,6 @@ const emptyForm = {
   paymentType: 'Others' as PaymentType,
   paymentTermChoice: '',
   bankReferenceNo: '',
-  receiptDate: '',
   paymentStatus: 'NOT PAID' as PaymentStatus,
   materialStatus: 'In Transit' as MaterialStatus,
   warehouseName: '',
@@ -114,21 +115,24 @@ const emptyForm = {
 };
 type FormState = typeof emptyForm;
 type DocumentField = 'poDocName' | 'invoiceDocName' | 'blDocName' | 'mawbDocName' | 'hawbDocName' | 'boeDocName';
-type DocumentNumberField = 'poNo' | 'invoiceNo' | 'blNo' | 'boeNo';
-type DocumentDateField = 'poDate' | 'invoiceDate' | 'blDate' | 'boeDate';
-type DocumentCounts = Record<DocumentNumberField, number>;
+type DocumentNumberField = 'poNo' | 'invoiceNo' | 'proformaInvoiceNo' | 'blNo' | 'boeNo';
+type DocumentDateField = 'poDate' | 'invoiceDate' | 'proformaInvoiceDate' | 'blDate' | 'boeDate';
+type DocumentCounts = Record<Exclude<DocumentNumberField, 'proformaInvoiceNo'>, number>;
 
-// The PO count drives every other document count, so they all start equal.
 const DEFAULT_DOCUMENT_COUNTS: DocumentCounts = {
   poNo: 1,
   invoiceNo: 1,
-  blNo: 1,
-  boeNo: 1,
+  blNo: 0,
+  boeNo: 0,
 };
 
 function splitDocumentValues(value: string, count: number): string[] {
   const values = value ? value.split('_') : [];
   return Array.from({ length: count }, (_, index) => values[index] ?? '');
+}
+
+function hasProformaInvoiceTerm(value: string): boolean {
+  return /\b(?:pro\s*forma|per\s*forma)\s+invoice\b/i.test(value);
 }
 
 // Join values with "_", but return '' when every entry is blank so optional
@@ -163,6 +167,8 @@ function shipmentToForm(s: Shipment & { mawbDocument?: ShipmentDocument; hawbDoc
     material: s.material,
     invoiceNo: s.invoiceNo,
     invoiceDate: s.invoiceDate,
+    proformaInvoiceNo: s.proformaInvoiceNo ?? '',
+    proformaInvoiceDate: s.proformaInvoiceDate ?? '',
     invoiceDocName: s.invoiceDocument?.name ?? '',
     portOfLoading: s.portOfLoading,
     portOfLanding: s.portOfLanding ?? '',
@@ -183,7 +189,6 @@ function shipmentToForm(s: Shipment & { mawbDocument?: ShipmentDocument; hawbDoc
     paymentType: s.paymentType,
     paymentTermChoice: savedPaymentTerms,
     bankReferenceNo: s.bankReferenceNo,
-    receiptDate: s.receiptDate ?? '',
     paymentStatus: s.paymentStatus,
     materialStatus: s.materialStatus,
     warehouseName: s.warehouseName ?? '',
@@ -216,6 +221,8 @@ function formToShipment(
     material: f.material.trim() || 'Industrial Components',
     invoiceNo: f.invoiceNo.trim(),
     invoiceDate: f.invoiceDate,
+    proformaInvoiceNo: f.proformaInvoiceNo.trim(),
+    proformaInvoiceDate: f.proformaInvoiceDate,
     invoiceDocument: doc(f.invoiceDocName, prev?.invoiceDocument),
     portOfLoading: f.portOfLoading.trim(),
     portOfLanding: f.portOfLanding.trim() || undefined,
@@ -239,7 +246,6 @@ function formToShipment(
     paymentStatus: f.paymentStatus,
     paymentTerms,
     bankReferenceNo: f.bankReferenceNo.trim(),
-    receiptDate: f.receiptDate || undefined,
     materialStatus: f.materialStatus,
     warehouseName: f.warehouseName.trim() || undefined,
     arrivedDate: f.materialStatus === 'Arrived' ? f.arrivedDate : undefined,
@@ -255,15 +261,33 @@ function validate(
   f: FormState,
   activeModeNames: readonly string[],
   documentCounts: DocumentCounts,
+  proformaRequired: boolean,
 ): Record<string, string> {
   const e: Record<string, string> = {};
   if (!f.supplier.trim()) e.supplier = 'Supplier name is required';
   const poValues = splitDocumentValues(f.poNo, documentCounts.poNo);
   const invoiceValues = splitDocumentValues(f.invoiceNo, documentCounts.invoiceNo);
+  const proformaNumbers = splitDocumentValues(f.proformaInvoiceNo, documentCounts.invoiceNo);
+  const proformaDates = splitDocumentValues(f.proformaInvoiceDate, documentCounts.invoiceNo);
   const blValues = splitDocumentValues(f.blNo === 'BL-PENDING' ? '' : f.blNo, documentCounts.blNo);
   const boeValues = splitDocumentValues(f.boeNo === 'BOE-PENDING' ? '' : f.boeNo, documentCounts.boeNo);
   if (poValues.some((value) => !value.trim())) e.poNo = 'Enter a PO number in every PO field';
   if (invoiceValues.some((value) => !value.trim())) e.invoiceNo = 'Enter an invoice number in every invoice field';
+  const hasProformaData = proformaNumbers.some((value) => value.trim()) || proformaDates.some(Boolean);
+  if (proformaRequired && proformaNumbers.some((value) => !value.trim())) {
+    e.proformaInvoiceNo = 'Enter a proforma invoice number for every invoice';
+  }
+  if (proformaRequired && proformaDates.some((value) => !value)) {
+    e.proformaInvoiceDate = 'Enter a proforma invoice date for every invoice';
+  }
+  if (hasProformaData && !proformaRequired) {
+    if (proformaNumbers.some((value) => !value.trim())) {
+      e.proformaInvoiceNo = 'Enter a proforma invoice number for every proforma date';
+    }
+    if (proformaDates.some((value) => !value)) {
+      e.proformaInvoiceDate = 'Enter a proforma invoice date for every proforma number';
+    }
+  }
   if (blValues.some((value) => value.trim()) && blValues.some((value) => !value.trim())) {
     e.blNo = 'Complete every BL field or leave all BL fields blank';
   }
@@ -290,8 +314,6 @@ function validate(
       e.blDate = 'Enter a BL date for each BL to calculate the payment due date';
     } else if (dateBasis === 'PO Date' && !allDatesProvided(f.poDate, documentCounts.poNo)) {
       e.poDate = 'Enter a PO date for each PO to calculate the payment due date';
-    } else if (dateBasis === 'Receipt Date' && !f.receiptDate) {
-      e.receiptDate = 'Select the date of receipt to calculate the payment due date';
     }
   }
 
@@ -341,9 +363,13 @@ export default function ShipmentEntryAndHistoryPage() {
     (masterOptions[masterType] ?? []).filter((entry) => Boolean(entry.is_active));
   const masterSelectOptions = (masterType: MasterType): SearchableSelectOption[] =>
     activeMasterNames(masterType).map((entry) => ({ value: entry.name, label: entry.name }));
+  const selectedPaymentTerm = activeMasterNames('payment-terms')
+    .find((entry) => entry.name === formData.paymentTermChoice);
+  const proformaRequired = selectedPaymentTerm?.credit_basis === 'PROFORMA_INVOICE_DATE'
+    || hasProformaInvoiceTerm(formData.paymentTermChoice);
   const errors = useMemo(
-    () => (showErrors ? validate(formData, activeMasterNames('modes').map((entry) => entry.name), documentCounts) : {}),
-    [showErrors, formData, masterOptions, documentCounts],
+    () => (showErrors ? validate(formData, activeMasterNames('modes').map((entry) => entry.name), documentCounts, proformaRequired) : {}),
+    [showErrors, formData, masterOptions, documentCounts, proformaRequired],
   );
   const errorCount = Object.keys(errors).length;
 
@@ -410,9 +436,12 @@ export default function ShipmentEntryAndHistoryPage() {
       showToast('Enter one document number per field; underscores separate saved rows.');
       return;
     }
-    const countField = field.endsWith('No') ? field as DocumentNumberField : ({
+    const countField: keyof DocumentCounts = field.endsWith('No')
+      ? field === 'proformaInvoiceNo' ? 'invoiceNo' : field as keyof DocumentCounts
+      : ({
       poDate: 'poNo',
       invoiceDate: 'invoiceNo',
+      proformaInvoiceDate: 'invoiceNo',
       blDate: 'blNo',
       boeDate: 'boeNo',
     } as const)[field as DocumentDateField];
@@ -425,24 +454,36 @@ export default function ShipmentEntryAndHistoryPage() {
     });
   };
 
-  // Only the PO count is entered by the user. Invoice, BL and BOE entries
-  // are opened automatically so they always match the number of POs.
-  const changePoCount = (requestedCount: number) => {
-    const count = Math.max(1, Math.min(255, Math.floor(requestedCount || 1)));
-    setDocumentCounts({ poNo: count, invoiceNo: count, blNo: count, boeNo: count });
+  const changeDocumentCount = (field: keyof DocumentCounts, requestedCount: number) => {
+    const minimum = field === 'poNo' || field === 'invoiceNo' ? 1 : 0;
+    const count = Math.max(minimum, Math.min(255, Math.floor(requestedCount)));
+    setDocumentCounts((current) => ({ ...current, [field]: count }));
     setFormData((current) => {
       const resize = (value: string) => joinDocumentValues(splitDocumentValues(value, count));
-      return {
-        ...current,
-        poNo: resize(current.poNo),
-        poDate: resize(current.poDate),
-        invoiceNo: resize(current.invoiceNo),
-        invoiceDate: resize(current.invoiceDate),
-        blNo: current.blNo === 'BL-PENDING' ? '' : resize(current.blNo),
-        blDate: resize(current.blDate),
-        boeNo: current.boeNo === 'BOE-PENDING' ? '' : resize(current.boeNo),
-        boeDate: resize(current.boeDate),
-      };
+      switch (field) {
+        case 'poNo':
+          return { ...current, poNo: resize(current.poNo), poDate: resize(current.poDate) };
+        case 'invoiceNo':
+          return {
+            ...current,
+            invoiceNo: resize(current.invoiceNo),
+            invoiceDate: resize(current.invoiceDate),
+            proformaInvoiceNo: resize(current.proformaInvoiceNo),
+            proformaInvoiceDate: resize(current.proformaInvoiceDate),
+          };
+        case 'blNo':
+          return {
+            ...current,
+            blNo: resize(current.blNo === 'BL-PENDING' ? '' : current.blNo),
+            blDate: resize(current.blDate),
+          };
+        case 'boeNo':
+          return {
+            ...current,
+            boeNo: resize(current.boeNo === 'BOE-PENDING' ? '' : current.boeNo),
+            boeDate: resize(current.boeDate),
+          };
+      }
     });
   };
 
@@ -464,27 +505,27 @@ export default function ShipmentEntryAndHistoryPage() {
   const startEdit = (s: Shipment) => {
     setEditingId(s.id);
     const editedForm = shipmentToForm(s);
-    // Use one shared count (the largest saved) so every document type lines up with the PO count.
-    const sharedCount = Math.max(
-      1,
-      documentCountFromValue(editedForm.poNo, 1),
-      documentCountFromValue(editedForm.invoiceNo, 1),
-      documentCountFromValue(editedForm.blNo, 0),
-      documentCountFromValue(editedForm.boeNo, 0),
-    );
-    const resize = (value: string) => joinDocumentValues(splitDocumentValues(value, sharedCount));
+    const counts: DocumentCounts = {
+      poNo: documentCountFromValue(editedForm.poNo, 1),
+      invoiceNo: documentCountFromValue(editedForm.invoiceNo, 1),
+      blNo: documentCountFromValue(editedForm.blNo, 0),
+      boeNo: documentCountFromValue(editedForm.boeNo, 0),
+    };
+    const resize = (value: string, count: number) => joinDocumentValues(splitDocumentValues(value, count));
     setFormData({
       ...editedForm,
-      poNo: resize(editedForm.poNo),
-      poDate: resize(editedForm.poDate),
-      invoiceNo: resize(editedForm.invoiceNo),
-      invoiceDate: resize(editedForm.invoiceDate),
-      blNo: editedForm.blNo === 'BL-PENDING' ? '' : resize(editedForm.blNo),
-      blDate: resize(editedForm.blDate),
-      boeNo: editedForm.boeNo === 'BOE-PENDING' ? '' : resize(editedForm.boeNo),
-      boeDate: resize(editedForm.boeDate),
+      poNo: resize(editedForm.poNo, counts.poNo),
+      poDate: resize(editedForm.poDate, counts.poNo),
+      invoiceNo: resize(editedForm.invoiceNo, counts.invoiceNo),
+      invoiceDate: resize(editedForm.invoiceDate, counts.invoiceNo),
+      proformaInvoiceNo: resize(editedForm.proformaInvoiceNo, counts.invoiceNo),
+      proformaInvoiceDate: resize(editedForm.proformaInvoiceDate, counts.invoiceNo),
+      blNo: resize(editedForm.blNo === 'BL-PENDING' ? '' : editedForm.blNo, counts.blNo),
+      blDate: resize(editedForm.blDate, counts.blNo),
+      boeNo: resize(editedForm.boeNo === 'BOE-PENDING' ? '' : editedForm.boeNo, counts.boeNo),
+      boeDate: resize(editedForm.boeDate, counts.boeNo),
     });
-    setDocumentCounts({ poNo: sharedCount, invoiceNo: sharedCount, blNo: sharedCount, boeNo: sharedCount });
+    setDocumentCounts(counts);
     setPendingFiles({});
     setShowErrors(false);
     setSelectedId(null);
@@ -530,7 +571,12 @@ export default function ShipmentEntryAndHistoryPage() {
   };
 
   const validateFormAndScroll = () => {
-    const errs = validate(formData, activeMasterNames('modes').map((entry) => entry.name), documentCounts);
+    const errs = validate(
+      formData,
+      activeMasterNames('modes').map((entry) => entry.name),
+      documentCounts,
+      proformaRequired,
+    );
     if (Object.keys(errs).length > 0) {
       setShowErrors(true);
       setTimeout(() => {
@@ -599,8 +645,6 @@ export default function ShipmentEntryAndHistoryPage() {
   };
 
   const selectedPaymentTerms = formData.paymentTermChoice;
-  const selectedPaymentTerm = activeMasterNames('payment-terms')
-    .find((entry) => entry.name === selectedPaymentTerms);
   const paymentDueDateBasis = formData.paymentStatus === 'NOT PAID' && formData.paymentType !== 'LC'
     ? selectedPaymentTerm?.credit_basis
       ? creditBasisLabel(selectedPaymentTerm.credit_basis)
@@ -608,9 +652,9 @@ export default function ShipmentEntryAndHistoryPage() {
     : null;
   const creditBaseISO = getPaymentBaseISO({
     invoiceDate: formData.invoiceDate,
+    proformaInvoiceDate: formData.proformaInvoiceDate,
     blDate: formData.blDate,
     poDate: formData.poDate,
-    receiptDate: formData.receiptDate,
     paymentTerms: selectedPaymentTerms,
     creditDaysFrom: selectedPaymentTerm?.credit_basis ? creditBasisLabel(selectedPaymentTerm.credit_basis) : null,
   });
@@ -620,9 +664,9 @@ export default function ShipmentEntryAndHistoryPage() {
     creditDays: selectedPaymentTerm?.credit_days ?? null,
     creditDaysFrom: selectedPaymentTerm?.credit_basis ? creditBasisLabel(selectedPaymentTerm.credit_basis) : null,
     invoiceDate: formData.invoiceDate,
+    proformaInvoiceDate: formData.proformaInvoiceDate,
     blDate: formData.blDate,
     poDate: formData.poDate,
-    receiptDate: formData.receiptDate,
   });
 
   const filteredShipments = useMemo(() => {
@@ -633,6 +677,7 @@ export default function ShipmentEntryAndHistoryPage() {
         item.supplier.toLowerCase().includes(q) ||
         item.poNo.toLowerCase().includes(q) ||
         item.invoiceNo.toLowerCase().includes(q) ||
+        (item.proformaInvoiceNo ?? '').toLowerCase().includes(q) ||
         item.blNo.toLowerCase().includes(q) ||
         item.material.toLowerCase().includes(q) ||
         item.country.toLowerCase().includes(q) ||
@@ -668,6 +713,8 @@ export default function ShipmentEntryAndHistoryPage() {
         'Mode of Shipment': getModeLabel(s),
         'Invoice Number': s.invoiceNo,
         'Invoice Date': s.invoiceDate,
+        'Proforma Invoice Number': s.proformaInvoiceNo || '',
+        'Proforma Invoice Date': s.proformaInvoiceDate || '',
         'BL Number': s.blNo,
         'BL Date': s.blDate,
         'Port of Loading': s.portOfLoading,
@@ -722,6 +769,8 @@ export default function ShipmentEntryAndHistoryPage() {
         'Mode': getModeLabel(s),
         'Invoice No': s.invoiceNo,
         'Invoice Date': s.invoiceDate,
+        'Proforma Invoice No': s.proformaInvoiceNo || '',
+        'Proforma Invoice Date': s.proformaInvoiceDate || '',
         'BL No': s.blNo,
         'BL Date': s.blDate,
         'BOE No': s.boeNo,
@@ -971,7 +1020,7 @@ export default function ShipmentEntryAndHistoryPage() {
                 numberError={errors.poNo}
                 dateRequired={paymentDueDateBasis === 'PO Date'}
                 dateError={errors.poDate}
-                onCountChange={changePoCount}
+                onCountChange={(count) => changeDocumentCount('poNo', count)}
                 onNumberChange={(index, value) => updateDocumentValue('poNo', index, value)}
                 onDateChange={(index, value) => updateDocumentValue('poDate', index, value)}
               />
@@ -1008,6 +1057,7 @@ export default function ShipmentEntryAndHistoryPage() {
                 id="invoiceNo"
                 count={documentCounts.invoiceNo}
                 minimum={1}
+                fullWidth
                 required
                 numberValues={splitDocumentValues(formData.invoiceNo, documentCounts.invoiceNo)}
                 dateValues={splitDocumentValues(formData.invoiceDate, documentCounts.invoiceNo)}
@@ -1015,9 +1065,36 @@ export default function ShipmentEntryAndHistoryPage() {
                 numberError={errors.invoiceNo}
                 dateRequired={paymentDueDateBasis === 'Invoice Date'}
                 dateError={errors.invoiceDate}
+                onCountChange={(count) => changeDocumentCount('invoiceNo', count)}
                 onNumberChange={(index, value) => updateDocumentValue('invoiceNo', index, value)}
                 onDateChange={(index, value) => updateDocumentValue('invoiceDate', index, value)}
               />
+
+              {proformaRequired && (
+                <>
+                  <DocumentEntryFields
+                    title="Proforma Invoices"
+                    numberLabel="Proforma invoice number"
+                    dateLabel="Proforma invoice date"
+                    id="proformaInvoiceNo"
+                    count={documentCounts.invoiceNo}
+                    minimum={1}
+                    fullWidth
+                    required
+                    numberValues={splitDocumentValues(formData.proformaInvoiceNo, documentCounts.invoiceNo)}
+                    dateValues={splitDocumentValues(formData.proformaInvoiceDate, documentCounts.invoiceNo)}
+                    error={errors.proformaInvoiceNo ?? errors.proformaInvoiceDate}
+                    numberError={errors.proformaInvoiceNo}
+                    dateRequired
+                    dateError={errors.proformaInvoiceDate}
+                    onNumberChange={(index, value) => updateDocumentValue('proformaInvoiceNo', index, value)}
+                    onDateChange={(index, value) => updateDocumentValue('proformaInvoiceDate', index, value)}
+                  />
+                  <div style={{ ...hintStyle, gridColumn: '1 / -1' }}>
+                    Enter one proforma invoice number and date for each commercial invoice. Due dates use the proforma invoice date.
+                  </div>
+                </>
+              )}
 
               <Field label="Invoice Document File">
                 <FileUploadZone
@@ -1080,6 +1157,7 @@ export default function ShipmentEntryAndHistoryPage() {
                 numberError={errors.blNo}
                 dateRequired={paymentDueDateBasis === 'BL Date'}
                 dateError={errors.blDate}
+                onCountChange={(count) => changeDocumentCount('blNo', count)}
                 onNumberChange={(index, value) => updateDocumentValue('blNo', index, value)}
                 onDateChange={(index, value) => updateDocumentValue('blDate', index, value)}
               />
@@ -1179,6 +1257,7 @@ export default function ShipmentEntryAndHistoryPage() {
                 numberError={errors.boeNo}
                 dateRequired={false}
                 dateError={errors.boeDate}
+                onCountChange={(count) => changeDocumentCount('boeNo', count)}
                 onNumberChange={(index, value) => updateDocumentValue('boeNo', index, value)}
                 onDateChange={(index, value) => updateDocumentValue('boeDate', index, value)}
               />
@@ -1217,16 +1296,6 @@ export default function ShipmentEntryAndHistoryPage() {
                 />
                 {!activeMasterNames('payment-terms').length && <MasterSetupLink masterType="payment-terms" />}
               </Field>
-
-              {paymentDueDateBasis === 'Receipt Date' && (
-                <Field label="Date of Receipt" required id="receiptDate" error={errors.receiptDate}>
-                  <DateField
-                    value={formData.receiptDate}
-                    onChange={(value) => setField('receiptDate', value)}
-                    invalid={!!errors.receiptDate}
-                  />
-                </Field>
-              )}
 
               <Field
                 label="Bank Reference Number"
@@ -2119,6 +2188,12 @@ function ShipmentDrawer({
           <DetailGroup title="Invoice">
             <Detail label="Invoice Number">{s.invoiceNo || '-'}</Detail>
             <Detail label="Invoice Date">{formatDMY(s.invoiceDate) || '-'}</Detail>
+            {s.proformaInvoiceNo && (
+              <>
+                <Detail label="Proforma Invoice Number">{s.proformaInvoiceNo}</Detail>
+                <Detail label="Proforma Invoice Date">{formatDMY(s.proformaInvoiceDate) || '-'}</Detail>
+              </>
+            )}
           </DetailGroup>
 
           <DetailGroup title="Shipping">
@@ -2475,10 +2550,7 @@ function Section({
   );
 }
 
-/* Number + date entries for one document type.
-   - Only the PO block passes `onCountChange`, so only it shows the count box.
-   - With a single entry the block sits in one grid cell (next to other fields);
-     with several entries it spans the row and lays entries out 3-4 per line. */
+/* Number + date entries for one independently managed document type. */
 function DocumentEntryFields({
   title,
   numberLabel,
@@ -2486,6 +2558,7 @@ function DocumentEntryFields({
   id,
   count,
   minimum,
+  fullWidth = false,
   required = false,
   numberValues,
   dateValues,
@@ -2503,6 +2576,7 @@ function DocumentEntryFields({
   id: string;
   count: number;
   minimum: number;
+  fullWidth?: boolean;
   required?: boolean;
   numberValues: string[];
   dateValues: string[];
@@ -2521,27 +2595,35 @@ function DocumentEntryFields({
       required={required}
       id={id}
       error={error}
-      span={count > 1}
+      span={fullWidth || count > 1}
       labelStyleOverride={documentEntryLabelStyle}
     >
       {onCountChange && (
-        <label style={{ ...documentEntryLabelStyle, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
-          Number of POs
-          <input
-            type="number"
-            min={minimum}
-            max={255}
-            value={count}
-            onChange={(event) => onCountChange(Number(event.target.value))}
-            aria-label={`Number of ${title.toLowerCase()}`}
-            style={{ ...documentEntryInputStyle, width: 72 }}
-          />
-          <span style={{ fontSize: 'var(--font-size-compact)', fontWeight: 500, textTransform: 'none', letterSpacing: 0 }}>
-            Invoice, BL and BOE follow this count
-          </span>
-        </label>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+          <button
+            type="button"
+            onClick={() => onCountChange(count + 1)}
+            disabled={count >= 255}
+            aria-label={`Add ${numberLabel.toLowerCase()}`}
+            style={documentCountButtonStyle}
+          >
+            <Plus size={14} />
+            Add {numberLabel.replace(' number', '')}
+          </button>
+          {count > minimum && (
+            <button
+              type="button"
+              onClick={() => onCountChange(count - 1)}
+              aria-label={`Remove last ${numberLabel.toLowerCase()}`}
+              style={{ ...documentCountButtonStyle, color: 'var(--text-secondary)' }}
+            >
+              <X size={12} />
+              Remove last
+            </button>
+          )}
+        </div>
       )}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '8px 12px', maxWidth: 760 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '8px 12px', width: '100%' }}>
         {numberValues.flatMap((number, index) => [
           <label key={`${id}-number-${index}`} style={documentEntryLabelStyle}>
               {numberLabel} {index + 1}{required && <span style={{ color: 'var(--accent-red)' }}> *</span>}
@@ -2719,12 +2801,15 @@ function ModeIcon({ mode, size }: { mode: ShipmentMode; size: number }) {
   return <Navigation size={size} color={color} />;
 }
 
-function creditBasisLabel(basis: string): 'Invoice Date' | 'BL Date' | 'PO Date' | 'Receipt Date' | null {
-  const labels: Record<string, 'Invoice Date' | 'BL Date' | 'PO Date' | 'Receipt Date'> = {
+function creditBasisLabel(
+  basis: string,
+): 'Invoice Date' | 'BL Date' | 'PO Date' | 'Receipt Date' | 'Proforma Invoice Date' | null {
+  const labels: Record<string, 'Invoice Date' | 'BL Date' | 'PO Date' | 'Receipt Date' | 'Proforma Invoice Date'> = {
     INVOICE_DATE: 'Invoice Date',
     BL_DATE: 'BL Date',
     PO_DATE: 'PO Date',
     RECEIPT_DATE: 'Receipt Date',
+    PROFORMA_INVOICE_DATE: 'Proforma Invoice Date',
   };
   return labels[basis] ?? null;
 }
@@ -2875,6 +2960,21 @@ const documentEntryInputStyle: React.CSSProperties = {
   background: 'var(--bg-card)',
   color: 'var(--text-primary)',
   fontWeight: 500,
+};
+
+const documentCountButtonStyle: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 5,
+  padding: '0.35rem 0.55rem',
+  border: '1px solid var(--border)',
+  borderRadius: 6,
+  background: 'var(--bg-card)',
+  color: 'var(--text-primary)',
+  fontSize: 'var(--font-size-compact)',
+  fontWeight: 600,
+  cursor: 'pointer',
+  fontFamily: 'inherit',
 };
 
 const selectStyle: React.CSSProperties = { ...inputStyle, cursor: 'pointer' };

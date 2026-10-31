@@ -42,6 +42,8 @@ class ShipmentInput(BaseModel):
     material: str = Field(default="", max_length=500)
     invoiceNo: str = Field(default="", max_length=20654)
     invoiceDate: str | None = None
+    proformaInvoiceNo: str = Field(default="", max_length=20654)
+    proformaInvoiceDate: str | None = None
     portOfLoading: str = Field(default="", max_length=120)
     portOfLanding: str | None = Field(default=None, max_length=120)
     blNo: str = Field(default="", max_length=20654)
@@ -246,11 +248,31 @@ def _payment_fields(cursor, data: ShipmentInput) -> tuple[int | None, str, int |
     row = cursor.fetchone()
     if not row:
         raise HTTPException(status_code=422, detail="Select an active payment term from Master Data")
+    payment_type = str(row["payment_type"])
+    credit_days = int(row["credit_days"]) if row["credit_days"] is not None else None
+    credit_basis = str(row["credit_basis"]) if row["credit_basis"] is not None else None
+    if _uses_proforma_invoice(term, credit_basis):
+        payment_type = "CREDIT_DAYS"
+        term_days = re.search(
+            r"\b(\d+)\s*days?\s+(?:from|after)\s+(?:the\s+)?(?:pro\s*forma|per\s*forma)\s+invoice\b",
+            term,
+            re.IGNORECASE,
+        )
+        if credit_days is None:
+            credit_days = int(term_days.group(1)) if term_days else 0
+        credit_basis = "PROFORMA_INVOICE_DATE"
     return (
         int(row["id"]),
-        str(row["payment_type"]),
-        int(row["credit_days"]) if row["credit_days"] is not None else None,
-        str(row["credit_basis"]) if row["credit_basis"] is not None else None,
+        payment_type,
+        credit_days,
+        credit_basis,
+    )
+
+
+def _uses_proforma_invoice(term: str, credit_basis: str | None = None) -> bool:
+    return (
+        credit_basis == "PROFORMA_INVOICE_DATE"
+        or re.search(r"\b(?:pro\s*forma|per\s*forma)\s+invoice\b", term, re.IGNORECASE) is not None
     )
 
 
@@ -331,6 +353,37 @@ def _shipment_input_values(cursor, data: ShipmentInput, *, creating: bool, actor
         raise HTTPException(status_code=422, detail="At least one PO number is required")
     if not child_rows[DB_TABLES["shipment_invoices"]]:
         raise HTTPException(status_code=422, detail="At least one invoice number is required")
+    proforma_rows = _document_rows(
+        data.proformaInvoiceNo,
+        data.proformaInvoiceDate,
+        "proforma invoice number",
+        "proforma invoice date",
+        80,
+    )
+    invoice_rows = child_rows[DB_TABLES["shipment_invoices"]]
+    has_proforma_number = bool(data.proformaInvoiceNo.strip())
+    has_proforma_date = bool(data.proformaInvoiceDate and data.proformaInvoiceDate.strip())
+    proforma_required = _uses_proforma_invoice(data.paymentTerms or "", credit_basis)
+    if has_proforma_number != has_proforma_date:
+        raise HTTPException(
+            status_code=422,
+            detail="Provide both a proforma invoice number and date for each entry",
+        )
+    if proforma_required and len(proforma_rows) != len(invoice_rows):
+        raise HTTPException(
+            status_code=422,
+            detail="Provide one proforma invoice number and date for each invoice because the payment term uses a proforma invoice",
+        )
+    if proforma_rows and any(not number or item_date is None for number, item_date in proforma_rows):
+        raise HTTPException(
+            status_code=422,
+            detail="Provide a valid proforma invoice date for each proforma invoice number",
+        )
+    if proforma_rows and len(proforma_rows) != len(invoice_rows):
+        raise HTTPException(
+            status_code=422,
+            detail="Provide one proforma invoice number and date for each invoice",
+        )
 
     return {
         "supplier_id": supplier_id,
@@ -351,6 +404,7 @@ def _shipment_input_values(cursor, data: ShipmentInput, *, creating: bool, actor
         "payment_type": payment_type,
         "credit_days": credit_days,
         "credit_basis": credit_basis,
+        "proforma_rows": proforma_rows or [(None, None)] * len(invoice_rows),
         "prw_status": payment_status,
         "prw_raw": payment_raw,
         "bank_reference_no": data.bankReferenceNo.strip() or None,
@@ -365,7 +419,12 @@ def _shipment_input_values(cursor, data: ShipmentInput, *, creating: bool, actor
     }
 
 
-def _insert_children(cursor, sh_no: str, rows: dict[str, list[tuple[str, date | None]]]) -> None:
+def _insert_children(
+    cursor,
+    sh_no: str,
+    rows: dict[str, list[tuple[str, date | None]]],
+    proforma_rows: list[tuple[str | None, date | None]],
+) -> None:
     definitions = {
         DB_TABLES["shipment_pos"]: ("po_no", "po_date", True),
         DB_TABLES["shipment_invoices"]: ("invoice_no", "invoice_date", False),
@@ -375,6 +434,21 @@ def _insert_children(cursor, sh_no: str, rows: dict[str, list[tuple[str, date | 
     for table, records in rows.items():
         number_column, date_column, has_material = definitions[table]
         if not records:
+            continue
+        if table == DB_TABLES["shipment_invoices"]:
+            cursor.executemany(
+                f"""
+                INSERT INTO {table}
+                    (sh_no, line_no, {number_column}, {date_column},
+                     proforma_invoice_no, proforma_invoice_date)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                """,
+                [
+                    (sh_no, index, number, item_date, proforma_no, proforma_date)
+                    for index, (number, item_date) in enumerate(records, 1)
+                    for proforma_no, proforma_date in [proforma_rows[index - 1]]
+                ],
+            )
             continue
         if has_material:
             cursor.executemany(
@@ -473,6 +547,8 @@ def _shape_shipment(row: dict[str, Any], attachments: list[dict[str, Any]]) -> d
         "material": row.get("material_summary") or "",
         "invoiceNo": row.get("invoice_nos") or "",
         "invoiceDate": _iso_joined_dates(row.get("invoice_dates")),
+        "proformaInvoiceNo": row.get("proforma_invoice_nos") or "",
+        "proformaInvoiceDate": _iso_joined_dates(row.get("proforma_invoice_dates")),
         "invoiceDocument": document_fields.get("invoiceDocument"),
         "portOfLoading": row.get("port_of_loading") or "",
         "portOfLanding": row.get("port_of_landing") or "",
@@ -506,6 +582,7 @@ def _shape_shipment(row: dict[str, Any], attachments: list[dict[str, Any]]) -> d
             "BL_DATE": "BL Date",
             "PO_DATE": "PO Date",
             "RECEIPT_DATE": "Receipt Date",
+            "PROFORMA_INVOICE_DATE": "Proforma Invoice Date",
         }.get(str(row.get("credit_basis") or "")),
         "paymentStatus": _payment_status_for_ui(row),
         "paymentTerms": row.get("payment_terms_text") or "",
@@ -538,7 +615,12 @@ def _shipment_rows(cursor, sh_no: str | None = None, *, limit: int = 200, offset
     cursor.execute(
         f"""
         SELECT overview.*, s.other_mode_detail, s.prw_raw, s.arrived_date,
-               shipment_mode.name AS mode_name
+               shipment_mode.name AS mode_name,
+               (SELECT GROUP_CONCAT(i.proforma_invoice_no ORDER BY i.line_no SEPARATOR '_')
+                FROM {DB_TABLES['shipment_invoices']} i WHERE i.sh_no = s.sh_no) AS proforma_invoice_nos,
+               (SELECT GROUP_CONCAT(COALESCE(DATE_FORMAT(i.proforma_invoice_date, '%d-%m-%Y'), '?')
+                                    ORDER BY i.line_no SEPARATOR '_')
+                FROM {DB_TABLES['shipment_invoices']} i WHERE i.sh_no = s.sh_no) AS proforma_invoice_dates
         FROM {DB_VIEWS['shipment_overview']} AS overview
         JOIN {DB_TABLES['shipments']} AS s ON s.sh_no = overview.sh_no
         LEFT JOIN {DB_TABLES['shipment_modes']} AS shipment_mode
@@ -635,7 +717,8 @@ def list_shipment_invoices(sh_no: str, _user: dict[str, Any] = Depends(get_curre
         cursor = conn.cursor(dictionary=True)
         cursor.execute(
             f"""
-            SELECT invoice_id, invoice_no, invoice_date, amount, currency, due_date,
+            SELECT invoice_id, invoice_no, invoice_date, proforma_invoice_no, proforma_invoice_date,
+                   amount, currency, due_date,
                    payment_state, days_to_due, base_date, paid_amount, payment_type,
                    credit_days, credit_basis
             FROM {DB_VIEWS['invoice_due']}
@@ -656,6 +739,7 @@ def list_shipment_invoices(sh_no: str, _user: dict[str, Any] = Depends(get_curre
             {
                 **row,
                 "invoice_date": _date_string(row.get("invoice_date")),
+                "proforma_invoice_date": _date_string(row.get("proforma_invoice_date")),
                 "due_date": _date_string(row.get("due_date")),
                 "base_date": _date_string(row.get("base_date")),
                 "amount": str(row["amount"]) if row.get("amount") is not None else None,
@@ -838,7 +922,7 @@ def create_shipment(data: ShipmentInput, user: dict[str, Any] = Depends(require_
                 values["material_status"], values["etd"], values["eta"], values["arrived_date"], actor, actor,
             ),
         )
-        _insert_children(cursor, sh_no, values["child_rows"])
+        _insert_children(cursor, sh_no, values["child_rows"], values["proforma_rows"])
         _link_invoice_documents(cursor, sh_no)
         _audit(cursor, sh_no, "CREATE", "Shipment created", actor)
         result = _serialize_rows(cursor, _shipment_rows(cursor, sh_no=sh_no))[0]
@@ -917,7 +1001,12 @@ def _reorder_child_lines(cursor, table: str, sh_no: str, target_lines: dict[int,
             free_line = current_line
 
 
-def _replace_children(cursor, sh_no: str, rows: dict[str, list[tuple[str, date | None]]]) -> None:
+def _replace_children(
+    cursor,
+    sh_no: str,
+    rows: dict[str, list[tuple[str, date | None]]],
+    proforma_rows: list[tuple[str | None, date | None]],
+) -> None:
     definitions = {
         DB_TABLES["shipment_pos"]: ("po_no", "po_date", "po_id", True),
         DB_TABLES["shipment_invoices"]: ("invoice_no", "invoice_date", "invoice_id", False),
@@ -971,12 +1060,27 @@ def _replace_children(cursor, sh_no: str, rows: dict[str, list[tuple[str, date |
         available_lines = [line for line in range(256) if line not in used_lines]
         row_targets: dict[int, int] = {}
         for target_line, (number, item_date) in enumerate(records, 1):
+            proforma_no, proforma_date = (
+                proforma_rows[target_line - 1]
+                if table == DB_TABLES["shipment_invoices"]
+                else (None, None)
+            )
             if number in existing:
                 row_id = int(existing[number]["id"])
-                cursor.execute(
-                    f"UPDATE {table} SET {date_column} = %s WHERE id = %s",
-                    (item_date, row_id),
-                )
+                if table == DB_TABLES["shipment_invoices"]:
+                    cursor.execute(
+                        f"""
+                        UPDATE {table}
+                        SET {date_column} = %s, proforma_invoice_no = %s, proforma_invoice_date = %s
+                        WHERE id = %s
+                        """,
+                        (item_date, proforma_no, proforma_date, row_id),
+                    )
+                else:
+                    cursor.execute(
+                        f"UPDATE {table} SET {date_column} = %s WHERE id = %s",
+                        (item_date, row_id),
+                    )
             else:
                 if not available_lines:
                     raise HTTPException(status_code=422, detail="At most 255 document rows of each type are allowed")
@@ -985,6 +1089,16 @@ def _replace_children(cursor, sh_no: str, rows: dict[str, list[tuple[str, date |
                     cursor.execute(
                         f"INSERT INTO {table} (sh_no, line_no, {number_column}, {date_column}, material) VALUES (%s, %s, %s, %s, %s)",
                         (sh_no, temporary_line, number, item_date, None),
+                    )
+                elif table == DB_TABLES["shipment_invoices"]:
+                    cursor.execute(
+                        f"""
+                        INSERT INTO {table}
+                            (sh_no, line_no, {number_column}, {date_column},
+                             proforma_invoice_no, proforma_invoice_date)
+                        VALUES (%s, %s, %s, %s, %s, %s)
+                        """,
+                        (sh_no, temporary_line, number, item_date, proforma_no, proforma_date),
                     )
                 else:
                     cursor.execute(
@@ -1031,7 +1145,7 @@ def update_shipment(sh_no: str, data: ShipmentInput, user: dict[str, Any] = Depe
                 values["etd"], values["eta"], values["arrived_date"], actor, sh_no,
             ),
         )
-        _replace_children(cursor, sh_no, values["child_rows"])
+        _replace_children(cursor, sh_no, values["child_rows"], values["proforma_rows"])
         _link_invoice_documents(cursor, sh_no)
         _audit(cursor, sh_no, "UPDATE", "Shipment updated", actor)
         result = _serialize_rows(cursor, _shipment_rows(cursor, sh_no=sh_no))[0]

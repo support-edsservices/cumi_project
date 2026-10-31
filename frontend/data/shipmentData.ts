@@ -609,6 +609,7 @@ export function getPaymentBaseISO(s: {
   creditDaysFrom?: string | null;
   paymentTerms?: string;
   invoiceDate?: string;
+  proformaInvoiceDate?: string;
   blDate?: string;
   poDate?: string;
   receiptDate?: string;
@@ -616,13 +617,26 @@ export function getPaymentBaseISO(s: {
   const creditDaysFrom = s.creditDaysFrom ?? getPaymentTermRule(s.paymentTerms)?.from;
   if (!creditDaysFrom) return '';
   if (creditDaysFrom === 'Invoice Date') return s.invoiceDate?.split('_')[0] || '';
+  if (creditDaysFrom === 'Proforma Invoice Date') return s.proformaInvoiceDate?.split('_')[0] || '';
   if (creditDaysFrom === 'BL Date') return s.blDate?.split('_')[0] || '';
   if (creditDaysFrom === 'PO Date') return s.poDate?.split('_')[0] || '';
   if (creditDaysFrom === 'Receipt Date') return s.receiptDate?.split('_')[0] || '';
   return '';
 }
 
-function getPaymentTermRule(terms?: string): { days: number; from: 'BL Date' | 'Invoice Date' | 'PO Date' | 'Receipt Date' } | null {
+type PaymentDateBasis = 'BL Date' | 'Invoice Date' | 'PO Date' | 'Receipt Date' | 'Proforma Invoice Date';
+
+function getPaymentTermRule(terms?: string): { days: number; from: PaymentDateBasis } | null {
+  const proformaDays = terms?.match(
+    /\b(\d+)\s*days?\s+(?:from|after)\s+(?:the\s+)?(?:pro\s*forma|per\s*forma)\s+invoice\b/i,
+  );
+  if (proformaDays) {
+    return { days: Number(proformaDays[1]), from: 'Proforma Invoice Date' };
+  }
+  if (/\b(?:pro\s*forma|per\s*forma)\s+invoice\b/i.test(terms ?? '')) {
+    return { days: 0, from: 'Proforma Invoice Date' };
+  }
+
   const match = terms?.match(/\b(\d+)\s*days?\s+from\s+(?:the\s+)?(?:(?:date\s+of\s+)?(invoice|receipt)|(bill\s+of\s+lading|bl)|(po))\b/i);
   if (!match) return null;
   const days = Number(match[1]);
@@ -638,7 +652,7 @@ function getPaymentTermRule(terms?: string): { days: number; from: 'BL Date' | '
   return { days, from };
 }
 
-export function getPaymentTermDateBasis(terms?: string): 'BL Date' | 'Invoice Date' | 'PO Date' | 'Receipt Date' | null {
+export function getPaymentTermDateBasis(terms?: string): PaymentDateBasis | null {
   return getPaymentTermRule(terms)?.from ?? null;
 }
 

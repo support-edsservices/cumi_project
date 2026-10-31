@@ -11,7 +11,12 @@ export type ShipmentMode = string;
 export type PaymentType = 'LC' | 'Others';
 
 /** Which date the credit days are counted from. */
-export type CreditDaysFrom = 'Invoice Date' | 'BL Date' | 'PO Date' | 'Receipt Date';
+export type CreditDaysFrom =
+  | 'Invoice Date'
+  | 'BL Date'
+  | 'PO Date'
+  | 'Receipt Date'
+  | 'Proforma Invoice Date';
 
 export type PaymentStatus = 'PAID' | 'NOT PAID' | 'PARTIAL' | 'ADVANCE' | '2 WAY' | 'SR DATE';
 export const PAYMENT_STATUSES: readonly PaymentStatus[] = [
@@ -50,6 +55,8 @@ export interface Shipment {
   invoiceNo: string;
   invoiceDate: string; // YYYY-MM-DD or ''
   invoiceDocument?: ShipmentDocument;
+  proformaInvoiceNo?: string;
+  proformaInvoiceDate?: string;
 
   portOfLoading: string;
   portOfLanding?: string;

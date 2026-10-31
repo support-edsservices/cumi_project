@@ -228,7 +228,10 @@ function ShipmentListModal({
     return shipments.filter(s => {
       const supplierCountryStr = `${s.supplier} ${s.country || ''}`.toLowerCase();
       const poDateStr = `${s.poNo} ${s.poDate ? formatDMY(s.poDate) : ''}`.toLowerCase();
-      const invoiceDateStr = `${s.invoiceNo} ${s.invoiceDate ? formatDMY(s.invoiceDate) : ''}`.toLowerCase();
+      const invoiceDateStr = (
+        `${s.invoiceNo} ${s.invoiceDate ? formatDMY(s.invoiceDate) : ''} ` +
+        `${s.proformaInvoiceNo ?? ''} ${s.proformaInvoiceDate ? formatDMY(s.proformaInvoiceDate) : ''}`
+      ).toLowerCase();
       const blDateStr = `${s.blNo || ''} ${s.blDate ? formatDMY(s.blDate) : ''}`.toLowerCase();
       const paymentTermsStr = getPaymentTermsLabel(s).toLowerCase();
       const paymentStatusStr = s.paymentStatus.toLowerCase();
@@ -443,6 +446,11 @@ function ShipmentListModal({
                     <td style={{ padding: '0.625rem 0.75rem', color: 'var(--text-secondary)' }}>
                       <div>{s.invoiceNo}</div>
                       <div style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)' }}>{s.invoiceDate ? formatDMY(s.invoiceDate) : '—'}</div>
+                      {s.proformaInvoiceNo && (
+                        <div style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)' }}>
+                          Proforma: {s.proformaInvoiceNo} · {formatDMY(s.proformaInvoiceDate) || '—'}
+                        </div>
+                      )}
                     </td>
                     <td style={{ padding: '0.625rem 0.75rem', color: 'var(--text-secondary)' }}>
                       <div>{s.blNo || '—'}</div>
@@ -1327,6 +1335,11 @@ function DuePaymentsTable({ data }: { data: Shipment[] }) {
                   </td>
                   <td style={{ ...cell, color: 'var(--text-secondary)', fontSize: 'var(--font-size-body-small)' }}>
                     {s.invoiceNo}
+                    {s.proformaInvoiceNo && (
+                      <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-compact)' }}>
+                        Proforma: {s.proformaInvoiceNo} · {formatDMY(s.proformaInvoiceDate) || '—'}
+                      </div>
+                    )}
                   </td>
                   <td style={{ ...cell, whiteSpace: 'nowrap' }}>
                     <div style={{ color: 'var(--text-primary)', fontWeight: 600, fontSize: 'var(--font-size-body-small)' }}>

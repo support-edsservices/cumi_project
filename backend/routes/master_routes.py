@@ -26,7 +26,13 @@ MASTER_TABLES = {
     "materials": DB_TABLES["materials"],
 }
 PRW_VALUES = {"PAID", "NOT PAID", "PARTIAL", "ADVANCE", "2 WAY", "SR DATE"}
-CREDIT_BASES = {"INVOICE_DATE", "BL_DATE", "PO_DATE", "RECEIPT_DATE"}
+CREDIT_BASES = {
+    "INVOICE_DATE",
+    "BL_DATE",
+    "PO_DATE",
+    "RECEIPT_DATE",
+    "PROFORMA_INVOICE_DATE",
+}
 
 
 class MasterEntryInput(BaseModel):
