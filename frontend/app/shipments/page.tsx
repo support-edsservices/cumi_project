@@ -36,6 +36,7 @@ import {
   Paperclip,
   AlertTriangle,
   RotateCcw,
+  CircleX,
 } from 'lucide-react';
 
 import {
@@ -266,12 +267,14 @@ function validate(
   const e: Record<string, string> = {};
   if (!f.supplier.trim()) e.supplier = 'Supplier name is required';
   const poValues = splitDocumentValues(f.poNo, documentCounts.poNo);
+  const poDates = splitDocumentValues(f.poDate, documentCounts.poNo);
   const invoiceValues = splitDocumentValues(f.invoiceNo, documentCounts.invoiceNo);
   const proformaNumbers = splitDocumentValues(f.proformaInvoiceNo, documentCounts.invoiceNo);
   const proformaDates = splitDocumentValues(f.proformaInvoiceDate, documentCounts.invoiceNo);
   const blValues = splitDocumentValues(f.blNo === 'BL-PENDING' ? '' : f.blNo, documentCounts.blNo);
   const boeValues = splitDocumentValues(f.boeNo === 'BOE-PENDING' ? '' : f.boeNo, documentCounts.boeNo);
   if (poValues.some((value) => !value.trim())) e.poNo = 'Enter a PO number in every PO field';
+  if (poDates.some((value) => !value)) e.poDate = 'Enter a PO date for every PO';
   if (invoiceValues.some((value) => !value.trim())) e.invoiceNo = 'Enter an invoice number in every invoice field';
   const hasProformaData = proformaNumbers.some((value) => value.trim()) || proformaDates.some(Boolean);
   if (proformaRequired && proformaNumbers.some((value) => !value.trim())) {
@@ -312,8 +315,6 @@ function validate(
       e.invoiceDate = 'Enter an invoice date for each invoice to calculate the payment due date';
     } else if (dateBasis === 'BL Date' && !allDatesProvided(f.blDate, documentCounts.blNo)) {
       e.blDate = 'Enter a BL date for each BL to calculate the payment due date';
-    } else if (dateBasis === 'PO Date' && !allDatesProvided(f.poDate, documentCounts.poNo)) {
-      e.poDate = 'Enter a PO date for each PO to calculate the payment due date';
     }
   }
 
@@ -689,7 +690,7 @@ export default function ShipmentEntryAndHistoryPage() {
       const matchPayment = filterPayment === 'all' || item.paymentStatus === filterPayment;
       const matchDocStatus = filterDocStatus === 'all' || item.documentStatus === filterDocStatus;
       const matchMatStatus = filterMaterialStatus === 'all' || item.materialStatus === filterMaterialStatus;
-      const matchPoDate = poDateMatchesRange(item.poDate, historyPoDateRange.startDate, historyPoDateRange.endDate);
+      const matchPoDate = !item.poDate || poDateMatchesRange(item.poDate, historyPoDateRange.startDate, historyPoDateRange.endDate);
 
       return matchSearch && matchMode && matchPayment && matchDocStatus && matchMatStatus && matchPoDate;
     });
@@ -1018,7 +1019,7 @@ export default function ShipmentEntryAndHistoryPage() {
                 dateValues={splitDocumentValues(formData.poDate, documentCounts.poNo)}
                 error={errors.poNo ?? errors.poDate}
                 numberError={errors.poNo}
-                dateRequired={paymentDueDateBasis === 'PO Date'}
+                dateRequired
                 dateError={errors.poDate}
                 onCountChange={(count) => changeDocumentCount('poNo', count)}
                 onNumberChange={(index, value) => updateDocumentValue('poNo', index, value)}
@@ -1838,6 +1839,12 @@ export default function ShipmentEntryAndHistoryPage() {
                               <ModeIcon mode={item.modeOfShipment} size={12} />
                               <span>{getModeLabel(item)}</span>
                             </div>
+                            <div style={{ marginTop: 7 }}>
+                              <CompletenessIndicator
+                                completion={getShipmentCompleteness(item).overall}
+                                compact
+                              />
+                            </div>
                           </td>
 
                           <td style={{ padding: '0.75rem 0.85rem', borderBottom: '1px solid var(--border)', verticalAlign: 'top' }}>
@@ -2050,6 +2057,7 @@ function ShipmentDrawer({
     { label: 'BOE', doc: s.boeDocument },
   ];
   const attached = docs.filter((d) => d.doc);
+  const completeness = getShipmentCompleteness(s);
 
   const openDocument = async (event: React.MouseEvent<HTMLAnchorElement>, url: string) => {
     event.preventDefault();
@@ -2177,7 +2185,7 @@ function ShipmentDrawer({
         <div style={{ flex: 1, overflowY: 'auto', padding: '1.25rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
           <TrackingProgress shipment={s} />
 
-          <DetailGroup title="Supplier & Purchase Order">
+          <DetailGroup title="Supplier & Purchase Order" completion={completeness.supplierPo}>
             <Detail label="Supplier">{s.supplier || '-'}</Detail>
             <Detail label="Country of Origin">{s.country || '-'}</Detail>
             <Detail label="PO Number">{s.poNo || '-'}</Detail>
@@ -2185,7 +2193,7 @@ function ShipmentDrawer({
             <Detail label="Material">{s.material || '-'}</Detail>
           </DetailGroup>
 
-          <DetailGroup title="Invoice">
+          <DetailGroup title="Invoice" completion={completeness.invoice}>
             <Detail label="Invoice Number">{s.invoiceNo || '-'}</Detail>
             <Detail label="Invoice Date">{formatDMY(s.invoiceDate) || '-'}</Detail>
             {s.proformaInvoiceNo && (
@@ -2196,7 +2204,7 @@ function ShipmentDrawer({
             )}
           </DetailGroup>
 
-          <DetailGroup title="Shipping">
+          <DetailGroup title="Shipping" completion={completeness.shipping}>
             <Detail label="Mode of Shipment">{getModeLabel(s)}</Detail>
             <Detail label="Port of Loading">{s.portOfLoading || '-'}</Detail>
             <Detail label="Port of Landing">{s.portOfLanding || '-'}</Detail>
@@ -2206,14 +2214,14 @@ function ShipmentDrawer({
             <Detail label="HAWB">{s.hawb || '-'}</Detail>
           </DetailGroup>
 
-          <DetailGroup title="Customs">
+          <DetailGroup title="Customs" completion={completeness.customs}>
             <Detail label="Custom House Agent">{s.cha || '-'}</Detail>
             <Detail label="Document Status">{s.documentStatus}</Detail>
             <Detail label="BOE Number">{s.boeNo || '-'}</Detail>
             <Detail label="BOE Date">{formatDMY(s.boeDate) || '-'}</Detail>
           </DetailGroup>
 
-          <DetailGroup title="Payment">
+          <DetailGroup title="Payment" completion={completeness.payment}>
             <Detail label="Payment Type">{s.paymentType}</Detail>
             <Detail label="Payment Terms">{getPaymentTermsLabel(s)}</Detail>
             <Detail label="PRW Status">
@@ -2242,7 +2250,7 @@ function ShipmentDrawer({
             )}
           </DetailGroup>
 
-          <DetailGroup title="Material Status">
+          <DetailGroup title="Material Status" completion={completeness.materialStatus}>
             <Detail label="Status">{s.materialStatus}</Detail>
             {s.materialStatus === 'Arrived' ? (
               <>
@@ -2261,7 +2269,10 @@ function ShipmentDrawer({
             <Detail label="Entered On">{formatDMY(s.createdAt) || '-'}</Detail>
           </DetailGroup>
 
-          <DetailGroup title="Documents & Attachments">
+          <DetailGroup
+            title="Documents & Attachments"
+            completion={getCompleteness([attached.length > 0])}
+          >
             <div style={{ gridColumn: '1 / -1', display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
               {attached.length === 0 && <span style={{ color: 'var(--text-muted)' }}>No documents attached.</span>}
 
@@ -2407,22 +2418,162 @@ function TrackingProgress({ shipment }: { shipment: Shipment }) {
   );
 }
 
-function DetailGroup({ title, children }: { title: string; children: React.ReactNode }) {
+type CompletionStatus = 'complete' | 'partial' | 'incomplete';
+type Completion = { status: CompletionStatus; filled: number; total: number };
+
+function isFilled(value: unknown): boolean {
+  if (value === null || value === undefined || value === false) return false;
+  const text = String(value).trim();
+  return Boolean(text) && !['-', '?', 'BL-PENDING', 'BOE-PENDING'].includes(text.toUpperCase());
+}
+
+function getCompleteness(values: unknown[]): Completion {
+  const filled = values.filter(isFilled).length;
+  const total = values.length;
+  const status: CompletionStatus = filled === total
+    ? 'complete'
+    : filled <= 1
+      ? 'incomplete'
+      : 'partial';
+  return { status, filled, total };
+}
+
+function documentValues(value: string | undefined): string[] {
+  return value ? value.split('_').map((part) => part.trim()) : [];
+}
+
+function addDocumentCompleteness(values: unknown[], numbers: string | undefined, dates: string | undefined, required: boolean) {
+  const numberValues = documentValues(numbers);
+  const dateValues = documentValues(dates);
+  if (!required && !numberValues.some(isFilled) && !dateValues.some(isFilled)) return;
+  const count = Math.max(required ? 1 : 0, numberValues.length, dateValues.length);
+  for (let index = 0; index < count; index += 1) {
+    values.push(numberValues[index] ?? '');
+    values.push(dateValues[index] ?? '');
+  }
+}
+
+function getShipmentCompleteness(shipment: Shipment) {
+  const supplierPoValues: unknown[] = [
+    shipment.supplier,
+    shipment.country,
+    shipment.material,
+  ];
+  addDocumentCompleteness(supplierPoValues, shipment.poNo, shipment.poDate, true);
+
+  const invoiceValues: unknown[] = [];
+  addDocumentCompleteness(invoiceValues, shipment.invoiceNo, shipment.invoiceDate, true);
+  const paymentTerms = getPaymentTermsLabel(shipment);
+  addDocumentCompleteness(
+    invoiceValues,
+    shipment.proformaInvoiceNo,
+    shipment.proformaInvoiceDate,
+    hasProformaInvoiceTerm(paymentTerms),
+  );
+
+  const shippingValues: unknown[] = [
+    shipment.modeOfShipment,
+    shipment.portOfLoading,
+    shipment.portOfLanding,
+  ];
+  addDocumentCompleteness(shippingValues, shipment.blNo, shipment.blDate, false);
+  if (isFilled(shipment.mawb)) shippingValues.push(shipment.mawb);
+  if (isFilled(shipment.hawb)) shippingValues.push(shipment.hawb);
+
+  const customsValues: unknown[] = [shipment.cha, shipment.documentStatus];
+  addDocumentCompleteness(customsValues, shipment.boeNo, shipment.boeDate, false);
+
+  const paymentValues: unknown[] = [
+    shipment.paymentType,
+    paymentTerms,
+    shipment.paymentStatus,
+  ];
+  if (shipment.paymentType === 'LC') paymentValues.push(shipment.bankReferenceNo);
+
+  const materialValues: unknown[] = [shipment.materialStatus];
+  if (shipment.materialStatus === 'Arrived') {
+    materialValues.push(shipment.arrivedDate, shipment.warehouseName);
+  } else {
+    materialValues.push(shipment.etd, shipment.eta);
+  }
+
+  const sections = {
+    supplierPo: getCompleteness(supplierPoValues),
+    invoice: getCompleteness(invoiceValues),
+    shipping: getCompleteness(shippingValues),
+    customs: getCompleteness(customsValues),
+    payment: getCompleteness(paymentValues),
+    materialStatus: getCompleteness(materialValues),
+  };
+  const overall = getCompleteness(
+    Object.values(sections).flatMap(({ filled, total }) => [
+      ...Array.from({ length: filled }, () => true),
+      ...Array.from({ length: total - filled }, () => false),
+    ]),
+  );
+  return { ...sections, overall };
+}
+
+function CompletenessIndicator({ completion, compact = false }: { completion: Completion; compact?: boolean }) {
+  const config = {
+    complete: { label: 'Complete', color: 'var(--accent-green)', Icon: CheckCircle2 },
+    partial: { label: 'Partially complete', color: 'var(--accent-orange)', Icon: AlertTriangle },
+    incomplete: { label: 'Missing details', color: 'var(--accent-red)', Icon: CircleX },
+  }[completion.status];
+  const { Icon } = config;
+
   return (
-    <section>
+    <span
+      title={`${config.label}: ${completion.filled} of ${completion.total} details filled`}
+      aria-label={`${config.label}: ${completion.filled} of ${completion.total} details filled`}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 5,
+        color: config.color,
+        fontSize: compact ? 'var(--font-size-tiny)' : 'var(--font-size-compact)',
+        fontWeight: 700,
+      }}
+    >
+      <Icon size={compact ? 13 : 16} strokeWidth={2.5} />
+      <span>{compact ? `${completion.filled}/${completion.total}` : config.label}</span>
+    </span>
+  );
+}
+
+function DetailGroup({
+  title,
+  completion,
+  children,
+}: {
+  title: string;
+  completion: Completion;
+  children: React.ReactNode;
+}) {
+  const statusColor = {
+    complete: 'var(--accent-green)',
+    partial: 'var(--accent-orange)',
+    incomplete: 'var(--accent-red)',
+  }[completion.status];
+
+  return (
+    <section style={{ borderLeft: `3px solid ${statusColor}`, borderRadius: '2px 0 0 2px', paddingLeft: 12 }}>
       <div
         style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
           fontSize: 'var(--font-size-label)',
           fontWeight: 800,
           textTransform: 'uppercase',
           letterSpacing: '0.06em',
-          color: 'var(--accent-blue)',
           paddingBottom: 6,
           marginBottom: 10,
           borderBottom: '1px solid var(--border)',
         }}
       >
-        {title}
+        <CompletenessIndicator completion={completion} />
+        <span style={{ color: 'var(--accent-blue)' }}>{title}</span>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '0.85rem 1rem' }}>{children}</div>
     </section>

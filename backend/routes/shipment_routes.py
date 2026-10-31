@@ -132,6 +132,8 @@ def _document_rows(
     number_field: str,
     date_field: str,
     max_number_length: int,
+    *,
+    require_dates: bool = False,
 ) -> list[tuple[str, date | None]]:
     number_values = [
         value.strip()
@@ -141,6 +143,11 @@ def _document_rows(
     date_values = _date_values(dates, date_field)
     if not number_values:
         return []
+    if require_dates and (len(date_values) != len(number_values) or any(value is None for value in date_values)):
+        raise HTTPException(
+            status_code=422,
+            detail=f"Provide one {date_field} for each {number_field}, separated by underscores",
+        )
     if date_values and len(date_values) != len(number_values):
         raise HTTPException(
             status_code=422,
@@ -344,7 +351,9 @@ def _shipment_input_values(cursor, data: ShipmentInput, *, creating: bool, actor
         raise HTTPException(status_code=422, detail="Arrival date is required when material status is Arrived")
 
     child_rows = {
-        DB_TABLES["shipment_pos"]: _document_rows(data.poNo, data.poDate, "PO number", "PO date", 80),
+        DB_TABLES["shipment_pos"]: _document_rows(
+            data.poNo, data.poDate, "PO number", "PO date", 80, require_dates=True
+        ),
         DB_TABLES["shipment_invoices"]: _document_rows(data.invoiceNo, data.invoiceDate, "invoice number", "invoice date", 80),
         DB_TABLES["shipment_bls"]: _document_rows(data.blNo, data.blDate, "BL number", "BL date", 80),
         DB_TABLES["shipment_boes"]: _document_rows(data.boeNo, data.boeDate, "BOE number", "BOE date", 40),
