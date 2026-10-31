@@ -240,6 +240,10 @@ body {
   position: relative;
   z-index: 20;
 }
+.document-entry-input::placeholder {
+  color: var(--text-secondary);
+  opacity: 1;
+}
 
 .stat-card {
   background: var(--bg-card);

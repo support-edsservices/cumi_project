@@ -20,6 +20,7 @@ import { Shipment, MaterialStatus, PaymentStatus, PAYMENT_STATUSES } from '@/typ
 import {
   formatDMY,
   formatEtdEta,
+  getDefaultPoDateRange,
   getDaysUntilDue,
   getModeLabel,
   getPaymentDueDate,
@@ -27,6 +28,7 @@ import {
   getPaymentTermsLabel,
   isPaymentCalendarEligible,
   isPaymentOverdue,
+  poDateMatchesRange,
   toISODate,
 } from '@/data/shipmentData';
 import { useShipments } from '@/hooks/useShipments';
@@ -1192,7 +1194,7 @@ function MaterialStatusBreakdown({
     data.forEach(s => {
       map[s.materialStatus] = (map[s.materialStatus] || 0) + 1;
     });
-    const statuses: MaterialStatus[] = ['In Transit', 'At Port', 'Customs Clearance', 'Arrived', 'Pending Shipment'];
+    const statuses: MaterialStatus[] = ['Pending Shipment','In Transit', 'At Port', 'Customs Clearance', 'Arrived'];
     return statuses.map(st => ({
       status: st,
       count: map[st] || 0,
@@ -1388,6 +1390,7 @@ function DuePaymentsTable({ data }: { data: Shipment[] }) {
 export default function ShipmentDashboardPage() {
   const { shipments, ready } = useShipments();
   const [searchTerm, setSearchTerm] = useState('');
+  const [dashboardPoDateRange, setDashboardPoDateRange] = useState(() => getDefaultPoDateRange('year'));
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<Date | null>(null);
 
   /* Modal state for active KPI card click / Material Status click */
@@ -1398,20 +1401,21 @@ export default function ShipmentDashboardPage() {
 
   /* Filtered data */
   const filtered = useMemo(() => {
-    if (!searchTerm.trim()) return shipments;
     const q = searchTerm.toLowerCase();
     return shipments.filter(s =>
-      s.supplier.toLowerCase().includes(q) ||
-      s.invoiceNo.toLowerCase().includes(q) ||
-      s.material.toLowerCase().includes(q) ||
-      s.blNo.toLowerCase().includes(q) ||
-      s.poNo.toLowerCase().includes(q) ||
-      s.id.toLowerCase().includes(q) ||
-      s.country.toLowerCase().includes(q) ||
-      s.modeOfShipment.toLowerCase().includes(q) ||
-      (s.otherModeDetail ?? '').toLowerCase().includes(q)
+      poDateMatchesRange(s.poDate, dashboardPoDateRange.startDate, dashboardPoDateRange.endDate) &&
+      (!searchTerm.trim() ||
+        s.supplier.toLowerCase().includes(q) ||
+        s.invoiceNo.toLowerCase().includes(q) ||
+        s.material.toLowerCase().includes(q) ||
+        s.blNo.toLowerCase().includes(q) ||
+        s.poNo.toLowerCase().includes(q) ||
+        s.id.toLowerCase().includes(q) ||
+        s.country.toLowerCase().includes(q) ||
+        s.modeOfShipment.toLowerCase().includes(q) ||
+        (s.otherModeDetail ?? '').toLowerCase().includes(q))
     );
-  }, [shipments, searchTerm]);
+  }, [shipments, searchTerm, dashboardPoDateRange]);
 
   /* Today date normalized */
   const today = useMemo(() => {
@@ -1555,9 +1559,48 @@ export default function ShipmentDashboardPage() {
         </span>
       </div>
 
+      <div className="fade-up" style={{
+        display: 'flex', alignItems: 'end', flexWrap: 'wrap', gap: '0.75rem',
+        background: 'var(--bg-card)', border: '1px solid var(--border)',
+        borderRadius: 10, padding: '0.65rem 0.875rem', boxShadow: 'var(--card-shadow)',
+      }}>
+        <label style={{ display: 'grid', gap: 4, color: 'var(--text-secondary)', fontSize: 'var(--font-size-label)', fontWeight: 700 }}>
+          PO Date From
+          <input
+            type="date"
+            aria-label="Dashboard PO date from"
+            value={dashboardPoDateRange.startDate}
+            max={dashboardPoDateRange.endDate || undefined}
+            onChange={(event) => setDashboardPoDateRange((range) => ({ ...range, startDate: event.target.value }))}
+            style={{ minHeight: 34, minWidth: 165, padding: '0.35rem 0.55rem', border: '1px solid var(--border)', borderRadius: 7, background: 'var(--bg-secondary)', color: 'var(--text-primary)', font: 'inherit' }}
+          />
+        </label>
+        <label style={{ display: 'grid', gap: 4, color: 'var(--text-secondary)', fontSize: 'var(--font-size-label)', fontWeight: 700 }}>
+          PO Date To
+          <input
+            type="date"
+            aria-label="Dashboard PO date to"
+            value={dashboardPoDateRange.endDate}
+            min={dashboardPoDateRange.startDate || undefined}
+            onChange={(event) => setDashboardPoDateRange((range) => ({ ...range, endDate: event.target.value }))}
+            style={{ minHeight: 34, minWidth: 165, padding: '0.35rem 0.55rem', border: '1px solid var(--border)', borderRadius: 7, background: 'var(--bg-secondary)', color: 'var(--text-primary)', font: 'inherit' }}
+          />
+        </label>
+        <button
+          type="button"
+          onClick={() => setDashboardPoDateRange(getDefaultPoDateRange('year'))}
+          style={{ minHeight: 34, padding: '0.4rem 0.7rem', border: '1px solid var(--border)', borderRadius: 7, background: 'var(--bg-secondary)', color: 'var(--text-primary)', font: 'inherit', fontSize: 'var(--font-size-compact)', fontWeight: 700, cursor: 'pointer' }}
+        >
+          This year
+        </button>
+        <span style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-size-compact)' }}>
+          Dashboard is filtered by PO date
+        </span>
+      </div>
+
       {/* ── ROW 1: KPI Summary Cards (Mobile Responsive Grid & Interactive Modals) ── */}
       <div style={{
-        display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.5rem',
+        display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.5rem',
       }}>
         <KpiCard 
           icon={Package} 

@@ -562,6 +562,32 @@ export function toISODate(d: Date | string | undefined | null): string {
   return `${year}-${month}-${day}`;
 }
 
+export function getDefaultPoDateRange(period: 'month' | 'year'): { startDate: string; endDate: string } {
+  const now = new Date();
+  const start = period === 'month'
+    ? new Date(now.getFullYear(), now.getMonth(), 1)
+    : new Date(now.getFullYear(), 0, 1);
+  return { startDate: toISODate(start), endDate: toISODate(now) };
+}
+
+export function poDateMatchesRange(
+  poDate: string | null | undefined,
+  startDate: string,
+  endDate: string,
+): boolean {
+  if (!startDate && !endDate) return true;
+  if (!poDate) return false;
+
+  return poDate.split('_').some((value) => {
+    const raw = value.trim();
+    const isoDate = /^(\d{4}-\d{2}-\d{2})/.exec(raw)?.[1]
+      ?? (/^(\d{2})-(\d{2})-(\d{4})$/.exec(raw)
+        ? `${raw.slice(6, 10)}-${raw.slice(3, 5)}-${raw.slice(0, 2)}`
+        : '');
+    return Boolean(isoDate) && (!startDate || isoDate >= startDate) && (!endDate || isoDate <= endDate);
+  });
+}
+
 /** Adds N days to an ISO date string (YYYY-MM-DD) and returns new YYYY-MM-DD */
 export function addDaysToISO(isoDate: string | undefined | null, days: number): string | null {
   if (!isoDate) return null;

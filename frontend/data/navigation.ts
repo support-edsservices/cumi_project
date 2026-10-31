@@ -39,7 +39,7 @@ export const navSections: NavSection[] = [
   {
     title: 'Supply Chain',
     items: [
-      { label: 'New Entry', href: '/shipments/entry', icon: FilePlus },
+      { label: 'New Entry', href: '/shipments', icon: FilePlus },
       {
         label: 'Master Data',
         icon: Database,
