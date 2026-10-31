@@ -962,6 +962,7 @@ export default function ShipmentEntryAndHistoryPage() {
                   options={masterSelectOptions('materials')}
                   placeholder="Search materials"
                   style={inputStyle}
+                  allowCustom
                 />
                 {!activeMasterNames('materials').length && <MasterSetupLink masterType="materials" />}
               </Field>

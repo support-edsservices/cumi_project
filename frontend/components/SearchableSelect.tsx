@@ -32,6 +32,7 @@ interface SearchableSelectProps {
   ariaLabel: string;
   style?: CSSProperties;
   disabled?: boolean;
+  allowCustom?: boolean;
 }
 
 export default function SearchableSelect({
@@ -42,6 +43,7 @@ export default function SearchableSelect({
   ariaLabel,
   style,
   disabled = false,
+  allowCustom = false,
 }: SearchableSelectProps) {
   const listId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -53,6 +55,16 @@ export default function SearchableSelect({
   const filteredOptions = options.filter((option) =>
     option.label.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()),
   );
+  const trimmedQuery = query.trim();
+  const exactOptionExists = options.some((option) =>
+    option.label.toLocaleLowerCase() === trimmedQuery.toLocaleLowerCase(),
+  );
+  const menuOptions = [
+    ...filteredOptions.map((option) => ({ option, isCustom: false })),
+    ...(allowCustom && trimmedQuery && !exactOptionExists
+      ? [{ option: { value: trimmedQuery, label: `Add "${trimmedQuery}"` }, isCustom: true }]
+      : []),
+  ];
 
   useEffect(() => {
     if (!open) return;
@@ -85,15 +97,21 @@ export default function SearchableSelect({
       event.preventDefault();
       setMenuPosition(getMenuPosition(event.currentTarget));
       setOpen(true);
-      setActiveIndex((index) => Math.min(index + 1, filteredOptions.length - 1));
+      setActiveIndex((index) => Math.min(index + 1, menuOptions.length - 1));
     } else if (event.key === 'ArrowUp') {
       event.preventDefault();
       setMenuPosition(getMenuPosition(event.currentTarget));
       setOpen(true);
       setActiveIndex((index) => Math.max(index - 1, 0));
-    } else if (event.key === 'Enter' && open && filteredOptions.length > 0) {
+    } else if (event.key === 'Enter' && open && menuOptions.length > 0) {
       event.preventDefault();
-      selectOption(filteredOptions[Math.min(activeIndex, filteredOptions.length - 1)]);
+      const selected = menuOptions[Math.min(activeIndex, menuOptions.length - 1)];
+      if (selected.isCustom) {
+        onChange(selected.option.value);
+        closeMenu();
+      } else {
+        selectOption(selected.option);
+      }
     } else if (event.key === 'Escape' && open) {
       event.preventDefault();
       closeMenu();
@@ -116,7 +134,7 @@ export default function SearchableSelect({
         aria-autocomplete="list"
         aria-expanded={open}
         aria-controls={listId}
-        aria-activedescendant={open && filteredOptions.length ? `${listId}-${activeIndex}` : undefined}
+        aria-activedescendant={open && menuOptions.length ? `${listId}-${activeIndex}` : undefined}
         value={open ? query : selectedLabel}
         placeholder={placeholder}
         disabled={disabled}
@@ -127,7 +145,15 @@ export default function SearchableSelect({
           setMenuPosition(getMenuPosition(event.currentTarget));
           setOpen(true);
         }}
-        onBlur={closeMenu}
+        onBlur={() => {
+          if (allowCustom && trimmedQuery) {
+            const exactOption = options.find((option) =>
+              option.label.toLocaleLowerCase() === trimmedQuery.toLocaleLowerCase(),
+            );
+            onChange(exactOption?.value ?? trimmedQuery);
+          }
+          closeMenu();
+        }}
         onChange={(event) => {
           setQuery(event.target.value);
           setActiveIndex(0);
@@ -159,15 +185,22 @@ export default function SearchableSelect({
           role="listbox"
           style={{ position: 'fixed', zIndex: 2147483647, top: menuPosition.top, left: menuPosition.left, width: menuPosition.width, maxHeight: menuPosition.maxHeight, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 8, background: 'var(--bg-card)', boxShadow: '0 8px 20px rgba(0,0,0,0.16)' }}
         >
-          {filteredOptions.length ? filteredOptions.map((option, index) => (
+          {menuOptions.length ? menuOptions.map(({ option, isCustom }, index) => (
             <div
-              key={option.value}
+              key={`${isCustom ? 'custom' : 'option'}-${option.value}`}
               id={`${listId}-${index}`}
               role="option"
-              aria-selected={option.value === value}
+              aria-selected={!isCustom && option.value === value}
               onMouseEnter={() => setActiveIndex(index)}
               onMouseDown={(event) => event.preventDefault()}
-              onClick={() => selectOption(option)}
+              onClick={() => {
+                if (isCustom) {
+                  onChange(option.value);
+                  closeMenu();
+                } else {
+                  selectOption(option);
+                }
+              }}
               style={{ padding: '0.55rem 0.7rem', cursor: 'pointer', color: 'var(--text-primary)', background: index === activeIndex ? 'var(--bg-secondary)' : 'transparent', fontSize: 'var(--font-size-body-compact)' }}
             >
               {option.label}
