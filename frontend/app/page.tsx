@@ -1121,17 +1121,15 @@ function PaymentDonut({ data }: { data: Shipment[] }) {
 /* ── Shipments by Mode (Recharts Bar) ── */
 function ShipmentsByMode({ data }: { data: Shipment[] }) {
   const modeData = useMemo(() => {
-    let sea = 0, air = 0, others = 0;
-    data.forEach(s => {
-      if (s.modeOfShipment === 'Sea') sea++;
-      else if (s.modeOfShipment === 'Air') air++;
-      else others++;
+    const counts = new Map<string, number>();
+    data.forEach((shipment) => {
+      counts.set(shipment.modeOfShipment, (counts.get(shipment.modeOfShipment) ?? 0) + 1);
     });
-    return [
-      { mode: 'Sea', count: sea, color: ACCENT.blue },
-      { mode: 'Air', count: air, color: ACCENT.teal },
-      { mode: 'Others', count: others, color: ACCENT.purple },
-    ];
+    return Array.from(counts, ([mode, count], index) => ({
+      mode,
+      count,
+      color: [ACCENT.blue, ACCENT.teal, ACCENT.purple][index % 3],
+    }));
   }, [data]);
 
   const modeIcon = (mode: string, color: string) =>
@@ -1410,6 +1408,7 @@ export default function ShipmentDashboardPage() {
       s.poNo.toLowerCase().includes(q) ||
       s.id.toLowerCase().includes(q) ||
       s.country.toLowerCase().includes(q) ||
+      s.modeOfShipment.toLowerCase().includes(q) ||
       (s.otherModeDetail ?? '').toLowerCase().includes(q)
     );
   }, [shipments, searchTerm]);

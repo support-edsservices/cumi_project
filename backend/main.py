@@ -7,11 +7,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from config.db_config import get_connection
 from config.settings import MASTER_DB, CORS_ORIGINS
 from routes.auth_routes import router as auth_router
+from routes.master_routes import router as master_router
+from routes.shipment_routes import router as shipment_router
 
 app = FastAPI(
-    title="CUMI EnergyMeter Enterprise API",
-    description="Backend API for Energy Telemetry and User Authentication",
-    version="1.0.0",
+    title="CUMI Shipment Management API",
+    description="Backend API for shipment tracking, documents, and authentication",
+    version="1.1.0",
 )
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -48,6 +50,8 @@ app.add_middleware(
 
 # Include Authentication Router
 app.include_router(auth_router)
+app.include_router(master_router)
+app.include_router(shipment_router)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -80,8 +84,8 @@ def check_mysql_connection():
 
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"MySQL connection test failed: {str(e)}")
+    except Exception:
+        raise HTTPException(status_code=500, detail="MySQL connection test failed")
     finally:
         if cursor is not None:
             cursor.close()

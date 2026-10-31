@@ -1,7 +1,7 @@
 /* ─────────────────────────────────────────────────────────────────────────────
    shipmentData.ts – Seed data and helper functions for import shipments.
    Fully supports:
-   - Mode of Shipment: Sea, Air, Others
+   - Mode of Shipment: selected from shipment mode master data
    - Payment Types: LC (bank ref mandatory) vs Others (credit days from Invoice/BL/PO date)
    - Dynamic due date calculation from custom credit days & base date
    - Material statuses with Arrived date or ETD/ETA
@@ -318,8 +318,7 @@ export const shipmentData: Shipment[] = [
     hawb: '',
     cha: 'Ceva Logistics India',
     documentStatus: 'In Process',
-    modeOfShipment: 'Others',
-    otherModeDetail: 'Multimodal Rail-Sea',
+    modeOfShipment: 'Multimodal Rail-Sea',
     boeNo: 'BOE/2026/5012345',
     boeDate: '2026-10-14',
     country: 'United States',
@@ -536,6 +535,9 @@ export const shipmentData: Shipment[] = [
 export function formatDMY(d: string | Date | undefined | null): string {
   if (!d) return '';
   if (typeof d === 'string') {
+    if (d.includes('_')) {
+      return d.split('_').map((part) => part ? formatDMY(part) : '?').join('_');
+    }
     // If it's already an ISO string YYYY-MM-DD
     const parts = d.split('T')[0].split('-');
     if (parts.length === 3) {
@@ -571,9 +573,6 @@ export function addDaysToISO(isoDate: string | undefined | null, days: number): 
 
 /** Returns the display label for Mode of Shipment */
 export function getModeLabel(s: { modeOfShipment: ShipmentMode; otherModeDetail?: string }): string {
-  if (s.modeOfShipment === 'Others') {
-    return s.otherModeDetail?.trim() ? `Others (${s.otherModeDetail})` : 'Others';
-  }
   return s.modeOfShipment;
 }
 
@@ -590,10 +589,10 @@ export function getPaymentBaseISO(s: {
 }): string {
   const creditDaysFrom = s.creditDaysFrom ?? getPaymentTermRule(s.paymentTerms)?.from;
   if (!creditDaysFrom) return '';
-  if (creditDaysFrom === 'Invoice Date') return s.invoiceDate || '';
-  if (creditDaysFrom === 'BL Date') return s.blDate || '';
-  if (creditDaysFrom === 'PO Date') return s.poDate || '';
-  if (creditDaysFrom === 'Receipt Date') return s.receiptDate || '';
+  if (creditDaysFrom === 'Invoice Date') return s.invoiceDate?.split('_')[0] || '';
+  if (creditDaysFrom === 'BL Date') return s.blDate?.split('_')[0] || '';
+  if (creditDaysFrom === 'PO Date') return s.poDate?.split('_')[0] || '';
+  if (creditDaysFrom === 'Receipt Date') return s.receiptDate?.split('_')[0] || '';
   return '';
 }
 

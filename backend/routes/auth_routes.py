@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 from config.db_config import get_connection
 from config.settings import (
     MASTER_DB,
-    User_Table,
+    DB_TABLES,
     ALL_ROLES,
     SINGLETON_ROLES,
     AUTO_GRANTED_ROLES,
@@ -153,7 +153,7 @@ def get_available_roles():
     try:
         cursor = conn.cursor(dictionary=True)
         format_strings = ','.join(['%s'] * len(SINGLETON_ROLES))
-        query = f"SELECT DISTINCT role FROM {User_Table} WHERE role IN ({format_strings})"
+        query = f"SELECT DISTINCT role FROM {DB_TABLES['users']} WHERE role IN ({format_strings})"
         cursor.execute(query, tuple(SINGLETON_ROLES))
         existing_singleton_rows = cursor.fetchall()
         existing_singletons = {row["role"].lower() for row in existing_singleton_rows if row.get("role")}
@@ -209,7 +209,7 @@ def signup(data: SignUpRequest, response: Response, request: Request):
     try:
         cursor = conn.cursor(dictionary=True)
 
-        query_check = f"SELECT phone_number FROM {User_Table} WHERE phone_number = %s"
+        query_check = f"SELECT phone_number FROM {DB_TABLES['users']} WHERE phone_number = %s"
         cursor.execute(query_check, (phone_clean,))
         if cursor.fetchone():
             raise HTTPException(
@@ -218,7 +218,7 @@ def signup(data: SignUpRequest, response: Response, request: Request):
             )
 
         if role_clean in [s.lower() for s in SINGLETON_ROLES]:
-            cursor.execute(f"SELECT COUNT(*) as cnt FROM {User_Table} WHERE LOWER(role) = %s", (role_clean,))
+            cursor.execute(f"SELECT COUNT(*) as cnt FROM {DB_TABLES['users']} WHERE LOWER(role) = %s", (role_clean,))
             res = cursor.fetchone()
             if res and res.get("cnt", 0) >= 1:
                 raise HTTPException(
@@ -231,7 +231,7 @@ def signup(data: SignUpRequest, response: Response, request: Request):
         hashed_pwd = hash_password(data.password)
 
         insert_query = (
-            f"INSERT INTO {User_Table} (phone_number, password, user_name, email, role, isGranted) "
+            f"INSERT INTO {DB_TABLES['users']} (phone_number, password, user_name, email, role, isGranted) "
             f"VALUES (%s, %s, %s, %s, %s, %s)"
         )
         cursor.execute(insert_query, (phone_clean, hashed_pwd, name_clean, email_clean, role_clean, is_granted))
@@ -317,7 +317,7 @@ def login(data: LoginRequest, response: Response, request: Request):
 
         query = (
             f"SELECT phone_number, password, user_name, email, role, isGranted "
-            f"FROM {User_Table} WHERE phone_number = %s OR email = %s"
+            f"FROM {DB_TABLES['users']} WHERE phone_number = %s OR email = %s"
         )
         cursor.execute(query, (identifier, identifier))
         user_row = cursor.fetchone()
@@ -430,7 +430,7 @@ def refresh_token_endpoint(request: Request, response: Response, data: Optional[
     cursor = None
     try:
         cursor = conn.cursor(dictionary=True)
-        query = f"SELECT phone_number, user_name, email, role, isGranted FROM {User_Table} WHERE phone_number = %s"
+        query = f"SELECT phone_number, user_name, email, role, isGranted FROM {DB_TABLES['users']} WHERE phone_number = %s"
         cursor.execute(query, (phone_number,))
         user_row = cursor.fetchone()
 
@@ -540,7 +540,7 @@ def list_all_users(admin_user: dict = Depends(require_admin)):
         cursor = conn.cursor(dictionary=True)
         query = (
             f"SELECT phone_number, user_name, email, role, isGranted "
-            f"FROM {User_Table} "
+            f"FROM {DB_TABLES['users']} "
             f"ORDER BY isGranted ASC, role ASC, user_name ASC"
         )
         cursor.execute(query)
@@ -576,7 +576,7 @@ def grant_user_access(data: GrantAccessRequest, admin_user: dict = Depends(requi
     try:
         cursor = conn.cursor(dictionary=True)
 
-        cursor.execute(f"SELECT phone_number, role, isGranted FROM {User_Table} WHERE phone_number = %s", (target_phone,))
+        cursor.execute(f"SELECT phone_number, role, isGranted FROM {DB_TABLES['users']} WHERE phone_number = %s", (target_phone,))
         target_user = cursor.fetchone()
         if not target_user:
             raise HTTPException(
@@ -594,7 +594,7 @@ def grant_user_access(data: GrantAccessRequest, admin_user: dict = Depends(requi
                 detail="Admins can never modify Super Admin permissions."
             )
 
-        update_query = f"UPDATE {User_Table} SET isGranted = %s WHERE phone_number = %s"
+        update_query = f"UPDATE {DB_TABLES['users']} SET isGranted = %s WHERE phone_number = %s"
         cursor.execute(update_query, (data.is_granted, target_phone))
         conn.commit()
 
@@ -638,7 +638,7 @@ def delete_user(phone_number: str, admin_user: dict = Depends(require_admin)):
     cursor = None
     try:
         cursor = conn.cursor(dictionary=True)
-        cursor.execute(f"SELECT phone_number, role FROM {User_Table} WHERE phone_number = %s", (target_phone,))
+        cursor.execute(f"SELECT phone_number, role FROM {DB_TABLES['users']} WHERE phone_number = %s", (target_phone,))
         target_user = cursor.fetchone()
         if not target_user:
             raise HTTPException(
@@ -664,7 +664,7 @@ def delete_user(phone_number: str, admin_user: dict = Depends(require_admin)):
             )
 
         # Super Admin can delete admin and all other users; Admin can delete manager & user
-        cursor.execute(f"DELETE FROM {User_Table} WHERE phone_number = %s", (target_phone,))
+        cursor.execute(f"DELETE FROM {DB_TABLES['users']} WHERE phone_number = %s", (target_phone,))
         conn.commit()
 
         return {

@@ -1,113 +1,132 @@
 'use client';
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   Shared shipment store
-   The entry/history page and the dashboard both read from here, so an add,
-   edit or delete on one page shows up on the other.
-
-   It keeps the data in this browser's localStorage, seeded from
-   data/shipmentData.ts. That is a stand-in: swap the three actions below for
-   your API calls when the backend is ready and nothing else needs to change.
-───────────────────────────────────────────────────────────────────────────── */
 import { useCallback, useEffect, useState } from 'react';
-import { PAYMENT_STATUSES, PaymentStatus, Shipment } from '@/types/shipment';
-import { shipmentData as seed } from '@/data/shipmentData';
+import { BASE_URL } from '@/data/ENUM';
+import { Shipment, ShipmentDocument } from '@/types/shipment';
+import { useAuth } from '@/context/AuthContext';
 
-const STORAGE_KEY = 'cumi.shipments.v2';
+export type ShipmentDocumentType = 'PO' | 'INVOICE' | 'BL' | 'MAWB' | 'HAWB' | 'BOE' | 'OTHER';
 
-function read(): Shipment[] {
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return seed;
-    const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return seed;
-    return parsed.map((item): Shipment => {
-      const shipment = item as Omit<Shipment, 'materialStatus' | 'paymentStatus'> & {
-        materialStatus: string;
-        deliveredDate?: string;
-        paymentStatus?: string;
-      };
-      const { materialStatus, deliveredDate, paymentStatus, ...rest } = shipment;
-      const normalizedValue = paymentStatus?.trim().toUpperCase().replace(/[-_]+/g, ' ').replace(/\s+/g, ' ');
-      const normalizedPaymentStatus = !normalizedValue
-        ? 'NOT PAID'
-        : normalizedValue === 'UNPAID'
-          ? 'NOT PAID'
-          : normalizedValue === '2WAY'
-            ? '2 WAY'
-            : normalizedValue === 'PARTIALL'
-              ? 'PARTIAL'
-              : PAYMENT_STATUSES.find((status) => status === normalizedValue);
-      if (!normalizedPaymentStatus) {
-        throw new Error(`Unknown payment status "${paymentStatus}" in saved shipments.`);
-      }
-      if (materialStatus === 'Delivered') {
-        return {
-          ...rest,
-          materialStatus: 'Arrived',
-          paymentStatus: normalizedPaymentStatus,
-          arrivedDate: shipment.arrivedDate ?? deliveredDate,
-        };
-      }
-      return {
-        ...rest,
-        materialStatus: materialStatus as Shipment['materialStatus'],
-        paymentStatus: normalizedPaymentStatus as PaymentStatus,
-      };
-    });
-  } catch (error) {
-    console.error('Failed to read saved shipments from browser storage.', error);
-    return seed;
+const DOCUMENT_PROPERTIES: Partial<Record<ShipmentDocumentType, keyof Shipment>> = {
+  PO: 'poDocument',
+  INVOICE: 'invoiceDocument',
+  BL: 'blDocument',
+  MAWB: 'mawbDocument',
+  HAWB: 'hawbDocument',
+  BOE: 'boeDocument',
+};
+
+async function responseError(response: Response, fallback: string): Promise<Error> {
+  const data: unknown = await response.json().catch(() => null);
+  if (data && typeof data === 'object' && 'detail' in data && typeof data.detail === 'string') {
+    return new Error(data.detail);
   }
+  return new Error(fallback);
 }
 
-function write(list: Shipment[]) {
-  try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
-  } catch {
-    /* storage full or blocked: the in-memory copy still works for this session */
+function shipmentFromApi(shipment: Shipment): Shipment {
+  const normalized = { ...shipment };
+  const documentKeys = ['poDocument', 'invoiceDocument', 'blDocument', 'mawbDocument', 'hawbDocument', 'boeDocument'] as const;
+  for (const key of documentKeys) {
+    const document = normalized[key] as ShipmentDocument | undefined;
+    if (document?.url.startsWith('/')) {
+      normalized[key] = { ...document, url: `${BASE_URL}${document.url}` };
+    }
   }
+  return normalized;
 }
 
 export function useShipments() {
-  const [shipments, setShipments] = useState<Shipment[]>(seed);
-  /** false until the saved data has been read, so pages don't flash the starting data. */
+  const { fetchWithAuth } = useAuth();
+  const [shipments, setShipments] = useState<Shipment[]>([]);
   const [ready, setReady] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setShipments(read());
-    setReady(true);
-    // Keep other open tabs in sync.
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === STORAGE_KEY) setShipments(read());
+    let active = true;
+    async function loadShipments() {
+      try {
+        const response = await fetchWithAuth(`${BASE_URL}/api/shipments`);
+        if (!response.ok) throw await responseError(response, 'Could not load shipments.');
+        const data: Shipment[] = await response.json();
+        if (active) {
+          setShipments(data.map(shipmentFromApi));
+          setError(null);
+        }
+      } catch (loadError) {
+        if (active) {
+          setError(loadError instanceof Error ? loadError.message : 'Could not load shipments.');
+        }
+      } finally {
+        if (active) setReady(true);
+      }
+    }
+    void loadShipments();
+    return () => {
+      active = false;
     };
-    window.addEventListener('storage', onStorage);
-    return () => window.removeEventListener('storage', onStorage);
-  }, []);
+  }, [fetchWithAuth]);
 
-  const addShipment = useCallback((record: Shipment) => {
-    setShipments((prev) => {
-      const next = [record, ...prev];
-      write(next);
-      return next;
+  const addShipment = useCallback(async (record: Shipment): Promise<Shipment> => {
+    const response = await fetchWithAuth(`${BASE_URL}/api/shipments`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(record),
     });
-  }, []);
+    if (!response.ok) throw await responseError(response, 'Could not save shipment.');
+    const saved: Shipment = shipmentFromApi(await response.json());
+    setShipments((current) => [saved, ...current]);
+    setError(null);
+    return saved;
+  }, [fetchWithAuth]);
 
-  const updateShipment = useCallback((record: Shipment) => {
-    setShipments((prev) => {
-      const next = prev.map((s) => (s.id === record.id ? record : s));
-      write(next);
-      return next;
+  const updateShipment = useCallback(async (record: Shipment): Promise<Shipment> => {
+    const response = await fetchWithAuth(`${BASE_URL}/api/shipments/${encodeURIComponent(record.id)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(record),
     });
-  }, []);
+    if (!response.ok) throw await responseError(response, 'Could not update shipment.');
+    const saved: Shipment = shipmentFromApi(await response.json());
+    setShipments((current) => current.map((shipment) => shipment.id === saved.id ? saved : shipment));
+    setError(null);
+    return saved;
+  }, [fetchWithAuth]);
 
-  const deleteShipment = useCallback((id: string) => {
-    setShipments((prev) => {
-      const next = prev.filter((s) => s.id !== id);
-      write(next);
-      return next;
+  const deleteShipment = useCallback(async (id: string): Promise<void> => {
+    const response = await fetchWithAuth(`${BASE_URL}/api/shipments/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
     });
-  }, []);
+    if (!response.ok) throw await responseError(response, 'Could not delete shipment.');
+    setShipments((current) => current.filter((shipment) => shipment.id !== id));
+    setError(null);
+  }, [fetchWithAuth]);
 
-  return { shipments, ready, addShipment, updateShipment, deleteShipment };
+  const uploadAttachment = useCallback(async (
+    shNo: string,
+    type: ShipmentDocumentType,
+    file: File,
+  ): Promise<ShipmentDocument> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await fetchWithAuth(
+      `${BASE_URL}/api/shipments/${encodeURIComponent(shNo)}/attachments?type=${type}`,
+      { method: 'POST', body: formData },
+    );
+    if (!response.ok) throw await responseError(response, `Could not upload ${type} document.`);
+    const uploaded = await response.json() as ShipmentDocument & { docType: ShipmentDocumentType };
+    const document = {
+      ...uploaded,
+      url: uploaded.url.startsWith('/') ? `${BASE_URL}${uploaded.url}` : uploaded.url,
+    };
+    const property = DOCUMENT_PROPERTIES[type];
+    if (property) {
+      setShipments((current) => current.map((shipment) => (
+        shipment.id === shNo ? { ...shipment, [property]: document } : shipment
+      )));
+    }
+    return document;
+  }, [fetchWithAuth]);
+
+  return { shipments, ready, error, addShipment, updateShipment, deleteShipment, uploadAttachment };
 }

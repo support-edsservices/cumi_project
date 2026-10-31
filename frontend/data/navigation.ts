@@ -6,6 +6,7 @@ import {
   Zap, Settings, Users, Sun, Battery, TrendingUp,
   Clock, AlertTriangle, Map, Cpu, Layers,
   Package, FilePlus,
+  Database,
 } from 'lucide-react';
 
 export interface NavChild {
@@ -39,6 +40,21 @@ export const navSections: NavSection[] = [
     title: 'Supply Chain',
     items: [
       { label: 'New Entry', href: '/shipments/entry', icon: FilePlus },
+      {
+        label: 'Master Data',
+        icon: Database,
+        children: [
+          { label: 'Suppliers', href: '/masters/suppliers' },
+          { label: 'Ports', href: '/masters/ports' },
+          { label: 'CHA Agents', href: '/masters/chas' },
+          { label: 'Shipment Modes', href: '/masters/modes' },
+          { label: 'Countries', href: '/masters/countries' },
+          { label: 'Payment Terms', href: '/masters/payment-terms' },
+          { label: 'PRW / Payment Status', href: '/masters/prw' },
+          { label: 'Warehouses', href: '/masters/warehouses' },
+          { label: 'Materials', href: '/masters/materials' },
+        ],
+      },
     ],
   },
   {

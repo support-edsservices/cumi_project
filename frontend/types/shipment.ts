@@ -4,8 +4,8 @@
    extra exports, merge them in rather than deleting them.
 ───────────────────────────────────────────────────────────────────────────── */
 
-/** Sea, Air, or anything else (the actual mode is typed into `otherModeDetail`). */
-export type ShipmentMode = 'Sea' | 'Air' | 'Others';
+/** Shipment modes are maintained as master data. */
+export type ShipmentMode = string;
 
 /** LC needs a bank reference number. Everything else does not. */
 export type PaymentType = 'LC' | 'Others';
@@ -34,6 +34,7 @@ export interface ShipmentDocument {
   name: string;
   url: string;
   type: string;
+  id?: number;
 }
 
 export interface Shipment {
@@ -56,13 +57,15 @@ export interface Shipment {
   blDate: string; // YYYY-MM-DD or ''
   blDocument?: ShipmentDocument;
   mawb: string;
+  mawbDocument?: ShipmentDocument;
   hawb: string;
+  hawbDocument?: ShipmentDocument;
 
   cha: string;
   documentStatus: DocumentStatus;
 
   modeOfShipment: ShipmentMode;
-  /** Only used when modeOfShipment === 'Others'. */
+  /** Retained for displaying legacy records. */
   otherModeDetail?: string;
 
   boeNo: string;
@@ -94,6 +97,8 @@ export interface Shipment {
 
   /** Link to the PDF / document folder for this shipment. NOT a tracking link. */
   link: string;
+  /** Relative storage folder assigned by the backend. */
+  docsFolderPath?: string;
 
   leadTime: number;
   createdAt: string;

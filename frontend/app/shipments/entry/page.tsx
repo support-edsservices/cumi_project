@@ -3,7 +3,7 @@
 /* ─────────────────────────────────────────────────────────────────────────────
    Shipment Entry & History Portal
    - New Entry / Edit Entry form
-       • Mode of shipment: Sea, Air or Others
+       • Mode of shipment: selected from maintained master data
        • MAWB / HAWB document attachments added
        • Action Buttons: Clear, Preview, Save (with confirmation dialog)
    - History & Records table with search, filters, Excel / CSV export
@@ -18,9 +18,6 @@ import {
   X,
   UploadCloud,
   FileText,
-  Ship,
-  Plane,
-  Package,
   CheckCircle2,
   Building2,
   Receipt,
@@ -31,14 +28,12 @@ import {
   Download,
   Search,
   Eye,
-  ExternalLink,
   Table as TableIcon,
   Plus,
   Pencil,
   Trash2,
   Paperclip,
   AlertTriangle,
-  Truck,
   RotateCcw,
 } from 'lucide-react';
 
@@ -63,11 +58,15 @@ import {
   getPaymentTermDateBasis,
   getPaymentTermsLabel,
   getPaymentPeriod,
-  PAYMENT_TERM_OPTIONS,
   nextShipmentId,
   toISODate,
 } from '@/data/shipmentData';
 import { useShipments } from '@/hooks/useShipments';
+import type { ShipmentDocumentType } from '@/hooks/useShipments';
+import { useAuth } from '@/context/AuthContext';
+import { MASTER_LABELS, MASTER_PATHS, MASTER_TYPES, type MasterEntry, type MasterType } from '@/data/masterData';
+import { BASE_URL } from '@/data/ENUM';
+import SearchableSelect, { type SearchableSelectOption } from '@/components/SearchableSelect';
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Form state
@@ -92,15 +91,13 @@ const emptyForm = {
   hawbDocName: '',
   cha: '',
   documentStatus: 'Pending' as DocumentStatus,
-  modeOfShipment: 'Sea' as ShipmentMode,
-  otherModeDetail: '',
+  modeOfShipment: '' as ShipmentMode,
   boeNo: '',
   boeDate: '',
   boeDocName: '',
   country: '',
   paymentType: 'Others' as PaymentType,
   paymentTermChoice: '',
-  customPaymentTerms: '',
   bankReferenceNo: '',
   receiptDate: '',
   paymentStatus: 'NOT PAID' as PaymentStatus,
@@ -113,10 +110,40 @@ const emptyForm = {
   leadTime: '45',
 };
 type FormState = typeof emptyForm;
+type DocumentField = 'poDocName' | 'invoiceDocName' | 'blDocName' | 'mawbDocName' | 'hawbDocName' | 'boeDocName';
+type DocumentNumberField = 'poNo' | 'invoiceNo' | 'blNo' | 'boeNo';
+type DocumentDateField = 'poDate' | 'invoiceDate' | 'blDate' | 'boeDate';
+type DocumentCounts = Record<DocumentNumberField, number>;
+
+const DEFAULT_DOCUMENT_COUNTS: DocumentCounts = {
+  poNo: 1,
+  invoiceNo: 1,
+  blNo: 0,
+  boeNo: 0,
+};
+
+function splitDocumentValues(value: string, count: number): string[] {
+  const values = value ? value.split('_') : [];
+  return Array.from({ length: count }, (_, index) => values[index] ?? '');
+}
+
+function documentCountFromValue(value: string, minimum: number): number {
+  const values = value.split('_').filter((part) => part.trim());
+  if (values.every((part) => ['BL-PENDING', 'BOE-PENDING'].includes(part.toUpperCase()))) return minimum;
+  return Math.max(minimum, values.length);
+}
+
+const DOCUMENT_UPLOADS: { field: DocumentField; type: ShipmentDocumentType }[] = [
+  { field: 'poDocName', type: 'PO' },
+  { field: 'invoiceDocName', type: 'INVOICE' },
+  { field: 'blDocName', type: 'BL' },
+  { field: 'mawbDocName', type: 'MAWB' },
+  { field: 'hawbDocName', type: 'HAWB' },
+  { field: 'boeDocName', type: 'BOE' },
+];
 
 function shipmentToForm(s: Shipment & { mawbDocument?: ShipmentDocument; hawbDocument?: ShipmentDocument }): FormState {
   const savedPaymentTerms = s.paymentTerms ?? getPaymentTermsLabel(s);
-  const isPresetPaymentTerm = (PAYMENT_TERM_OPTIONS as readonly string[]).includes(savedPaymentTerms);
 
   return {
     supplier: s.supplier,
@@ -139,14 +166,12 @@ function shipmentToForm(s: Shipment & { mawbDocument?: ShipmentDocument; hawbDoc
     cha: s.cha,
     documentStatus: s.documentStatus,
     modeOfShipment: s.modeOfShipment,
-    otherModeDetail: s.otherModeDetail ?? '',
     boeNo: s.boeNo,
     boeDate: s.boeDate,
     boeDocName: s.boeDocument?.name ?? '',
     country: s.country,
     paymentType: s.paymentType,
-    paymentTermChoice: isPresetPaymentTerm ? savedPaymentTerms : '__custom__',
-    customPaymentTerms: isPresetPaymentTerm ? '' : savedPaymentTerms,
+    paymentTermChoice: savedPaymentTerms,
     bankReferenceNo: s.bankReferenceNo,
     receiptDate: s.receiptDate ?? '',
     paymentStatus: s.paymentStatus,
@@ -155,7 +180,7 @@ function shipmentToForm(s: Shipment & { mawbDocument?: ShipmentDocument; hawbDoc
     arrivedDate: s.arrivedDate ?? '',
     etd: s.etd,
     eta: s.eta,
-    link: s.link,
+    link: s.docsFolderPath ?? '',
     leadTime: String(s.leadTime),
   };
 }
@@ -164,14 +189,13 @@ function formToShipment(
   f: FormState,
   id: string,
   createdAt: string,
-  prev?: Shipment & { mawbDocument?: ShipmentDocument; hawbDocument?: ShipmentDocument }
+  prev?: Shipment & { mawbDocument?: ShipmentDocument; hawbDocument?: ShipmentDocument },
+  paymentTerm?: MasterEntry,
 ): Shipment & { mawbDocument?: ShipmentDocument; hawbDocument?: ShipmentDocument } {
   const doc = (name: string, existing?: ShipmentDocument): ShipmentDocument | undefined =>
     !name ? undefined : existing && existing.name === name ? existing : { name, url: '#', type: 'pdf' };
 
-  const paymentTerms = f.paymentTermChoice === '__custom__'
-    ? f.customPaymentTerms.trim()
-    : f.paymentTermChoice;
+  const paymentTerms = f.paymentTermChoice;
 
   return {
     id,
@@ -183,7 +207,7 @@ function formToShipment(
     invoiceNo: f.invoiceNo.trim(),
     invoiceDate: f.invoiceDate,
     invoiceDocument: doc(f.invoiceDocName, prev?.invoiceDocument),
-    portOfLoading: f.portOfLoading.trim() || 'Origin Port',
+    portOfLoading: f.portOfLoading.trim(),
     portOfLanding: f.portOfLanding.trim() || undefined,
     blNo: f.blNo.trim() || 'BL-PENDING',
     blDate: f.blDate,
@@ -192,17 +216,16 @@ function formToShipment(
     mawbDocument: doc(f.mawbDocName, prev?.mawbDocument),
     hawb: f.hawb.trim(),
     hawbDocument: doc(f.hawbDocName, prev?.hawbDocument),
-    cha: f.cha.trim() || 'In-House Clearance',
+    cha: f.cha.trim(),
     documentStatus: f.documentStatus,
     modeOfShipment: f.modeOfShipment,
-    otherModeDetail: f.modeOfShipment === 'Others' ? f.otherModeDetail.trim() : undefined,
     boeNo: f.boeNo.trim() || 'BOE-PENDING',
     boeDate: f.boeDate,
     boeDocument: doc(f.boeDocName, prev?.boeDocument),
-    country: f.country.trim() || 'International',
+    country: f.country.trim(),
     paymentType: f.paymentType,
-    creditDays: null,
-    creditDaysFrom: null,
+    creditDays: paymentTerm?.credit_days ?? null,
+    creditDaysFrom: paymentTerm?.credit_basis ? creditBasisLabel(paymentTerm.credit_basis) : null,
     paymentStatus: f.paymentStatus,
     paymentTerms,
     bankReferenceNo: f.bankReferenceNo.trim(),
@@ -218,17 +241,30 @@ function formToShipment(
   };
 }
 
-function validate(f: FormState): Record<string, string> {
+function validate(
+  f: FormState,
+  activeModeNames: readonly string[],
+  documentCounts: DocumentCounts,
+): Record<string, string> {
   const e: Record<string, string> = {};
   if (!f.supplier.trim()) e.supplier = 'Supplier name is required';
-  if (!f.poNo.trim()) e.poNo = 'PO number is required';
-  if (!f.invoiceNo.trim()) e.invoiceNo = 'Invoice number is required';
-  const paymentTerms = f.paymentTermChoice === '__custom__' ? f.customPaymentTerms.trim() : f.paymentTermChoice;
-  if (!paymentTerms) e.paymentTerms = 'Select or enter payment terms';
-
-  if (f.modeOfShipment === 'Others' && !f.otherModeDetail.trim()) {
-    e.otherModeDetail = 'Enter the mode of shipment';
+  const poValues = splitDocumentValues(f.poNo, documentCounts.poNo);
+  const invoiceValues = splitDocumentValues(f.invoiceNo, documentCounts.invoiceNo);
+  const blValues = splitDocumentValues(f.blNo === 'BL-PENDING' ? '' : f.blNo, documentCounts.blNo);
+  const boeValues = splitDocumentValues(f.boeNo === 'BOE-PENDING' ? '' : f.boeNo, documentCounts.boeNo);
+  if (poValues.some((value) => !value.trim())) e.poNo = 'Enter a PO number in every PO field';
+  if (invoiceValues.some((value) => !value.trim())) e.invoiceNo = 'Enter an invoice number in every invoice field';
+  if (blValues.some((value) => value.trim()) && blValues.some((value) => !value.trim())) {
+    e.blNo = 'Complete every BL field or leave all BL fields blank';
   }
+  if (boeValues.some((value) => value.trim()) && boeValues.some((value) => !value.trim())) {
+    e.boeNo = 'Complete every BOE field or leave all BOE fields blank';
+  }
+  const paymentTerms = f.paymentTermChoice;
+  if (!paymentTerms) e.paymentTerms = 'Select or enter payment terms';
+  if (!activeModeNames.includes(f.modeOfShipment)) e.modeOfShipment = 'Select an active shipment mode';
+  if (!f.paymentStatus) e.paymentStatus = 'Select a PRW/payment status';
+
 
   if (f.paymentType === 'LC' && !f.bankReferenceNo.trim()) {
     e.bankReferenceNo = 'Bank reference is required for LC';
@@ -236,12 +272,14 @@ function validate(f: FormState): Record<string, string> {
 
   if (f.paymentStatus === 'NOT PAID' && f.paymentType !== 'LC') {
     const dateBasis = getPaymentTermDateBasis(paymentTerms);
-    if (dateBasis === 'Invoice Date' && !f.invoiceDate) {
-      e.invoiceDate = 'Enter the invoice date to calculate the payment due date';
-    } else if (dateBasis === 'BL Date' && !f.blDate) {
-      e.blDate = 'Enter the BL date to calculate the payment due date';
-    } else if (dateBasis === 'PO Date' && !f.poDate) {
-      e.poDate = 'Enter the PO date to calculate the payment due date';
+    const allDatesProvided = (value: string, count: number) =>
+      count > 0 && splitDocumentValues(value, count).every((date) => Boolean(date));
+    if (dateBasis === 'Invoice Date' && !allDatesProvided(f.invoiceDate, documentCounts.invoiceNo)) {
+      e.invoiceDate = 'Enter an invoice date for each invoice to calculate the payment due date';
+    } else if (dateBasis === 'BL Date' && !allDatesProvided(f.blDate, documentCounts.blNo)) {
+      e.blDate = 'Enter a BL date for each BL to calculate the payment due date';
+    } else if (dateBasis === 'PO Date' && !allDatesProvided(f.poDate, documentCounts.poNo)) {
+      e.poDate = 'Enter a PO date for each PO to calculate the payment due date';
     } else if (dateBasis === 'Receipt Date' && !f.receiptDate) {
       e.receiptDate = 'Select the date of receipt to calculate the payment due date';
     }
@@ -257,12 +295,17 @@ function validate(f: FormState): Record<string, string> {
    Page Component
 ═══════════════════════════════════════════════════════════════════════════ */
 export default function ShipmentEntryAndHistoryPage() {
-  const { shipments, addShipment, updateShipment, deleteShipment } = useShipments();
+  const { shipments, ready, error, addShipment, updateShipment, deleteShipment, uploadAttachment } = useShipments();
+  const { fetchWithAuth } = useAuth();
 
   const [activeTab, setActiveTab] = useState<'entry' | 'history'>('entry');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [masterOptions, setMasterOptions] = useState<Partial<Record<MasterType, MasterEntry[]>>>({});
+  const [masterDataError, setMasterDataError] = useState<string | null>(null);
 
   const [formData, setFormData] = useState<FormState>(emptyForm);
+  const [documentCounts, setDocumentCounts] = useState<DocumentCounts>(DEFAULT_DOCUMENT_COUNTS);
+  const [pendingFiles, setPendingFiles] = useState<Partial<Record<DocumentField, File>>>({});
   const [showErrors, setShowErrors] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
@@ -283,8 +326,38 @@ export default function ShipmentEntryAndHistoryPage() {
     [shipments, selectedId, previewShipment]
   );
 
-  const errors = useMemo(() => (showErrors ? validate(formData) : {}), [showErrors, formData]);
+  const activeMasterNames = (masterType: MasterType) =>
+    (masterOptions[masterType] ?? []).filter((entry) => Boolean(entry.is_active));
+  const masterSelectOptions = (masterType: MasterType): SearchableSelectOption[] =>
+    activeMasterNames(masterType).map((entry) => ({ value: entry.name, label: entry.name }));
+  const errors = useMemo(
+    () => (showErrors ? validate(formData, activeMasterNames('modes').map((entry) => entry.name), documentCounts) : {}),
+    [showErrors, formData, masterOptions, documentCounts],
+  );
   const errorCount = Object.keys(errors).length;
+
+  useEffect(() => {
+    let active = true;
+    const loadMasterOptions = async () => {
+      try {
+        const responses = await Promise.all(
+          MASTER_TYPES.map(async (masterType) => {
+            const response = await fetchWithAuth(`${BASE_URL}/api/masters/${masterType}`);
+            if (!response.ok) throw new Error(`Could not load ${MASTER_LABELS[masterType]} master data.`);
+            return [masterType, await response.json() as MasterEntry[]] as const;
+          })
+        );
+        if (active) {
+          setMasterOptions(Object.fromEntries(responses) as Record<MasterType, MasterEntry[]>);
+          setMasterDataError(null);
+        }
+      } catch (loadError) {
+        if (active) setMasterDataError(loadError instanceof Error ? loadError.message : 'Could not load master data.');
+      }
+    };
+    void loadMasterOptions();
+    return () => { active = false; };
+  }, [fetchWithAuth]);
 
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get('tab') === 'history') {
@@ -321,20 +394,65 @@ export default function ShipmentEntryAndHistoryPage() {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
+  const updateDocumentValue = (field: DocumentNumberField | DocumentDateField, index: number, value: string) => {
+    if (field.endsWith('No') && value.includes('_')) {
+      showToast('Enter one document number per field; underscores separate saved rows.');
+      return;
+    }
+    const countField = field.endsWith('No') ? field as DocumentNumberField : ({
+      poDate: 'poNo',
+      invoiceDate: 'invoiceNo',
+      blDate: 'blNo',
+      boeDate: 'boeNo',
+    } as const)[field as DocumentDateField];
+    setFormData((current) => {
+      const values = splitDocumentValues(current[field], documentCounts[countField]);
+      values[index] = value;
+      return { ...current, [field]: values.join('_') };
+    });
+  };
+
+  const changeDocumentCount = (
+    field: DocumentNumberField,
+    dateField: DocumentDateField,
+    requestedCount: number,
+    minimum: number,
+  ) => {
+    const count = Math.max(minimum, Math.min(255, Math.floor(requestedCount || minimum)));
+    setDocumentCounts((current) => ({ ...current, [field]: count }));
+    setFormData((current) => ({
+      ...current,
+      [field]: splitDocumentValues(current[field], count).join('_'),
+      [dateField]: splitDocumentValues(current[dateField], count).join('_'),
+    }));
+  };
+
+  const resetDocumentCounts = () => setDocumentCounts(DEFAULT_DOCUMENT_COUNTS);
+
   const handleFileSimulate = (
-    field: 'poDocName' | 'invoiceDocName' | 'blDocName' | 'boeDocName' | 'mawbDocName' | 'hawbDocName',
+    field: DocumentField,
     e: React.ChangeEvent<HTMLInputElement>,
   ) => {
     if (e.target.files && e.target.files[0]) {
-      const fileName = e.target.files[0].name;
+      const file = e.target.files[0];
+      const fileName = file.name;
       setField(field, fileName);
+      setPendingFiles((current) => ({ ...current, [field]: file }));
       showToast(`Attached document: ${fileName}`);
     }
   };
 
   const startEdit = (s: Shipment) => {
     setEditingId(s.id);
-    setFormData(shipmentToForm(s));
+    const editedForm = shipmentToForm(s);
+    setFormData(editedForm);
+    setDocumentCounts({
+      poNo: documentCountFromValue(editedForm.poNo, 1),
+      invoiceNo: documentCountFromValue(editedForm.invoiceNo, 1),
+      blNo: documentCountFromValue(editedForm.blNo, 0),
+      boeNo: documentCountFromValue(editedForm.boeNo, 0),
+    });
+    setPendingFiles({});
     setShowErrors(false);
     setSelectedId(null);
     setPreviewShipment(null);
@@ -345,31 +463,41 @@ export default function ShipmentEntryAndHistoryPage() {
   const cancelEdit = () => {
     setEditingId(null);
     setFormData(emptyForm);
+    resetDocumentCounts();
+    setPendingFiles({});
     setShowErrors(false);
     setActiveTab('history');
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (!deleteTarget) return;
     const { id } = deleteTarget;
-    deleteShipment(id);
-    if (selectedId === id) setSelectedId(null);
-    if (editingId === id) {
-      setEditingId(null);
-      setFormData(emptyForm);
+    try {
+      await deleteShipment(id);
+      if (selectedId === id) setSelectedId(null);
+      if (editingId === id) {
+        setEditingId(null);
+        setFormData(emptyForm);
+        resetDocumentCounts();
+        setPendingFiles({});
+      }
+      setDeleteTarget(null);
+      showToast(`Shipment ${id} deleted`);
+    } catch (deleteError) {
+      showToast(deleteError instanceof Error ? deleteError.message : 'Could not delete shipment.');
     }
-    setDeleteTarget(null);
-    showToast(`Shipment ${id} deleted`);
   };
 
   const handleClearForm = () => {
     setFormData(emptyForm);
+    resetDocumentCounts();
+    setPendingFiles({});
     setShowErrors(false);
     showToast('Form fields cleared');
   };
 
   const validateFormAndScroll = () => {
-    const errs = validate(formData);
+    const errs = validate(formData, activeMasterNames('modes').map((entry) => entry.name), documentCounts);
     if (Object.keys(errs).length > 0) {
       setShowErrors(true);
       setTimeout(() => {
@@ -383,7 +511,7 @@ export default function ShipmentEntryAndHistoryPage() {
   const handlePreview = () => {
     if (!validateFormAndScroll()) return;
     const currentId = editingId || nextShipmentId(shipments);
-    const mockPreview = formToShipment(formData, currentId, toISODate(new Date()));
+    const mockPreview = formToShipment(formData, currentId, toISODate(new Date()), undefined, selectedPaymentTerm);
     setPreviewShipment(mockPreview);
   };
 
@@ -392,40 +520,58 @@ export default function ShipmentEntryAndHistoryPage() {
     setShowSaveConfirm(true);
   };
 
-  const handleConfirmSave = () => {
+  const handleConfirmSave = async () => {
     setShowSaveConfirm(false);
+    let saved: Shipment | null = null;
+    const wasEditing = editingId !== null;
 
-    if (editingId) {
-      const prev = shipments.find((s) => s.id === editingId);
-      if (!prev) {
-        setEditingId(null);
-        showToast('That shipment no longer exists.');
-        return;
+    try {
+      let savedRecord: Shipment;
+      if (editingId) {
+        const prev = shipments.find((s) => s.id === editingId);
+        if (!prev) {
+          setEditingId(null);
+          showToast('That shipment no longer exists.');
+          return;
+        }
+        savedRecord = await updateShipment(formToShipment(formData, prev.id, prev.createdAt, prev, selectedPaymentTerm));
+      } else {
+        savedRecord = await addShipment(formToShipment(formData, '', toISODate(new Date()), undefined, selectedPaymentTerm));
       }
-      const updated = formToShipment(formData, prev.id, prev.createdAt, prev);
-      updateShipment(updated);
-      showToast(`Shipment ${updated.id} is saved`);
+      saved = savedRecord;
+
+      for (const upload of DOCUMENT_UPLOADS) {
+        const file = pendingFiles[upload.field];
+        if (!file) continue;
+        await uploadAttachment(savedRecord.id, upload.type, file);
+        setPendingFiles((current) => {
+          const next = { ...current };
+          delete next[upload.field];
+          return next;
+        });
+      }
+
+      showToast(`Shipment ${savedRecord.id} is saved`);
       setEditingId(null);
       setFormData(emptyForm);
+      resetDocumentCounts();
+      setPendingFiles({});
       setShowErrors(false);
       setActiveTab('history');
-      return;
+    } catch (saveError) {
+      if (saved && !wasEditing) setEditingId(saved.id);
+      const message = saveError instanceof Error ? saveError.message : 'Could not save shipment.';
+      showToast(saved ? `Shipment ${saved.id} was saved, but an attachment failed: ${message}` : message);
     }
-
-    const nextId = nextShipmentId(shipments);
-    const record = formToShipment(formData, nextId, toISODate(new Date()));
-    addShipment(record);
-    showToast(`Shipment ${record.id} is saved`);
-    setFormData(emptyForm);
-    setShowErrors(false);
-    setActiveTab('history');
   };
 
-  const selectedPaymentTerms = formData.paymentTermChoice === '__custom__'
-    ? formData.customPaymentTerms.trim()
-    : formData.paymentTermChoice;
+  const selectedPaymentTerms = formData.paymentTermChoice;
+  const selectedPaymentTerm = activeMasterNames('payment-terms')
+    .find((entry) => entry.name === selectedPaymentTerms);
   const paymentDueDateBasis = formData.paymentStatus === 'NOT PAID' && formData.paymentType !== 'LC'
-    ? getPaymentTermDateBasis(selectedPaymentTerms)
+    ? selectedPaymentTerm?.credit_basis
+      ? creditBasisLabel(selectedPaymentTerm.credit_basis)
+      : getPaymentTermDateBasis(selectedPaymentTerms)
     : null;
   const creditBaseISO = getPaymentBaseISO({
     invoiceDate: formData.invoiceDate,
@@ -433,10 +579,13 @@ export default function ShipmentEntryAndHistoryPage() {
     poDate: formData.poDate,
     receiptDate: formData.receiptDate,
     paymentTerms: selectedPaymentTerms,
+    creditDaysFrom: selectedPaymentTerm?.credit_basis ? creditBasisLabel(selectedPaymentTerm.credit_basis) : null,
   });
   const creditDue = getPaymentDueDate({
     paymentType: formData.paymentType,
     paymentTerms: selectedPaymentTerms,
+    creditDays: selectedPaymentTerm?.credit_days ?? null,
+    creditDaysFrom: selectedPaymentTerm?.credit_basis ? creditBasisLabel(selectedPaymentTerm.credit_basis) : null,
     invoiceDate: formData.invoiceDate,
     blDate: formData.blDate,
     poDate: formData.poDate,
@@ -456,7 +605,7 @@ export default function ShipmentEntryAndHistoryPage() {
         item.country.toLowerCase().includes(q) ||
         item.cha.toLowerCase().includes(q) ||
         item.id.toLowerCase().includes(q) ||
-        (item.otherModeDetail ?? '').toLowerCase().includes(q);
+        item.modeOfShipment.toLowerCase().includes(q);
 
       const matchMode = filterMode === 'all' || item.modeOfShipment === filterMode;
       const matchPayment = filterPayment === 'all' || item.paymentStatus === filterPayment;
@@ -508,7 +657,7 @@ export default function ShipmentEntryAndHistoryPage() {
         'ETD': s.etd || '',
         'ETA': s.eta || '',
         'Lead Time (Days)': s.leadTime,
-        'Documents Link': s.link || '-',
+        'Documents Folder': s.docsFolderPath || '-',
       };
     });
 
@@ -559,7 +708,7 @@ export default function ShipmentEntryAndHistoryPage() {
         'ETD': s.etd || '',
         'ETA': s.eta || '',
         'Lead Time': s.leadTime,
-        'Documents Link': s.link || '',
+        'Documents Folder': s.docsFolderPath || '',
       };
     });
 
@@ -582,6 +731,13 @@ export default function ShipmentEntryAndHistoryPage() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', maxWidth: "100%", margin: '0 auto', width: '100%' }}>
       <style>{PAGE_CSS}</style>
+
+      {error && (
+        <div role="alert" style={{ padding: '0.75rem 1rem', borderRadius: 8, color: 'var(--accent-red)', background: 'rgba(239,68,68,0.12)' }}>
+          Shipment data could not be loaded: {error}
+        </div>
+      )}
+      {!ready && <div role="status">Loading shipments…</div>}
 
       {/* ── Top-Right Toast Notification ── */}
       {toastMessage && (
@@ -743,31 +899,48 @@ export default function ShipmentEntryAndHistoryPage() {
             </div>
           )}
 
+          {masterDataError && (
+            <div role="alert" style={{
+              padding: '0.7rem 1rem', borderRadius: 10, background: 'rgba(239,68,68,0.12)',
+              border: '1px solid var(--accent-red)', color: 'var(--accent-red)',
+              fontSize: 'var(--font-size-body-compact)', fontWeight: 650,
+            }}>
+              {masterDataError} Check that the master tables are installed, then refresh this page.
+            </div>
+          )}
+
           <Section icon={<Building2 size={16} color="var(--accent-blue)" />} tint="#3b82f618" title="Supplier & Purchase Order">
             <div style={gridStyle}>
               <Field label="Supplier Name" required id="supplier" error={errors.supplier}>
-                <input
-                  type="text"
-                  placeholder="e.g. Bosch GmbH, Siemens AG, ABB Ltd"
+                <SearchableSelect
+                  ariaLabel="Supplier Name"
                   value={formData.supplier}
-                  onChange={(e) => setField('supplier', e.target.value)}
+                  onChange={(value) => setField('supplier', value)}
+                  options={masterSelectOptions('suppliers')}
+                  placeholder="Search suppliers"
                   style={withError(inputStyle, errors.supplier)}
                 />
+                {!activeMasterNames('suppliers').length && <MasterSetupLink masterType="suppliers" />}
               </Field>
 
-              <Field label="PO Number" required id="poNo" error={errors.poNo}>
-                <input
-                  type="text"
-                  placeholder="e.g. PO/2026/04-0187"
-                  value={formData.poNo}
-                  onChange={(e) => setField('poNo', e.target.value)}
-                  style={withError(inputStyle, errors.poNo)}
-                />
-              </Field>
-
-              <Field label="PO Date" required={paymentDueDateBasis === 'PO Date'} id="poDate" error={errors.poDate}>
-                <DateField value={formData.poDate} onChange={(v) => setField('poDate', v)} invalid={!!errors.poDate} />
-              </Field>
+              <DocumentEntryFields
+                title="Purchase Orders"
+                numberLabel="PO number"
+                dateLabel="PO date"
+                id="poNo"
+                count={documentCounts.poNo}
+                minimum={1}
+                required
+                numberValues={splitDocumentValues(formData.poNo, documentCounts.poNo)}
+                dateValues={splitDocumentValues(formData.poDate, documentCounts.poNo)}
+                error={errors.poNo ?? errors.poDate}
+                numberError={errors.poNo}
+                dateRequired={paymentDueDateBasis === 'PO Date'}
+                dateError={errors.poDate}
+                onCountChange={(count) => changeDocumentCount('poNo', 'poDate', count, 1)}
+                onNumberChange={(index, value) => updateDocumentValue('poNo', index, value)}
+                onDateChange={(index, value) => updateDocumentValue('poDate', index, value)}
+              />
 
               <Field label="PO Document Attachment">
                 <FileUploadZone
@@ -782,28 +955,35 @@ export default function ShipmentEntryAndHistoryPage() {
           <Section icon={<Receipt size={16} color="var(--accent-purple)" />} tint="#8b5cf618" title="Material Description & Commercial Invoice" delay={1}>
             <div style={gridStyle}>
               <Field label="Material / Product Description">
-                <input
-                  type="text"
-                  placeholder="e.g. Hydraulic Actuators, Silicon Carbide Grit"
+                <SearchableSelect
+                  ariaLabel="Material / Product Description"
                   value={formData.material}
-                  onChange={(e) => setField('material', e.target.value)}
+                  onChange={(value) => setField('material', value)}
+                  options={masterSelectOptions('materials')}
+                  placeholder="Search materials"
                   style={inputStyle}
                 />
+                {!activeMasterNames('materials').length && <MasterSetupLink masterType="materials" />}
               </Field>
 
-              <Field label="Invoice Number" required id="invoiceNo" error={errors.invoiceNo}>
-                <input
-                  type="text"
-                  placeholder="e.g. INV-BOSCH-2026-0412"
-                  value={formData.invoiceNo}
-                  onChange={(e) => setField('invoiceNo', e.target.value)}
-                  style={withError(inputStyle, errors.invoiceNo)}
-                />
-              </Field>
-
-              <Field label="Invoice Date" required={paymentDueDateBasis === 'Invoice Date'} id="invoiceDate" error={errors.invoiceDate}>
-                <DateField value={formData.invoiceDate} onChange={(v) => setField('invoiceDate', v)} invalid={!!errors.invoiceDate} />
-              </Field>
+              <DocumentEntryFields
+                title="Invoices"
+                numberLabel="Invoice number"
+                dateLabel="Invoice date"
+                id="invoiceNo"
+                count={documentCounts.invoiceNo}
+                minimum={1}
+                required
+                numberValues={splitDocumentValues(formData.invoiceNo, documentCounts.invoiceNo)}
+                dateValues={splitDocumentValues(formData.invoiceDate, documentCounts.invoiceNo)}
+                error={errors.invoiceNo ?? errors.invoiceDate}
+                numberError={errors.invoiceNo}
+                dateRequired={paymentDueDateBasis === 'Invoice Date'}
+                dateError={errors.invoiceDate}
+                onCountChange={(count) => changeDocumentCount('invoiceNo', 'invoiceDate', count, 1)}
+                onNumberChange={(index, value) => updateDocumentValue('invoiceNo', index, value)}
+                onDateChange={(index, value) => updateDocumentValue('invoiceDate', index, value)}
+              />
 
               <Field label="Invoice Document File">
                 <FileUploadZone
@@ -818,64 +998,58 @@ export default function ShipmentEntryAndHistoryPage() {
           <Section icon={<Navigation size={16} color="var(--accent-teal)" />} tint="#06b6d418" title="Mode of Shipment & Freight Documents" delay={2}>
             <div style={gridStyle}>
               <div style={{ gridColumn: '1 / -1' }}>
-                <label style={labelStyle}>Mode of Shipment</label>
-                <Segmented<ShipmentMode>
+                <label style={labelStyle}>Mode of Shipment <span style={{ color: 'var(--accent-red)' }}>*</span></label>
+                <SearchableSelect
+                  ariaLabel="Mode of Shipment"
                   value={formData.modeOfShipment}
-                  onChange={(v) => setField('modeOfShipment', v)}
-                  options={[
-                    { id: 'Sea', label: 'Sea Freight', icon: <Ship size={16} />, color: 'var(--accent-blue)' },
-                    { id: 'Air', label: 'Air Cargo', icon: <Plane size={16} />, color: 'var(--accent-teal)' },
-                    { id: 'Others', label: 'Others', icon: <Package size={16} />, color: 'var(--accent-purple)' },
-                  ]}
+                  onChange={(value) => setField('modeOfShipment', value as ShipmentMode)}
+                  options={masterSelectOptions('modes')}
+                  placeholder="Search shipment modes"
+                  style={selectStyle}
                 />
+                {!activeMasterNames('modes').length && <MasterSetupLink masterType="modes" />}
+                {errors.modeOfShipment && <div style={{ ...errorTextStyle }}>{errors.modeOfShipment}</div>}
               </div>
 
-              {formData.modeOfShipment === 'Others' && (
-                <Field label="Specify Mode of Shipment" required id="otherModeDetail" error={errors.otherModeDetail}>
-                  <input
-                    type="text"
-                    placeholder="e.g. Courier, Road / Truck, Rail, Hand carry"
-                    value={formData.otherModeDetail}
-                    onChange={(e) => setField('otherModeDetail', e.target.value)}
-                    style={withError(inputStyle, errors.otherModeDetail)}
-                    autoFocus
-                  />
-                </Field>
-              )}
-
               <Field label="Port of Loading / Airport">
-                <input
-                  type="text"
-                  placeholder="e.g. Hamburg, Rotterdam, Shanghai"
+                <SearchableSelect
+                  ariaLabel="Port of Loading / Airport"
                   value={formData.portOfLoading}
-                  onChange={(e) => setField('portOfLoading', e.target.value)}
+                  onChange={(value) => setField('portOfLoading', value)}
+                  options={masterSelectOptions('ports')}
+                  placeholder="Search ports"
                   style={inputStyle}
                 />
               </Field>
 
               <Field label="Port of Landing">
-                <input
-                  type="text"
-                  placeholder="e.g. Chennai Port, Nhava Sheva"
+                <SearchableSelect
+                  ariaLabel="Port of Landing"
                   value={formData.portOfLanding}
-                  onChange={(e) => setField('portOfLanding', e.target.value)}
+                  onChange={(value) => setField('portOfLanding', value)}
+                  options={masterSelectOptions('ports')}
+                  placeholder="Search ports"
                   style={inputStyle}
                 />
               </Field>
 
-              <Field label="Bill of Lading (BL) No">
-                <input
-                  type="text"
-                  placeholder="e.g. MAEU726491835, HLCU835720194"
-                  value={formData.blNo}
-                  onChange={(e) => setField('blNo', e.target.value)}
-                  style={inputStyle}
-                />
-              </Field>
-
-              <Field label="BL Date" required={paymentDueDateBasis === 'BL Date'} id="blDate" error={errors.blDate}>
-                <DateField value={formData.blDate} onChange={(v) => setField('blDate', v)} invalid={!!errors.blDate} />
-              </Field>
+              <DocumentEntryFields
+                title="Bills of Lading (BL)"
+                numberLabel="BL number"
+                dateLabel="BL date"
+                id="blNo"
+                count={documentCounts.blNo}
+                minimum={0}
+                numberValues={splitDocumentValues(formData.blNo === 'BL-PENDING' ? '' : formData.blNo, documentCounts.blNo)}
+                dateValues={splitDocumentValues(formData.blDate, documentCounts.blNo)}
+                error={errors.blNo ?? errors.blDate}
+                numberError={errors.blNo}
+                dateRequired={paymentDueDateBasis === 'BL Date'}
+                dateError={errors.blDate}
+                onCountChange={(count) => changeDocumentCount('blNo', 'blDate', count, 0)}
+                onNumberChange={(index, value) => updateDocumentValue('blNo', index, value)}
+                onDateChange={(index, value) => updateDocumentValue('blDate', index, value)}
+              />
 
               <Field label="BL Document File">
                 <FileUploadZone
@@ -926,51 +1100,56 @@ export default function ShipmentEntryAndHistoryPage() {
           <Section icon={<ShieldCheck size={16} color="var(--accent-green)" />} tint="#10b98118" title="Customs Clearance, BOE & CHA" delay={3}>
             <div style={gridStyle}>
               <Field label="Custom House Agent (CHA)">
-                <input
-                  type="text"
-                  placeholder="e.g. Kuehne + Nagel India, DHL Global Forwarding"
+                <SearchableSelect
+                  ariaLabel="Custom House Agent (CHA)"
                   value={formData.cha}
-                  onChange={(e) => setField('cha', e.target.value)}
+                  onChange={(value) => setField('cha', value)}
+                  options={masterSelectOptions('chas')}
+                  placeholder="Search CHA agents"
                   style={inputStyle}
                 />
+                {!activeMasterNames('chas').length && <MasterSetupLink masterType="chas" />}
               </Field>
 
               <Field label="Document Status">
-                <select
+                <SearchableSelect
+                  ariaLabel="Document Status"
                   value={formData.documentStatus}
-                  onChange={(e) => setField('documentStatus', e.target.value as DocumentStatus)}
+                  onChange={(value) => setField('documentStatus', value as DocumentStatus)}
+                  options={['Pending', 'Received', 'In Process', 'Completed'].map((value) => ({ value, label: value }))}
+                  placeholder="Search document statuses"
                   style={selectStyle}
-                >
-                  <option value="Pending">Pending</option>
-                  <option value="Received">Received</option>
-                  <option value="In Process">In Process</option>
-                  <option value="Completed">Completed</option>
-                </select>
+                />
               </Field>
 
               <Field label="Country of Origin">
-                <input
-                  type="text"
-                  placeholder="e.g. Germany, Japan, United States, Italy"
+                <SearchableSelect
+                  ariaLabel="Country of Origin"
                   value={formData.country}
-                  onChange={(e) => setField('country', e.target.value)}
+                  onChange={(value) => setField('country', value)}
+                  options={masterSelectOptions('countries')}
+                  placeholder="Search countries"
                   style={inputStyle}
                 />
               </Field>
 
-              <Field label="BOE (Bill of Entry) Number">
-                <input
-                  type="text"
-                  placeholder="e.g. BOE/2026/3847291"
-                  value={formData.boeNo}
-                  onChange={(e) => setField('boeNo', e.target.value)}
-                  style={inputStyle}
-                />
-              </Field>
-
-              <Field label="BOE Date">
-                <DateField value={formData.boeDate} onChange={(v) => setField('boeDate', v)} />
-              </Field>
+              <DocumentEntryFields
+                title="Bills of Entry (BOE)"
+                numberLabel="BOE number"
+                dateLabel="BOE date"
+                id="boeNo"
+                count={documentCounts.boeNo}
+                minimum={0}
+                numberValues={splitDocumentValues(formData.boeNo === 'BOE-PENDING' ? '' : formData.boeNo, documentCounts.boeNo)}
+                dateValues={splitDocumentValues(formData.boeDate, documentCounts.boeNo)}
+                error={errors.boeNo ?? errors.boeDate}
+                numberError={errors.boeNo}
+                dateRequired={false}
+                dateError={errors.boeDate}
+                onCountChange={(count) => changeDocumentCount('boeNo', 'boeDate', count, 0)}
+                onNumberChange={(index, value) => updateDocumentValue('boeNo', index, value)}
+                onDateChange={(index, value) => updateDocumentValue('boeDate', index, value)}
+              />
 
               <Field label="BOE Document Attachment">
                 <FileUploadZone
@@ -986,42 +1165,25 @@ export default function ShipmentEntryAndHistoryPage() {
             <div style={gridStyle}>
               <div>
                 <label style={labelStyle}>Payment Type</label>
-                <Segmented<PaymentType>
-                  value={formData.paymentType}
-                  onChange={(v) => setField('paymentType', v)}
-                  options={[
-                    { id: 'LC', label: 'LC', icon: <FileText size={16} />, color: 'var(--accent-orange)' },
-                    { id: 'Others', label: 'Others', icon: <Truck size={16} />, color: 'var(--accent-blue)' },
-                  ]}
-                />
+                <div style={{ ...inputStyle, minHeight: 40, display: 'flex', alignItems: 'center' }}>
+                  {selectedPaymentTerm?.payment_type === 'LC' ? 'LC' : 'Others'}
+                </div>
               </div>
 
               <Field label="Payment Terms" required id="paymentTerms" error={errors.paymentTerms}>
-                <select
+                <SearchableSelect
+                  ariaLabel="Payment Terms"
                   value={formData.paymentTermChoice}
-                  onChange={(e) => {
-                    const value = e.target.value;
+                  onChange={(value) => {
                     setField('paymentTermChoice', value);
-                    if (value === 'LC') setField('paymentType', 'LC');
-                    else if (value && value !== '__custom__') setField('paymentType', 'Others');
+                    const selectedTerm = activeMasterNames('payment-terms').find((entry) => entry.name === value);
+                    setField('paymentType', selectedTerm?.payment_type === 'LC' ? 'LC' : 'Others');
                   }}
+                  options={masterSelectOptions('payment-terms')}
+                  placeholder="Search payment terms"
                   style={withError(selectStyle, errors.paymentTerms)}
-                >
-                  <option value="">Select payment terms</option>
-                  {PAYMENT_TERM_OPTIONS.map((term) => (
-                    <option key={term} value={term}>{term}</option>
-                  ))}
-                  <option value="__custom__">Other — enter custom terms</option>
-                </select>
-                {formData.paymentTermChoice === '__custom__' && (
-                  <input
-                    type="text"
-                    value={formData.customPaymentTerms}
-                    onChange={(e) => setField('customPaymentTerms', e.target.value)}
-                    placeholder="Enter customer-specific payment terms"
-                    style={{ ...withError(inputStyle, errors.paymentTerms), marginTop: 8 }}
-                  />
-                )}
+                />
+                {!activeMasterNames('payment-terms').length && <MasterSetupLink masterType="payment-terms" />}
               </Field>
 
               {paymentDueDateBasis === 'Receipt Date' && (
@@ -1052,16 +1214,16 @@ export default function ShipmentEntryAndHistoryPage() {
                 </div>
               </Field>
 
-              <Field label="PRW / Payment Status">
-                <select
+              <Field label="PRW / Payment Status" required id="paymentStatus" error={errors.paymentStatus}>
+                <SearchableSelect
+                  ariaLabel="PRW / Payment Status"
                   value={formData.paymentStatus}
-                  onChange={(e) => setField('paymentStatus', e.target.value as PaymentStatus)}
+                  onChange={(value) => setField('paymentStatus', value as PaymentStatus)}
+                  options={masterSelectOptions('prw')}
+                  placeholder="Search PRW / payment statuses"
                   style={selectStyle}
-                >
-                  {PAYMENT_STATUSES.map((status) => (
-                    <option key={status} value={status}>{status}</option>
-                  ))}
-                </select>
+                />
+                {!activeMasterNames('prw').length && <MasterSetupLink masterType="prw" />}
               </Field>
 
               {paymentDueDateBasis && creditDue && selectedPaymentTerms && (
@@ -1084,25 +1246,23 @@ export default function ShipmentEntryAndHistoryPage() {
           <Section icon={<Calendar size={16} color="var(--accent-blue)" />} tint="#3b82f618" title="Material Status, Arrival Date & Documents Link" delay={5}>
             <div style={gridStyle}>
               <Field label="Material Status">
-                <select
+                <SearchableSelect
+                  ariaLabel="Material Status"
                   value={formData.materialStatus}
-                  onChange={(e) => setField('materialStatus', e.target.value as MaterialStatus)}
+                  onChange={(value) => setField('materialStatus', value as MaterialStatus)}
+                  options={['Pending Shipment', 'In Transit', 'At Port', 'Customs Clearance', 'Arrived'].map((value) => ({ value, label: value }))}
+                  placeholder="Search material statuses"
                   style={selectStyle}
-                >
-                  <option value="Pending Shipment">Pending Shipment</option>
-                  <option value="In Transit">In Transit</option>
-                  <option value="At Port">At Port</option>
-                  <option value="Customs Clearance">Customs Clearance</option>
-                  <option value="Arrived">Arrived</option>
-                </select>
+                />
               </Field>
 
               <Field label="Warehouse Name">
-                <input
-                  type="text"
-                  placeholder="Enter the warehouse where the shipment will arrive"
+                <SearchableSelect
+                  ariaLabel="Warehouse Name"
                   value={formData.warehouseName}
-                  onChange={(e) => setField('warehouseName', e.target.value)}
+                  onChange={(value) => setField('warehouseName', value)}
+                  options={masterSelectOptions('warehouses')}
+                  placeholder="Search warehouses"
                   style={inputStyle}
                 />
               </Field>
@@ -1146,15 +1306,15 @@ export default function ShipmentEntryAndHistoryPage() {
                 />
               </Field>
 
-              <Field label="Documents Link (PDF)" span>
+              <Field label="Documents Folder (server managed)" span>
                 <input
-                  type="url"
-                  placeholder="https://…/shipment-documents.pdf"
+                  type="text"
+                  placeholder="Assigned when the shipment is saved"
                   value={formData.link}
-                  onChange={(e) => setField('link', e.target.value)}
+                  readOnly
                   style={inputStyle}
                 />
-                <div style={hintStyle}>Link to the PDF / document folder for this shipment. This is not a tracking link.</div>
+                <div style={hintStyle}>Uploaded documents are stored in this server-managed folder.</div>
               </Field>
             </div>
           </Section>
@@ -1330,45 +1490,58 @@ export default function ShipmentEntryAndHistoryPage() {
             >
               <div>
                 <label style={{ ...labelStyle, marginBottom: 2 }}>Mode</label>
-                <select value={filterMode} onChange={(e) => setFilterMode(e.target.value)} style={filterSelectStyle}>
-                  <option value="all">All Modes</option>
-                  <option value="Sea">Sea Freight</option>
-                  <option value="Air">Air Cargo</option>
-                  <option value="Others">Others</option>
-                </select>
+                <SearchableSelect
+                  ariaLabel="Filter by mode"
+                  value={filterMode}
+                  onChange={setFilterMode}
+                  placeholder="Search modes"
+                  options={[{ value: 'all', label: 'All Modes' }, ...Array.from(new Set(shipments.map((shipment) => shipment.modeOfShipment)))
+                    .sort((left, right) => left.localeCompare(right))
+                    .map((mode) => ({ value: mode, label: mode }))]}
+                  style={filterSelectStyle}
+                />
               </div>
 
               <div>
                 <label style={{ ...labelStyle, marginBottom: 2 }}>PRW Status</label>
-                <select value={filterPayment} onChange={(e) => setFilterPayment(e.target.value)} style={filterSelectStyle}>
-                  <option value="all">All PRW statuses</option>
-                  {PAYMENT_STATUSES.map((status) => (
-                    <option key={status} value={status}>{status}</option>
-                  ))}
-                </select>
+                <SearchableSelect
+                  ariaLabel="Filter by PRW status"
+                  value={filterPayment}
+                  onChange={setFilterPayment}
+                  placeholder="Search PRW statuses"
+                  options={[{ value: 'all', label: 'All PRW statuses' }, ...PAYMENT_STATUSES.map((value) => ({ value, label: value }))]}
+                  style={filterSelectStyle}
+                />
               </div>
 
               <div>
                 <label style={{ ...labelStyle, marginBottom: 2 }}>Document Status</label>
-                <select value={filterDocStatus} onChange={(e) => setFilterDocStatus(e.target.value)} style={filterSelectStyle}>
-                  <option value="all">All Document Statuses</option>
-                  <option value="Pending">Pending</option>
-                  <option value="Received">Received</option>
-                  <option value="In Process">In Process</option>
-                  <option value="Completed">Completed</option>
-                </select>
+                <SearchableSelect
+                  ariaLabel="Filter by document status"
+                  value={filterDocStatus}
+                  onChange={setFilterDocStatus}
+                  placeholder="Search document statuses"
+                  options={['all', 'Pending', 'Received', 'In Process', 'Completed'].map((value) => ({
+                    value,
+                    label: value === 'all' ? 'All Document Statuses' : value,
+                  }))}
+                  style={filterSelectStyle}
+                />
               </div>
 
               <div>
                 <label style={{ ...labelStyle, marginBottom: 2 }}>Material Status</label>
-                <select value={filterMaterialStatus} onChange={(e) => setFilterMaterialStatus(e.target.value)} style={filterSelectStyle}>
-                  <option value="all">All Material Statuses</option>
-                  <option value="Pending Shipment">Pending Shipment</option>
-                  <option value="In Transit">In Transit</option>
-                  <option value="At Port">At Port</option>
-                  <option value="Customs Clearance">Customs Clearance</option>
-                  <option value="Arrived">Arrived</option>
-                </select>
+                <SearchableSelect
+                  ariaLabel="Filter by material status"
+                  value={filterMaterialStatus}
+                  onChange={setFilterMaterialStatus}
+                  placeholder="Search material statuses"
+                  options={['all', 'Pending Shipment', 'In Transit', 'At Port', 'Customs Clearance', 'Arrived'].map((value) => ({
+                    value,
+                    label: value === 'all' ? 'All Material Statuses' : value,
+                  }))}
+                  style={filterSelectStyle}
+                />
               </div>
             </div>
           </div>
@@ -1726,6 +1899,8 @@ function ShipmentDrawer({
   onEdit: () => void;
   onDelete: () => void;
 }) {
+  const { fetchWithAuth } = useAuth();
+  const [documentError, setDocumentError] = useState<string | null>(null);
   const due = getPaymentDueDate(s);
   const period = getPaymentPeriod(s);
   const daysLeft = getDaysUntilDue(s);
@@ -1739,6 +1914,34 @@ function ShipmentDrawer({
     { label: 'BOE', doc: s.boeDocument },
   ];
   const attached = docs.filter((d) => d.doc);
+
+  const openDocument = async (event: React.MouseEvent<HTMLAnchorElement>, url: string) => {
+    event.preventDefault();
+    setDocumentError(null);
+    const documentWindow = window.open('', '_blank');
+    if (!documentWindow) {
+      setDocumentError('Allow pop-ups to open this document.');
+      return;
+    }
+    documentWindow.opener = null;
+    try {
+      const response = await fetchWithAuth(url);
+      if (!response.ok) {
+        const detail = await response.json().catch(() => null);
+        throw new Error(
+          detail && typeof detail.detail === 'string'
+            ? detail.detail
+            : 'Could not open this document.',
+        );
+      }
+      const objectUrl = URL.createObjectURL(await response.blob());
+      documentWindow.location.href = objectUrl;
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+    } catch (openError) {
+      documentWindow.close();
+      setDocumentError(openError instanceof Error ? openError.message : 'Could not open this document.');
+    }
+  };
 
   return (
     <>
@@ -1918,7 +2121,7 @@ function ShipmentDrawer({
 
           <DetailGroup title="Documents & Attachments">
             <div style={{ gridColumn: '1 / -1', display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-              {attached.length === 0 && !s.link && <span style={{ color: 'var(--text-muted)' }}>No documents attached.</span>}
+              {attached.length === 0 && <span style={{ color: 'var(--text-muted)' }}>No documents attached.</span>}
 
               {attached.map(({ label, doc }) => {
                 const openable = doc && doc.url && doc.url !== '#';
@@ -1931,7 +2134,12 @@ function ShipmentDrawer({
                   </span>
                 );
                 return openable ? (
-                  <a key={label} href={doc!.url} target="_blank" rel="noreferrer" style={{ textDecoration: 'none' }}>
+                  <a
+                    key={label}
+                    href={doc!.url}
+                    onClick={(event) => void openDocument(event, doc!.url)}
+                    style={{ textDecoration: 'none' }}
+                  >
                     {chip}
                   </a>
                 ) : (
@@ -1939,15 +2147,9 @@ function ShipmentDrawer({
                 );
               })}
 
-              {s.link && (
-                <a href={s.link} target="_blank" rel="noreferrer" style={{ textDecoration: 'none' }}>
-                  <span style={{ ...chipStyle, borderColor: 'var(--accent-blue)', color: 'var(--accent-blue)' }}>
-                    <ExternalLink size={14} />
-                    <span>Open documents link (PDF)</span>
-                  </span>
-                </a>
-              )}
             </div>
+            {documentError && <div role="alert" style={{ gridColumn: '1 / -1', color: 'var(--accent-red)' }}>{documentError}</div>}
+            {s.docsFolderPath && <Detail label="Stored folder">{s.docsFolderPath}</Detail>}
           </DetailGroup>
         </div>
       </aside>
@@ -2196,13 +2398,100 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <div className={`card fade-up${delay ? ` delay-${delay}` : ''}`} style={{ padding: '1.25rem' }}>
+    <div className={`card shipment-entry-section fade-up${delay ? ` delay-${delay}` : ''}`} style={{ padding: '1.25rem' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', marginBottom: '1rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.625rem' }}>
         <div style={{ width: 32, height: 32, borderRadius: 8, background: tint, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{icon}</div>
         <div style={{ fontSize: 'var(--font-size-body-large)', fontWeight: 700, color: 'var(--text-primary)' }}>{title}</div>
       </div>
       {children}
     </div>
+  );
+}
+
+function DocumentEntryFields({
+  title,
+  numberLabel,
+  dateLabel,
+  id,
+  count,
+  minimum,
+  required = false,
+  numberValues,
+  dateValues,
+  error,
+  numberError,
+  dateRequired,
+  dateError,
+  onCountChange,
+  onNumberChange,
+  onDateChange,
+}: {
+  title: string;
+  numberLabel: string;
+  dateLabel: string;
+  id: string;
+  count: number;
+  minimum: number;
+  required?: boolean;
+  numberValues: string[];
+  dateValues: string[];
+  error?: string;
+  numberError?: string;
+  dateRequired: boolean;
+  dateError?: string;
+  onCountChange: (count: number) => void;
+  onNumberChange: (index: number, value: string) => void;
+  onDateChange: (index: number, value: string) => void;
+}) {
+  const maxNumberLength = numberLabel === 'BOE number' ? 40 : 80;
+  return (
+    <Field label={title} required={required} id={id} error={error} span>
+      <label style={{ ...labelStyle, display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+        Number of entries
+        <input
+          type="number"
+          min={minimum}
+          max={255}
+          value={count}
+          onChange={(event) => onCountChange(Number(event.target.value))}
+          aria-label={`Number of ${title.toLowerCase()}`}
+          style={{ ...inputStyle, width: 90 }}
+        />
+        {minimum === 0 && <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>Optional</span>}
+      </label>
+      <div style={{ display: 'grid', gap: 8 }}>
+        {numberValues.map((number, index) => (
+          <div
+            key={`${id}-${index}`}
+            style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 8 }}
+          >
+            <label style={labelStyle}>
+              {numberLabel} {index + 1}{required && <span style={{ color: 'var(--accent-red)' }}> *</span>}
+              <input
+                type="text"
+                maxLength={maxNumberLength}
+                placeholder={`Enter ${numberLabel.toLowerCase()}`}
+                value={number}
+                aria-invalid={Boolean(numberError)}
+                onChange={(event) => onNumberChange(index, event.target.value)}
+                style={withError(inputStyle, numberError)}
+              />
+            </label>
+            <label style={labelStyle}>
+              {dateLabel} {index + 1}{dateRequired && <span style={{ color: 'var(--accent-red)' }}> *</span>}
+              <input
+                type="date"
+                value={dateValues[index] ?? ''}
+                aria-invalid={Boolean(dateError)}
+                onChange={(event) => onDateChange(index, event.target.value)}
+                style={withError(inputStyle, dateError)}
+              />
+            </label>
+          </div>
+        ))}
+        {count === 0 && <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-compact)' }}>No entries added.</div>}
+      </div>
+    </Field>
   );
 }
 
@@ -2237,21 +2526,25 @@ function DateField({
   value,
   onChange,
   invalid,
+  allowMultiple = false,
 }: {
   value: string;
   onChange: (v: string) => void;
   invalid?: boolean;
+  allowMultiple?: boolean;
 }) {
   return (
     <div style={{ position: 'relative' }}>
       <input
-        type="date"
+        type={allowMultiple ? 'text' : 'date'}
+        placeholder={allowMultiple ? 'YYYY-MM-DD or YYYY-MM-DD_YYYY-MM-DD' : undefined}
+        autoComplete={allowMultiple ? 'off' : undefined}
         className="sp-date"
         value={value}
         onChange={(e) => onChange(e.target.value)}
         style={withError({ ...inputStyle, paddingRight: '2.6rem' }, invalid ? 'x' : undefined)}
       />
-      <Calendar
+      {!allowMultiple && <Calendar
         size={16}
         aria-hidden="true"
         style={{
@@ -2262,7 +2555,7 @@ function DateField({
           pointerEvents: 'none',
           color: 'var(--text-secondary)',
         }}
-      />
+      />}
     </div>
   );
 }
@@ -2338,9 +2631,33 @@ function InfoBox({ children }: { children: React.ReactNode }) {
 }
 
 function ModeIcon({ mode, size }: { mode: ShipmentMode; size: number }) {
-  if (mode === 'Sea') return <Ship size={size} color="var(--accent-blue)" />;
-  if (mode === 'Air') return <Plane size={size} color="var(--accent-teal)" />;
-  return <Package size={size} color="var(--accent-purple)" />;
+  const color = mode.toLowerCase().includes('sea')
+    ? 'var(--accent-blue)'
+    : mode.toLowerCase().includes('air')
+      ? 'var(--accent-teal)'
+      : 'var(--accent-purple)';
+  return <Navigation size={size} color={color} />;
+}
+
+function creditBasisLabel(basis: string): 'Invoice Date' | 'BL Date' | 'PO Date' | 'Receipt Date' | null {
+  const labels: Record<string, 'Invoice Date' | 'BL Date' | 'PO Date' | 'Receipt Date'> = {
+    INVOICE_DATE: 'Invoice Date',
+    BL_DATE: 'BL Date',
+    PO_DATE: 'PO Date',
+    RECEIPT_DATE: 'Receipt Date',
+  };
+  return labels[basis] ?? null;
+}
+
+function MasterSetupLink({ masterType }: { masterType: MasterType }) {
+  return (
+    <Link href={MASTER_PATHS[masterType]} style={{
+      display: 'inline-block', marginTop: 4, color: 'var(--accent-blue)',
+      fontSize: 'var(--font-size-compact)', fontWeight: 650, textDecoration: 'none',
+    }}>
+      Add {MASTER_LABELS[masterType]} master values
+    </Link>
+  );
 }
 
 function PaymentBadge({ status }: { status: PaymentStatus }) {

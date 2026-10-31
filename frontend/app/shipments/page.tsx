@@ -16,7 +16,6 @@ import {
 
 import { Shipment, MaterialStatus, PaymentStatus, PAYMENT_STATUSES } from '@/types/shipment';
 import {
-  shipmentData,
   getPaymentDueDate,
   getPaymentTermsLabel,
   isPaymentCalendarEligible,
@@ -24,6 +23,7 @@ import {
   getDaysUntilDue,
 } from '@/data/shipmentData';
 import { FONT_SIZES } from '@/context/ThemeContext';
+import { useShipments } from '@/hooks/useShipments';
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Helper constants
@@ -101,12 +101,12 @@ function getFirstDayOfMonth(year: number, month: number): number {
 
 /* ── KPI Stat Card ── */
 function KpiCard({
-  icon: Icon, label, value, color, delay, pulsing,
+  icon: Icon, label, value, color, delay, total, pulsing,
 }: {
   icon: React.ElementType; label: string; value: number;
-  color: string; delay: number; pulsing?: boolean;
+  color: string; delay: number; total: number; pulsing?: boolean;
 }) {
-  const pct = Math.min((value / Math.max(shipmentData.length, 1)) * 100, 100);
+  const pct = Math.min((value / Math.max(total, 1)) * 100, 100);
   return (
     <div className={`stat-card fade-up`} style={{ animationDelay: `${delay}s` }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
@@ -418,12 +418,16 @@ function PaymentDonut({ data }: { data: Shipment[] }) {
 /* ── Shipments by Mode (Recharts Bar) ── */
 function ShipmentsByMode({ data }: { data: Shipment[] }) {
   const modeData = useMemo(() => {
-    let sea = 0, air = 0;
-    data.forEach(s => { if (s.modeOfShipment === 'Sea') sea++; else air++; });
-    return [
-      { mode: 'Sea', count: sea, color: ACCENT.blue },
-      { mode: 'Air', count: air, color: ACCENT.teal },
-    ];
+    const counts = new Map<string, number>();
+    data.forEach((shipment) => {
+      counts.set(shipment.modeOfShipment, (counts.get(shipment.modeOfShipment) ?? 0) + 1);
+    });
+    const colors = [ACCENT.blue, ACCENT.teal, ACCENT.purple];
+    return Array.from(counts, ([mode, count], index) => ({
+      mode,
+      count,
+      color: colors[index % colors.length],
+    }));
   }, [data]);
 
   return (
@@ -448,9 +452,11 @@ function ShipmentsByMode({ data }: { data: Shipment[] }) {
       }}>
         {modeData.map(m => (
           <div key={m.mode} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            {m.mode === 'Sea'
+            {m.mode.toLowerCase().includes('sea')
               ? <Anchor size={14} color={m.color} />
-              : <Plane size={14} color={m.color} />
+              : m.mode.toLowerCase().includes('air')
+                ? <Plane size={14} color={m.color} />
+                : <Package size={14} color={m.color} />
             }
             <span style={{
               fontSize: 'var(--font-size-body-small)', fontWeight: 700,
@@ -722,9 +728,11 @@ function RecentTimeline({ data }: { data: Shipment[] }) {
 
               {/* Mode icon */}
               <div style={{ marginTop: 4, color: 'var(--text-muted)' }}>
-                {s.modeOfShipment === 'Sea'
+                {s.modeOfShipment.toLowerCase().includes('sea')
                   ? <Ship size={12} />
-                  : <Plane size={12} />
+                  : s.modeOfShipment.toLowerCase().includes('air')
+                    ? <Plane size={12} />
+                    : <Package size={12} />
                 }
               </div>
             </div>
@@ -740,12 +748,13 @@ function RecentTimeline({ data }: { data: Shipment[] }) {
 ═══════════════════════════════════════════════════════════════════════════ */
 export default function ShipmentDashboardPage() {
   const [searchTerm, setSearchTerm] = useState('');
+  const { shipments, ready, error } = useShipments();
 
   /* Filtered data */
   const filtered = useMemo(() => {
-    if (!searchTerm.trim()) return shipmentData;
+    if (!searchTerm.trim()) return shipments;
     const q = searchTerm.toLowerCase();
-    return shipmentData.filter(s =>
+    return shipments.filter(s =>
       s.supplier.toLowerCase().includes(q) ||
       s.invoiceNo.toLowerCase().includes(q) ||
       s.material.toLowerCase().includes(q) ||
@@ -754,7 +763,7 @@ export default function ShipmentDashboardPage() {
       s.id.toLowerCase().includes(q) ||
       s.country.toLowerCase().includes(q)
     );
-  }, [searchTerm]);
+  }, [searchTerm, shipments]);
 
   /* KPI computations */
   const kpis = useMemo(() => {
@@ -767,6 +776,13 @@ export default function ShipmentDashboardPage() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+
+      {error && (
+        <div role="alert" style={{ padding: '0.75rem 1rem', borderRadius: 8, color: 'var(--accent-red)', background: 'rgba(239,68,68,0.12)' }}>
+          Shipment data could not be loaded: {error}
+        </div>
+      )}
+      {!ready && <div role="status">Loading shipments…</div>}
 
       {/* ── Page header ── */}
       <div style={{
@@ -872,10 +888,10 @@ export default function ShipmentDashboardPage() {
       <div className="dashboard-kpi-grid" style={{
         display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.875rem',
       }}>
-        <KpiCard icon={Package} label="Total Shipments" value={kpis.totalShipments} color={ACCENT.blue} delay={0.05} />
-        <KpiCard icon={Ship} label="In Transit" value={kpis.inTransit} color={ACCENT.orange} delay={0.1} />
-        <KpiCard icon={AlertCircle} label="Pending Payments" value={kpis.pendingPayments} color={ACCENT.red} delay={0.15} />
-        <KpiCard icon={Clock} label="Overdue Payments" value={kpis.overduePayments} color={ACCENT.red} delay={0.2} pulsing />
+        <KpiCard icon={Package} label="Total Shipments" value={kpis.totalShipments} color={ACCENT.blue} delay={0.05} total={shipments.length} />
+        <KpiCard icon={Ship} label="In Transit" value={kpis.inTransit} color={ACCENT.orange} delay={0.1} total={shipments.length} />
+        <KpiCard icon={AlertCircle} label="Pending Payments" value={kpis.pendingPayments} color={ACCENT.red} delay={0.15} total={shipments.length} />
+        <KpiCard icon={Clock} label="Overdue Payments" value={kpis.overduePayments} color={ACCENT.red} delay={0.2} total={shipments.length} pulsing />
       </div>
 
       {/* ── ROW 2: Payment Calendar + Payment Status Donut ── */}
