@@ -28,6 +28,7 @@ import {
   isPaymentOverdue,
   poDateMatchesRange,
 } from '@/data/shipmentData';
+import { getFinancialYearRange } from '@/data/financialYear';
 import { useShipments } from '@/hooks/useShipments';
 import { FONT_SIZES } from '@/context/ThemeContext';
 import { useNotifications } from '@/context/NotificationContext';
@@ -1567,6 +1568,7 @@ export default function ShipmentDashboardPage() {
   const { setNotifications } = useNotifications();
   const [searchTerm, setSearchTerm] = useState('');
   const [dashboardPoDateRange, setDashboardPoDateRange] = useState(() => getDefaultPoDateRange('year'));
+  const financialYear = useMemo(() => getFinancialYearRange(), []);
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<Date | null>(null);
 
   const [activeModal, setActiveModal] = useState<{ title: string; color: string; data: Shipment[] } | null>(null);
@@ -1682,8 +1684,11 @@ export default function ShipmentDashboardPage() {
               onClick={() => setDashboardPoDateRange(getDefaultPoDateRange('year'))}
               style={{ height: 28, padding: '0.15rem 0.5rem', border: '1px solid var(--border)', borderRadius: 6, background: 'var(--bg-secondary)', color: 'var(--text-primary)', font: 'inherit', fontSize: 'var(--font-size-compact)', fontWeight: 700, cursor: 'pointer' }}
             >
-              This year
+              This financial year
             </button>
+            <span style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-size-compact)', fontWeight: 600 }}>
+              {financialYear.label}
+            </span>
           </div>
         </div>
 

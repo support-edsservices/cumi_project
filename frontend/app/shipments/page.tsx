@@ -69,6 +69,7 @@ import { useShipments } from '@/hooks/useShipments';
 import type { ShipmentDocumentType, ShipmentImportResult } from '@/hooks/useShipments';
 import { useAuth } from '@/context/AuthContext';
 import { MASTER_LABELS, MASTER_PATHS, MASTER_TYPES, type MasterEntry, type MasterType } from '@/data/masterData';
+import { getFinancialYearRange } from '@/data/financialYear';
 import { BASE_URL } from '@/data/ENUM';
 import SearchableSelect, { type SearchableSelectOption } from '@/components/SearchableSelect';
 import {
@@ -371,6 +372,7 @@ export default function ShipmentEntryAndHistoryPage() {
   const [filterDocStatus, setFilterDocStatus] = useState('all');
   const [filterMaterialStatus, setFilterMaterialStatus] = useState('all');
   const [historyPoDateRange, setHistoryPoDateRange] = useState(() => getDefaultPoDateRange('year'));
+  const financialYear = useMemo(() => getFinancialYearRange(), []);
 
   const selectedShipment = useMemo(
     () => previewShipment ?? (shipments.find((s) => s.id === selectedId) ?? null),
@@ -2024,8 +2026,11 @@ export default function ShipmentEntryAndHistoryPage() {
                 onClick={() => setHistoryPoDateRange(getDefaultPoDateRange('year'))}
                 style={{ ...ghostButtonStyle, minHeight: 34 }}
               >
-                This year
+                This financial year
               </button>
+              <span style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-size-compact)' }}>
+                {financialYear.label}
+              </span>
               <span style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-size-compact)' }}>
                 Filter based on PO date
               </span>

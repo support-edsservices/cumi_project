@@ -11,6 +11,7 @@
 ───────────────────────────────────────────────────────────────────────────── */
 
 import { Shipment, ShipmentMode, DocumentStatus, MaterialStatus, PaymentStatus } from '../types/shipment';
+import { getFinancialYearRange } from '@/data/financialYear';
 
 export const PAYMENT_TERM_OPTIONS = [
   '2 Way',
@@ -562,10 +563,13 @@ export function toISODate(d: Date | string | undefined | null): string {
 }
 
 export function getDefaultPoDateRange(period: 'month' | 'year'): { startDate: string; endDate: string } {
+  if (period === 'year') {
+    const financialYear = getFinancialYearRange();
+    return { startDate: financialYear.startDate, endDate: financialYear.endDate };
+  }
+
   const now = new Date();
-  const start = period === 'month'
-    ? new Date(now.getFullYear(), now.getMonth(), 1)
-    : new Date(now.getFullYear(), 0, 1);
+  const start = new Date(now.getFullYear(), now.getMonth(), 1);
   return { startDate: toISODate(start), endDate: toISODate(now) };
 }
 
