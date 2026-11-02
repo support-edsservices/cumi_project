@@ -96,7 +96,7 @@ const emptyForm = {
   hawb: '',
   hawbDocName: '',
   cha: '',
-  documentStatus: 'Pending' as DocumentStatus,
+  documentStatus: 'Not Provided' as DocumentStatus,
   modeOfShipment: '' as ShipmentMode,
   boeNo: '',
   boeDate: '',
@@ -454,24 +454,7 @@ export default function ShipmentEntryAndHistoryPage() {
       values[index] = value;
       const newJoinedValue = joinDocumentValues(values);
 
-      let updatedState = { ...current, [field]: newJoinedValue };
-
-      /* Auto-fill Proforma fields if they are empty when editing Commercial Invoice fields */
-      if (field === 'invoiceNo') {
-        const pfValues = splitDocumentValues(current.proformaInvoiceNo, documentCounts.invoiceNo);
-        if (!pfValues[index] || pfValues[index].trim() === '') {
-          pfValues[index] = value;
-          updatedState.proformaInvoiceNo = joinDocumentValues(pfValues);
-        }
-      } else if (field === 'invoiceDate') {
-        const pfDates = splitDocumentValues(current.proformaInvoiceDate, documentCounts.invoiceNo);
-        if (!pfDates[index] || pfDates[index].trim() === '') {
-          pfDates[index] = value;
-          updatedState.proformaInvoiceDate = joinDocumentValues(pfDates);
-        }
-      }
-
-      return updatedState;
+      return { ...current, [field]: newJoinedValue };
     });
   };
 
@@ -1228,7 +1211,7 @@ export default function ShipmentEntryAndHistoryPage() {
                   ariaLabel="Document Status"
                   value={formData.documentStatus}
                   onChange={(value) => setField('documentStatus', value as DocumentStatus)}
-                  options={['Pending', 'Received', 'In Process', 'Completed'].map((value) => ({ value, label: value }))}
+                  options={['Provided', 'Not Provided'].map((value) => ({ value, label: value }))}
                   placeholder="Search document statuses"
                   style={selectStyle}
                 />
@@ -1290,38 +1273,6 @@ export default function ShipmentEntryAndHistoryPage() {
                     setField('paymentTermChoice', value);
                     const selectedTerm = activeMasterNames('payment-terms').find((entry) => entry.name === value);
                     setField('paymentType', selectedTerm?.payment_type === 'LC' ? 'LC' : 'Others');
-
-                    // Auto-populate Proforma Invoice if the selected payment term requires it
-                    const isPFRequired = selectedTerm?.credit_basis === 'PROFORMA_INVOICE_DATE' || hasProformaInvoiceTerm(value);
-                    if (isPFRequired) {
-                      setFormData((curr) => {
-                        const invValues = splitDocumentValues(curr.invoiceNo, documentCounts.invoiceNo);
-                        const invDates = splitDocumentValues(curr.invoiceDate, documentCounts.invoiceNo);
-                        const pfValues = splitDocumentValues(curr.proformaInvoiceNo, documentCounts.invoiceNo);
-                        const pfDates = splitDocumentValues(curr.proformaInvoiceDate, documentCounts.invoiceNo);
-
-                        let updatedPFNo = [...pfValues];
-                        let updatedPFDate = [...pfDates];
-
-                        invValues.forEach((val, i) => {
-                          if ((!updatedPFNo[i] || !updatedPFNo[i].trim()) && val.trim()) {
-                            updatedPFNo[i] = val;
-                          }
-                        });
-
-                        invDates.forEach((dt, i) => {
-                          if ((!updatedPFDate[i] || !updatedPFDate[i].trim()) && dt.trim()) {
-                            updatedPFDate[i] = dt;
-                          }
-                        });
-
-                        return {
-                          ...curr,
-                          proformaInvoiceNo: joinDocumentValues(updatedPFNo),
-                          proformaInvoiceDate: joinDocumentValues(updatedPFDate),
-                        };
-                      });
-                    }
                   }}
                   options={masterSelectOptions('payment-terms')}
                   placeholder="Search payment terms"
@@ -1453,7 +1404,7 @@ export default function ShipmentEntryAndHistoryPage() {
             </div>
           </Section>
 
-          {/* ── Updated Bottom Action Bar (Clear, Preview, Save) ── */}
+          {/* ── Bottom Action Bar (Clear, Preview, Save) ── */}
           <div
             style={{
               display: 'flex',
@@ -1690,7 +1641,7 @@ export default function ShipmentEntryAndHistoryPage() {
                   value={filterDocStatus}
                   onChange={setFilterDocStatus}
                   placeholder="Search document statuses"
-                  options={['all', 'Pending', 'Received', 'In Process', 'Completed'].map((value) => ({
+                  options={['all', 'Provided', 'Not Provided'].map((value) => ({
                     value,
                     label: value === 'all' ? 'All Document Statuses' : value,
                   }))}
@@ -3174,7 +3125,7 @@ const labelStyle: React.CSSProperties = {
   fontWeight: 700,
   textTransform: 'uppercase',
   letterSpacing: '0.05em',
-  color: 'var(--text-muted)',
+  color: 'var(--text-heading)',
   marginBottom: '0.35rem',
 };
 
