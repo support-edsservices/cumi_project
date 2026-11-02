@@ -13,23 +13,20 @@ import {
 } from 'recharts';
 import {
   Package, Ship, AlertCircle, Clock, Search, Plus,
-  ChevronLeft, ChevronRight, Anchor, Plane, FileText, X, Calendar as CalendarIcon, Filter, Globe, AlertTriangle, PackageX, ExternalLink,
+  ChevronLeft, ChevronRight, Anchor, Plane, FileText, X, Filter, PackageX, MoreVertical, ChevronDown, ChevronUp,
 } from 'lucide-react';
 
 import { Shipment, MaterialStatus, PaymentStatus, PAYMENT_STATUSES } from '@/types/shipment';
 import {
   formatDMY,
-  formatEtdEta,
   getDefaultPoDateRange,
   getDaysUntilDue,
-  getModeLabel,
   getPaymentDueDate,
   getPaymentPeriod,
   getPaymentTermsLabel,
   isPaymentCalendarEligible,
   isPaymentOverdue,
   poDateMatchesRange,
-  toISODate,
 } from '@/data/shipmentData';
 import { useShipments } from '@/hooks/useShipments';
 import { FONT_SIZES } from '@/context/ThemeContext';
@@ -209,7 +206,8 @@ function ShipmentListModal({
 }) {
   const [colFilters, setColFilters] = useState({
     shipmentId: '',
-    supplierCountry: '',
+    supplier: '',
+    country: '',
     poDate: '',
     invoiceDate: '',
     blDate: '',
@@ -220,6 +218,13 @@ function ShipmentListModal({
     materialStatus: '',
   });
 
+  // Track expanded rows for three-dot menu
+  const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
+
+  const toggleRowExpanded = (id: string) => {
+    setExpandedRows(prev => ({ ...prev, [id]: !prev[id] }));
+  };
+
   const handleFilterChange = (col: keyof typeof colFilters, val: string) => {
     setColFilters(prev => ({ ...prev, [col]: val.toLowerCase() }));
   };
@@ -229,7 +234,8 @@ function ShipmentListModal({
   const filteredModalShipments = useMemo(() => {
     return shipments.filter(s => {
       const shipmentIdStr = s.id.toLowerCase();
-      const supplierCountryStr = `${s.supplier} ${s.country || ''}`.toLowerCase();
+      const supplierStr = (s.supplier || '').toLowerCase();
+      const countryStr = (s.country || '').toLowerCase();
       const poDateStr = `${s.poNo} ${s.poDate ? formatDMY(s.poDate) : ''}`.toLowerCase();
       const invoiceDateStr = (
         `${s.invoiceNo} ${s.invoiceDate ? formatDMY(s.invoiceDate) : ''} ` +
@@ -245,7 +251,8 @@ function ShipmentListModal({
 
       return (
         shipmentIdStr.includes(colFilters.shipmentId) &&
-        supplierCountryStr.includes(colFilters.supplierCountry) &&
+        supplierStr.includes(colFilters.supplier) &&
+        countryStr.includes(colFilters.country) &&
         poDateStr.includes(colFilters.poDate) &&
         invoiceDateStr.includes(colFilters.invoiceDate) &&
         blDateStr.includes(colFilters.blDate) &&
@@ -301,7 +308,8 @@ function ShipmentListModal({
               <button
                 onClick={() => setColFilters({
                   shipmentId: '',
-                  supplierCountry: '',
+                  supplier: '',
+                  country: '',
                   poDate: '',
                   invoiceDate: '',
                   blDate: '',
@@ -343,6 +351,26 @@ function ShipmentListModal({
                     placeholder="Search..."
                     value={colFilters.shipmentId}
                     onChange={e => handleFilterChange('shipmentId', e.target.value)}
+                    style={inputFilterStyle}
+                  />
+                </th>
+                <th style={{ padding: '0.625rem 0.75rem', fontWeight: 700, color: 'var(--text-muted)', fontSize: 'var(--font-size-label)', textTransform: 'uppercase' }}>
+                  Supplier
+                  <input
+                    type="text"
+                    placeholder="Search..."
+                    value={colFilters.supplier}
+                    onChange={e => handleFilterChange('supplier', e.target.value)}
+                    style={inputFilterStyle}
+                  />
+                </th>
+                <th style={{ padding: '0.625rem 0.75rem', fontWeight: 700, color: 'var(--text-muted)', fontSize: 'var(--font-size-label)', textTransform: 'uppercase' }}>
+                  Country
+                  <input
+                    type="text"
+                    placeholder="Search..."
+                    value={colFilters.country}
+                    onChange={e => handleFilterChange('country', e.target.value)}
                     style={inputFilterStyle}
                   />
                 </th>
@@ -417,7 +445,7 @@ function ShipmentListModal({
                   />
                 </th>
                 <th style={{ padding: '0.625rem 0.75rem', fontWeight: 700, color: 'var(--text-muted)', fontSize: 'var(--font-size-label)', textTransform: 'uppercase' }}>
-                  Status
+                  Material Status
                   <input
                     type="text"
                     placeholder="Search..."
@@ -426,75 +454,137 @@ function ShipmentListModal({
                     style={inputFilterStyle}
                   />
                 </th>
+                <th style={{ padding: '0.625rem 0.75rem', textAlign: 'center', fontWeight: 700, color: 'var(--text-muted)', fontSize: 'var(--font-size-label)', textTransform: 'uppercase' }}>
+                  More
+                </th>
               </tr>
             </thead>
             <tbody>
               {filteredModalShipments.length === 0 ? (
                 <tr>
-                  <td colSpan={10} style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: 'var(--font-size-body)' }}>
+                  <td colSpan={12} style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: 'var(--font-size-body)' }}>
                     {shipments.length === 0
                       ? 'No shipments match this criteria.'
                       : 'No shipments match the applied column search filters.'}
                   </td>
                 </tr>
               ) : (
-                filteredModalShipments.map((s, idx) => (
-                  <tr key={s.id} style={{ borderBottom: '1px solid var(--border)', background: idx % 2 === 1 ? 'var(--bg-secondary)' : 'transparent' }}>
-                    <td style={{ padding: '0.625rem 0.75rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                      {s.id}
-                    </td>
-                    <td style={{ padding: '0.625rem 0.75rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                      <div>{s.supplier}</div>
-                      <div style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)', fontWeight: 500 }}>{s.country || '—'}</div>
-                    </td>
-                    <td style={{ padding: '0.625rem 0.75rem', color: 'var(--text-secondary)' }}>
-                      <div>{s.poNo}</div>
-                      <div style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)' }}>{s.poDate ? formatDMY(s.poDate) : '—'}</div>
-                    </td>
-                    <td style={{ padding: '0.625rem 0.75rem', color: 'var(--text-secondary)' }}>
-                      <div>{s.invoiceNo}</div>
-                      <div style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)' }}>{s.invoiceDate ? formatDMY(s.invoiceDate) : '—'}</div>
-                      {s.proformaInvoiceNo && (
-                        <div style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)' }}>
-                          Proforma: {s.proformaInvoiceNo} · {formatDMY(s.proformaInvoiceDate) || '—'}
-                        </div>
-                      )}
-                    </td>
-                    <td style={{ padding: '0.625rem 0.75rem', color: 'var(--text-secondary)' }}>
-                      <div>{s.blNo || '—'}</div>
-                      <div style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)' }}>{s.blDate ? formatDMY(s.blDate) : '—'}</div>
-                    </td>
-                    <td style={{ padding: '0.625rem 0.75rem', color: 'var(--text-secondary)' }}>
-                      <div>ETD: {s.etd ? formatDMY(s.etd) : '—'}</div>
-                      <div>ETA: {s.eta ? formatDMY(s.eta) : '—'}</div>
-                      {s.arrivedDate && <div>Arrived: {formatDMY(s.arrivedDate)}</div>}
-                    </td>
-                    <td style={{ padding: '0.625rem 0.75rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-                      {getPaymentTermsLabel(s)}
-                    </td>
-                    <td style={{ padding: '0.625rem 0.75rem', color: 'var(--text-secondary)' }}>
-                      {getPaymentDueDate(s) ? formatDMY(getPaymentDueDate(s)) : '—'}
-                    </td>
-                    <td style={{ padding: '0.625rem 0.75rem' }}>
-                      <span style={{
-                        display: 'inline-block', padding: '3px 8px', borderRadius: 8,
-                        background: `${PAYMENT_STATUS_COLOR[s.paymentStatus]}18`, color: PAYMENT_STATUS_COLOR[s.paymentStatus],
-                        fontWeight: 800, fontSize: 'var(--font-size-tiny)',
-                      }}>
-                        {s.paymentStatus}
-                      </span>
-                    </td>
-                    <td style={{ padding: '0.625rem 0.75rem' }}>
-                      <span style={{
-                        display: 'inline-block', padding: '3px 8px', borderRadius: 8,
-                        background: `${MATERIAL_STATUS_COLOR[s.materialStatus]}18`, color: MATERIAL_STATUS_COLOR[s.materialStatus],
-                        fontWeight: 800, fontSize: 'var(--font-size-tiny)',
-                      }}>
-                        {s.materialStatus}
-                      </span>
-                    </td>
-                  </tr>
-                ))
+                filteredModalShipments.map((s, idx) => {
+                  const isExpanded = !!expandedRows[s.id];
+                  return (
+                    <tr key={s.id} style={{ borderBottom: '1px solid var(--border)', background: idx % 2 === 1 ? 'var(--bg-secondary)' : 'transparent' }}>
+                      <td style={{ padding: '0.625rem 0.75rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                        {s.id}
+                      </td>
+                      <td style={{ padding: '0.625rem 0.75rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                        {s.supplier}
+                      </td>
+                      <td style={{ padding: '0.625rem 0.75rem', color: 'var(--text-secondary)' }}>
+                        {s.country || '—'}
+                      </td>
+                      <td style={{ padding: '0.625rem 0.75rem', color: 'var(--text-secondary)' }}>
+                        <div>{s.poNo}</div>
+                        <div style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)' }}>{s.poDate ? formatDMY(s.poDate) : '—'}</div>
+                      </td>
+                      <td style={{ padding: '0.625rem 0.75rem', color: 'var(--text-secondary)' }}>
+                        <div>{s.invoiceNo}</div>
+                        <div style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)' }}>{s.invoiceDate ? formatDMY(s.invoiceDate) : '—'}</div>
+                        {s.proformaInvoiceNo && (
+                          <div style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)' }}>
+                            Proforma: {s.proformaInvoiceNo} · {formatDMY(s.proformaInvoiceDate) || '—'}
+                          </div>
+                        )}
+                      </td>
+                      <td style={{ padding: '0.625rem 0.75rem', color: 'var(--text-secondary)' }}>
+                        <div>{s.blNo || '—'}</div>
+                        <div style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)' }}>{s.blDate ? formatDMY(s.blDate) : '—'}</div>
+                      </td>
+                      <td style={{ padding: '0.625rem 0.75rem', color: 'var(--text-secondary)' }}>
+                        <div>ETD: {s.etd ? formatDMY(s.etd) : '—'}</div>
+                        <div>ETA: {s.eta ? formatDMY(s.eta) : '—'}</div>
+                        {s.arrivedDate && <div>Arrived: {formatDMY(s.arrivedDate)}</div>}
+                      </td>
+                      <td style={{ padding: '0.625rem 0.75rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                        {getPaymentTermsLabel(s)}
+                      </td>
+                      <td style={{ padding: '0.625rem 0.75rem', color: 'var(--text-secondary)' }}>
+                        {getPaymentDueDate(s) ? formatDMY(getPaymentDueDate(s)) : '—'}
+                      </td>
+                      <td style={{ padding: '0.625rem 0.75rem' }}>
+                        <span style={{
+                          display: 'inline-block', padding: '3px 8px', borderRadius: 8,
+                          background: `${PAYMENT_STATUS_COLOR[s.paymentStatus]}18`, color: PAYMENT_STATUS_COLOR[s.paymentStatus],
+                          fontWeight: 800, fontSize: 'var(--font-size-tiny)',
+                        }}>
+                          {s.paymentStatus}
+                        </span>
+                      </td>
+                      <td style={{ padding: '0.625rem 0.75rem' }}>
+                        <span style={{
+                          display: 'inline-block', padding: '3px 8px', borderRadius: 8,
+                          background: `${MATERIAL_STATUS_COLOR[s.materialStatus]}18`, color: MATERIAL_STATUS_COLOR[s.materialStatus],
+                          fontWeight: 800, fontSize: 'var(--font-size-tiny)',
+                        }}>
+                          {s.materialStatus}
+                        </span>
+                      </td>
+                      <td style={{ padding: '0.625rem 0.75rem', textAlign: 'center', position: 'relative' }}>
+                        <button
+                          onClick={() => toggleRowExpanded(s.id)}
+                          style={{
+                            background: isExpanded ? 'var(--bg-card)' : 'transparent',
+                            border: '1px solid var(--border)',
+                            borderRadius: 6,
+                            padding: '4px 6px',
+                            cursor: 'pointer',
+                            color: 'var(--text-primary)',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
+                          title="View additional shipment details"
+                        >
+                          <MoreVertical size={16} />
+                        </button>
+
+                        {/* Three-Dot Append Parameters Overlay Dropdown */}
+                        {isExpanded && (
+                          <div style={{
+                            position: 'absolute', right: '0.75rem', top: '2.5rem',
+                            background: 'var(--bg-card)', border: '1px solid var(--border)',
+                            borderRadius: 8, boxShadow: '0 10px 25px rgba(0,0,0,0.3)',
+                            padding: '0.85rem', zIndex: 10, width: 280, textAlign: 'left',
+                            fontSize: 'var(--font-size-compact)', color: 'var(--text-primary)',
+                          }}>
+                            <div style={{ fontWeight: 800, marginBottom: 6, borderBottom: '1px solid var(--border)', paddingBottom: 4, color: ACCENT.blue }}>
+                              Additional Parameters
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 4 }}>
+                              <div><strong>Material:</strong> {s.material || '—'}</div>
+                              <div><strong>Mode of Shipment:</strong> {s.modeOfShipment}</div>
+                              <div><strong>Port of Loading:</strong> {s.portOfLoading || '—'}</div>
+                              <div><strong>Port of Landing:</strong> {s.portOfLanding || '—'}</div>
+                              <div><strong>CHA Agent:</strong> {s.cha || '—'}</div>
+                              <div><strong>BOE No:</strong> {s.boeNo || '—'}</div>
+                              <div><strong>BOE Date:</strong> {s.boeDate ? formatDMY(s.boeDate) : '—'}</div>
+                              <div><strong>Warehouse:</strong> {s.warehouseName || '—'}</div>
+                              <div><strong>Bank Ref:</strong> {s.bankReferenceNo || '—'}</div>
+                              <div><strong>Lead Time:</strong> {s.leadTime} days</div>
+                              {s.docsFolderPath && <div><strong>Folder:</strong> {s.docsFolderPath}</div>}
+                              {s.link && (
+                                <div style={{ marginTop: 4 }}>
+                                  <a href={s.link} target="_blank" rel="noopener noreferrer" style={{ color: ACCENT.blue, fontWeight: 700, textDecoration: 'none' }}>
+                                    Open Document →
+                                  </a>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -504,7 +594,7 @@ function ShipmentListModal({
   );
 }
 
-/* ── Interactive Calendar View (Due Payment Indicators + Side-by-Side Horizontal ETA Circles) ── */
+/* ── Interactive Calendar View (Top-Right Corner ETA Dots + Center Payment Bars) ── */
 function PaymentCalendar({
   data,
   selectedDate,
@@ -618,9 +708,9 @@ function PaymentCalendar({
               onClick={() => onSelectDate(cellDate)}
               style={{
                 position: 'relative',
-                minHeight: 46,
+                minHeight: 40,
                 borderRadius: 6,
-                padding: '2px',
+                padding: '4px 2px',
                 border: isSelected
                   ? `2px solid ${ACCENT.purple}`
                   : isToday
@@ -637,6 +727,7 @@ function PaymentCalendar({
                 transition: 'all 0.15s ease',
               }}
             >
+              {/* Day Number */}
               <span style={{
                 fontSize: 'var(--font-size-compact)',
                 fontWeight: isSelected || isToday ? 800 : 500,
@@ -645,16 +736,16 @@ function PaymentCalendar({
                 {day}
               </span>
 
-              {/* Side-by-Side ETA Circles Container */}
+              {/* 1. TOP-RIGHT CORNER: ETA Status Dots */}
               {cellData?.etaShipments && cellData.etaShipments.length > 0 && (
                 <div style={{
+                  position: 'absolute',
+                  top: 10,
+                  right: 4,
                   display: 'flex',
-                  flexDirection: 'row',
                   alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 3,
-                  marginTop: 2,
-                  flexWrap: 'nowrap',
+                  gap: 2,
+                  zIndex: 1,
                 }}>
                   {cellData.etaShipments.map(s => {
                     const isArrived = s.materialStatus === 'Arrived';
@@ -663,12 +754,13 @@ function PaymentCalendar({
                         key={`eta-dot-${s.id}`}
                         title={`ETA Shipment ${s.id}: ${s.materialStatus}`}
                         style={{
-                          width: 6,
-                          height: 6,
+                          width: 8,
+                          height: 8,
                           borderRadius: '50%',
                           background: isArrived ? ACCENT.green : ACCENT.red,
                           display: 'inline-block',
                           flexShrink: 0,
+                          boxShadow: '0 0 2px rgba(0,0,0,0.3)',
                         }}
                       />
                     );
@@ -676,14 +768,18 @@ function PaymentCalendar({
                 </div>
               )}
 
-              {/* Mini payment bars */}
+              {/* 2. BOTTOM CENTER: Payment Due Status Bars */}
               {cellData?.dueShipments && cellData.dueShipments.length > 0 && (
-                <div style={{ display: 'flex', gap: 2, marginTop: 2, flexWrap: 'wrap', justifyContent: 'center' }}>
+                <div style={{ display: 'flex', gap: 2, marginTop: 4, flexWrap: 'wrap', justifyContent: 'center' }}>
                   {cellData.dueShipments.map(s => (
-                    <div key={`due-${s.id}`} style={{
-                      width: 8, height: 3, borderRadius: 1,
-                      background: PAYMENT_STATUS_COLOR[s.paymentStatus],
-                    }} />
+                    <div
+                      key={`due-${s.id}`}
+                      title={`Payment Due: ${s.paymentStatus}`}
+                      style={{
+                        width: 10, height: 4, borderRadius: 1,
+                        background: PAYMENT_STATUS_COLOR[s.paymentStatus],
+                      }}
+                    />
                   ))}
                 </div>
               )}
@@ -1278,6 +1374,12 @@ function MaterialStatusBreakdown({
 
 /* ── Upcoming Due Payments Table ── */
 function DuePaymentsTable({ data }: { data: Shipment[] }) {
+  const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
+
+  const toggleRowExpanded = (id: string) => {
+    setExpandedRows(prev => ({ ...prev, [id]: !prev[id] }));
+  };
+
   const rows = useMemo(() => {
     return data
       .map(s => ({
@@ -1303,23 +1405,25 @@ function DuePaymentsTable({ data }: { data: Shipment[] }) {
       <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--font-size-body)' }}>
           <thead>
-            <tr style={{ borderBottom: '2px solid var(--border)' }}>
-              {['Supplier', 'Invoice No', 'Payment Terms', 'Due Date', 'Days Left', 'Status', 'Documents'].map(h => (
-                <th key={h} style={{
-                  padding: '0.55rem 0.875rem', textAlign: 'left',
-                  fontWeight: 700, fontSize: 'var(--font-size-small)',
-                  letterSpacing: '0.06em', textTransform: 'uppercase',
-                  color: 'var(--text-muted)', whiteSpace: 'nowrap',
-                }}>
-                  {h}
-                </th>
-              ))}
+            <tr style={{ borderBottom: '2px solid var(--border)', background: 'var(--bg-secondary)' }}>
+              <th style={{ ...cell, textAlign: 'left', fontWeight: 700, fontSize: 'var(--font-size-small)', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Shipment ID</th>
+              <th style={{ ...cell, textAlign: 'left', fontWeight: 700, fontSize: 'var(--font-size-small)', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Supplier</th>
+              <th style={{ ...cell, textAlign: 'left', fontWeight: 700, fontSize: 'var(--font-size-small)', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Country</th>
+              <th style={{ ...cell, textAlign: 'left', fontWeight: 700, fontSize: 'var(--font-size-small)', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>PO & Date</th>
+              <th style={{ ...cell, textAlign: 'left', fontWeight: 700, fontSize: 'var(--font-size-small)', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Invoice & Date</th>
+              <th style={{ ...cell, textAlign: 'left', fontWeight: 700, fontSize: 'var(--font-size-small)', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>BL & Date</th>
+              <th style={{ ...cell, textAlign: 'left', fontWeight: 700, fontSize: 'var(--font-size-small)', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>ETD / ETA / Arrival</th>
+              <th style={{ ...cell, textAlign: 'left', fontWeight: 700, fontSize: 'var(--font-size-small)', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Payment Terms</th>
+              <th style={{ ...cell, textAlign: 'left', fontWeight: 700, fontSize: 'var(--font-size-small)', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Due Date</th>
+              <th style={{ ...cell, textAlign: 'left', fontWeight: 700, fontSize: 'var(--font-size-small)', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>PRW Status</th>
+              <th style={{ ...cell, textAlign: 'left', fontWeight: 700, fontSize: 'var(--font-size-small)', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Material Status</th>
+              <th style={{ ...cell, textAlign: 'center', fontWeight: 700, fontSize: 'var(--font-size-small)', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>More</th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 && (
               <tr>
-                <td colSpan={7} style={{ ...cell, textAlign: 'center', color: 'var(--text-muted)', padding: '1.5rem' }}>
+                <td colSpan={12} style={{ ...cell, textAlign: 'center', color: 'var(--text-muted)', padding: '1.5rem' }}>
                   No payments with a due date yet.
                 </td>
               </tr>
@@ -1332,22 +1436,43 @@ function DuePaymentsTable({ data }: { data: Shipment[] }) {
 
               const daysColor = overdue ? ACCENT.red : urgent ? ACCENT.orange : ACCENT.green;
               const statusColor = PAYMENT_STATUS_COLOR[s.paymentStatus];
+              const isExpanded = !!expandedRows[s.id];
 
               return (
                 <tr key={s.id} style={{
                   borderBottom: '1px solid var(--border)',
                   background: i % 2 === 1 ? 'var(--bg-secondary)' : 'transparent',
                 }}>
+                  <td style={{ ...cell, fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
+                    {s.id}
+                  </td>
                   <td style={{ ...cell, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
                     {s.supplier}
                   </td>
                   <td style={{ ...cell, color: 'var(--text-secondary)', fontSize: 'var(--font-size-body-small)' }}>
-                    {s.invoiceNo}
+                    {s.country || '—'}
+                  </td>
+                  <td style={{ ...cell, color: 'var(--text-secondary)', fontSize: 'var(--font-size-body-small)' }}>
+                    <div>{s.poNo}</div>
+                    <div style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)' }}>{s.poDate ? formatDMY(s.poDate) : '—'}</div>
+                  </td>
+                  <td style={{ ...cell, color: 'var(--text-secondary)', fontSize: 'var(--font-size-body-small)' }}>
+                    <div>{s.invoiceNo}</div>
+                    <div style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)' }}>{s.invoiceDate ? formatDMY(s.invoiceDate) : '—'}</div>
                     {s.proformaInvoiceNo && (
                       <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-compact)' }}>
                         Proforma: {s.proformaInvoiceNo} · {formatDMY(s.proformaInvoiceDate) || '—'}
                       </div>
                     )}
+                  </td>
+                  <td style={{ ...cell, color: 'var(--text-secondary)', fontSize: 'var(--font-size-body-small)' }}>
+                    <div>{s.blNo || '—'}</div>
+                    <div style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)' }}>{s.blDate ? formatDMY(s.blDate) : '—'}</div>
+                  </td>
+                  <td style={{ ...cell, color: 'var(--text-secondary)', fontSize: 'var(--font-size-body-small)' }}>
+                    <div>ETD: {s.etd ? formatDMY(s.etd) : '—'}</div>
+                    <div>ETA: {s.eta ? formatDMY(s.eta) : '—'}</div>
+                    {s.arrivedDate && <div>Arrived: {formatDMY(s.arrivedDate)}</div>}
                   </td>
                   <td style={{ ...cell, whiteSpace: 'nowrap' }}>
                     <div style={{ color: 'var(--text-primary)', fontWeight: 600, fontSize: 'var(--font-size-body-small)' }}>
@@ -1360,21 +1485,18 @@ function DuePaymentsTable({ data }: { data: Shipment[] }) {
                     )}
                   </td>
                   <td style={{ ...cell, color: 'var(--text-secondary)', fontSize: 'var(--font-size-body-small)', whiteSpace: 'nowrap' }}>
-                    {r.dueDate ? formatDMY(r.dueDate) : '—'}
-                  </td>
-                  <td style={cell}>
+                    <div>{r.dueDate ? formatDMY(r.dueDate) : '—'}</div>
                     <span style={{
-                      display: 'inline-block', padding: '2px 10px', borderRadius: 10,
+                      display: 'inline-block', marginTop: 2, padding: '2px 8px', borderRadius: 8,
                       background: `${daysColor}18`, color: daysColor,
                       fontSize: 'var(--font-size-compact)', fontWeight: 700,
-                      whiteSpace: 'nowrap',
                     }}>
                       {overdue ? `${Math.abs(daysLeft)}d overdue` : `${daysLeft}d left`}
                     </span>
                   </td>
                   <td style={cell}>
                     <span style={{
-                      display: 'inline-block', padding: '2px 10px', borderRadius: 10,
+                      display: 'inline-block', padding: '2px 8px', borderRadius: 8,
                       background: `${statusColor}18`, color: statusColor,
                       fontSize: 'var(--font-size-compact)', fontWeight: 700,
                       whiteSpace: 'nowrap',
@@ -1383,16 +1505,66 @@ function DuePaymentsTable({ data }: { data: Shipment[] }) {
                     </span>
                   </td>
                   <td style={cell}>
-                    {s.link ? (
-                      <a href={s.link} target="_blank" rel="noopener noreferrer" style={{
-                        display: 'inline-flex', alignItems: 'center', gap: 4,
-                        color: ACCENT.blue, fontSize: 'var(--font-size-compact)',
-                        fontWeight: 600, textDecoration: 'none',
+                    <span style={{
+                      display: 'inline-block', padding: '3px 8px', borderRadius: 8,
+                      background: `${MATERIAL_STATUS_COLOR[s.materialStatus]}18`, color: MATERIAL_STATUS_COLOR[s.materialStatus],
+                      fontWeight: 800, fontSize: 'var(--font-size-tiny)',
+                    }}>
+                      {s.materialStatus}
+                    </span>
+                  </td>
+                  <td style={{ ...cell, textAlign: 'center', position: 'relative' }}>
+                    <button
+                      onClick={() => toggleRowExpanded(s.id)}
+                      style={{
+                        background: isExpanded ? 'var(--bg-card)' : 'transparent',
+                        border: '1px solid var(--border)',
+                        borderRadius: 6,
+                        padding: '4px 6px',
+                        cursor: 'pointer',
+                        color: 'var(--text-primary)',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                      title="View additional shipment details"
+                    >
+                      <MoreVertical size={16} />
+                    </button>
+
+                    {/* Three-Dot Overlay Dropdown */}
+                    {isExpanded && (
+                      <div style={{
+                        position: 'absolute', right: '0.75rem', top: '2.5rem',
+                        background: 'var(--bg-card)', border: '1px solid var(--border)',
+                        borderRadius: 8, boxShadow: '0 10px 25px rgba(0,0,0,0.3)',
+                        padding: '0.85rem', zIndex: 10, width: 280, textAlign: 'left',
+                        fontSize: 'var(--font-size-compact)', color: 'var(--text-primary)',
                       }}>
-                        <FileText size={12} /> View PDF
-                      </a>
-                    ) : (
-                      <span style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-compact)' }}>—</span>
+                        <div style={{ fontWeight: 800, marginBottom: 6, borderBottom: '1px solid var(--border)', paddingBottom: 4, color: ACCENT.blue }}>
+                          Additional Parameters
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 4 }}>
+                          <div><strong>Material:</strong> {s.material || '—'}</div>
+                          <div><strong>Mode of Shipment:</strong> {s.modeOfShipment}</div>
+                          <div><strong>Port of Loading:</strong> {s.portOfLoading || '—'}</div>
+                          <div><strong>Port of Landing:</strong> {s.portOfLanding || '—'}</div>
+                          <div><strong>CHA Agent:</strong> {s.cha || '—'}</div>
+                          <div><strong>BOE No:</strong> {s.boeNo || '—'}</div>
+                          <div><strong>BOE Date:</strong> {s.boeDate ? formatDMY(s.boeDate) : '—'}</div>
+                          <div><strong>Warehouse:</strong> {s.warehouseName || '—'}</div>
+                          <div><strong>Bank Ref:</strong> {s.bankReferenceNo || '—'}</div>
+                          <div><strong>Lead Time:</strong> {s.leadTime} days</div>
+                          {s.docsFolderPath && <div><strong>Folder:</strong> {s.docsFolderPath}</div>}
+                          {s.link && (
+                            <div style={{ marginTop: 4 }}>
+                              <a href={s.link} target="_blank" rel="noopener noreferrer" style={{ color: ACCENT.blue, fontWeight: 700, textDecoration: 'none' }}>
+                                Open Document →
+                              </a>
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     )}
                   </td>
                 </tr>
@@ -1492,19 +1664,57 @@ export default function ShipmentDashboardPage() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
 
-      {/* ── Page header ── */}
+      {/* ── Page header (With Date Range Selector at Top Row) ── */}
       <div style={{
-        display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
-        flexWrap: 'wrap', gap: '0.55rem',
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        flexWrap: 'wrap', gap: '0.75rem', marginBottom: '0.25rem',
       }}>
-        <div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', flexWrap: 'wrap' }}>
           <h2 style={{
             fontSize: 'var(--font-size-section-heading)', fontWeight: 800,
             color: 'var(--text-primary)', margin: 0,
           }}>
             Shipment Dashboard
           </h2>
+
+          {/* Start and End Date Selection moved to Top Row */}
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap',
+            background: 'var(--bg-card)', border: '1px solid var(--border)',
+            borderRadius: 8, padding: '0.25rem 0.6rem', boxShadow: 'var(--card-shadow)',
+          }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--text-secondary)', fontSize: 'var(--font-size-compact)', fontWeight: 700 }}>
+              From:
+              <input
+                type="date"
+                aria-label="Dashboard PO date from"
+                value={dashboardPoDateRange.startDate}
+                max={dashboardPoDateRange.endDate || undefined}
+                onChange={(event) => setDashboardPoDateRange((range) => ({ ...range, startDate: event.target.value }))}
+                style={{ height: 28, padding: '0.15rem 0.4rem', border: '1px solid var(--border)', borderRadius: 6, background: 'var(--bg-secondary)', color: 'var(--text-primary)', font: 'inherit', fontSize: 'var(--font-size-compact)' }}
+              />
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--text-secondary)', fontSize: 'var(--font-size-compact)', fontWeight: 700 }}>
+              To:
+              <input
+                type="date"
+                aria-label="Dashboard PO date to"
+                value={dashboardPoDateRange.endDate}
+                min={dashboardPoDateRange.startDate || undefined}
+                onChange={(event) => setDashboardPoDateRange((range) => ({ ...range, endDate: event.target.value }))}
+                style={{ height: 28, padding: '0.15rem 0.4rem', border: '1px solid var(--border)', borderRadius: 6, background: 'var(--bg-secondary)', color: 'var(--text-primary)', font: 'inherit', fontSize: 'var(--font-size-compact)' }}
+              />
+            </label>
+            <button
+              type="button"
+              onClick={() => setDashboardPoDateRange(getDefaultPoDateRange('year'))}
+              style={{ height: 28, padding: '0.15rem 0.5rem', border: '1px solid var(--border)', borderRadius: 6, background: 'var(--bg-secondary)', color: 'var(--text-primary)', font: 'inherit', fontSize: 'var(--font-size-compact)', fontWeight: 700, cursor: 'pointer' }}
+            >
+              This year
+            </button>
+          </div>
         </div>
+
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
           <Link href="/shipments?tab=history" style={{ textDecoration: 'none' }}>
             <button style={{
@@ -1552,7 +1762,7 @@ export default function ShipmentDashboardPage() {
         display: 'flex', alignItems: 'center', gap: '0.625rem',
         background: 'var(--bg-card)', border: '1px solid var(--border)',
         borderRadius: 10, padding: '0.45rem 0.875rem',
-        boxShadow: 'var(--card-shadow)',
+        boxShadow: 'var(--card-shadow)', marginBottom: '0.25rem',
       }}>
         <Search size={15} color="var(--text-muted)" />
         <input
@@ -1584,43 +1794,6 @@ export default function ShipmentDashboardPage() {
         }}>
           {filtered.length} shipment{filtered.length !== 1 ? 's' : ''}
         </span>
-      </div>
-
-      <div className="fade-up" style={{
-        display: 'flex', alignItems: 'end', flexWrap: 'wrap', gap: '0.75rem',
-        background: 'var(--bg-card)', border: '1px solid var(--border)',
-        borderRadius: 10, padding: '0.65rem 0.875rem', boxShadow: 'var(--card-shadow)',
-      }}>
-        <label style={{ display: 'grid', gap: 4, color: 'var(--text-secondary)', fontSize: 'var(--font-size-label)', fontWeight: 700 }}>
-          From Date
-          <input
-            type="date"
-            aria-label="Dashboard PO date from"
-            value={dashboardPoDateRange.startDate}
-            max={dashboardPoDateRange.endDate || undefined}
-            onChange={(event) => setDashboardPoDateRange((range) => ({ ...range, startDate: event.target.value }))}
-            style={{ minHeight: 34, minWidth: 165, padding: '0.35rem 0.55rem', border: '1px solid var(--border)', borderRadius: 7, background: 'var(--bg-secondary)', color: 'var(--text-primary)', font: 'inherit' }}
-          />
-        </label>
-        <label style={{ display: 'grid', gap: 4, color: 'var(--text-secondary)', fontSize: 'var(--font-size-label)', fontWeight: 700 }}>
-          To Date
-          <input
-            type="date"
-            aria-label="Dashboard PO date to"
-            value={dashboardPoDateRange.endDate}
-            min={dashboardPoDateRange.startDate || undefined}
-            onChange={(event) => setDashboardPoDateRange((range) => ({ ...range, endDate: event.target.value }))}
-            style={{ minHeight: 34, minWidth: 165, padding: '0.35rem 0.55rem', border: '1px solid var(--border)', borderRadius: 7, background: 'var(--bg-secondary)', color: 'var(--text-primary)', font: 'inherit' }}
-          />
-        </label>
-        <button
-          type="button"
-          onClick={() => setDashboardPoDateRange(getDefaultPoDateRange('year'))}
-          style={{ minHeight: 34, padding: '0.4rem 0.7rem', border: '1px solid var(--border)', borderRadius: 7, background: 'var(--bg-secondary)', color: 'var(--text-primary)', font: 'inherit', fontSize: 'var(--font-size-compact)', fontWeight: 700, cursor: 'pointer' }}
-        >
-          This year
-        </button>
-        
       </div>
 
       {/* ── ROW 1: KPI Summary Cards (Mobile Responsive Grid & Interactive Modals) ── */}

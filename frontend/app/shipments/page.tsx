@@ -446,12 +446,32 @@ export default function ShipmentEntryAndHistoryPage() {
       blDate: 'blNo',
       boeDate: 'boeNo',
     } as const)[field as DocumentDateField];
+
     setFormData((current) => {
       const raw = current[field];
       const base = (field === 'blNo' && raw === 'BL-PENDING') || (field === 'boeNo' && raw === 'BOE-PENDING') ? '' : raw;
       const values = splitDocumentValues(base, documentCounts[countField]);
       values[index] = value;
-      return { ...current, [field]: joinDocumentValues(values) };
+      const newJoinedValue = joinDocumentValues(values);
+
+      let updatedState = { ...current, [field]: newJoinedValue };
+
+      /* Auto-fill Proforma fields if they are empty when editing Commercial Invoice fields */
+      if (field === 'invoiceNo') {
+        const pfValues = splitDocumentValues(current.proformaInvoiceNo, documentCounts.invoiceNo);
+        if (!pfValues[index] || pfValues[index].trim() === '') {
+          pfValues[index] = value;
+          updatedState.proformaInvoiceNo = joinDocumentValues(pfValues);
+        }
+      } else if (field === 'invoiceDate') {
+        const pfDates = splitDocumentValues(current.proformaInvoiceDate, documentCounts.invoiceNo);
+        if (!pfDates[index] || pfDates[index].trim() === '') {
+          pfDates[index] = value;
+          updatedState.proformaInvoiceDate = joinDocumentValues(pfDates);
+        }
+      }
+
+      return updatedState;
     });
   };
 
@@ -1034,9 +1054,9 @@ export default function ShipmentEntryAndHistoryPage() {
             </div>
           </Section>
 
-          <Section icon={<Receipt size={16} color="var(--accent-purple)" />} tint="#8b5cf618" title="Material Description & Commercial Invoice" delay={1}>
+          <Section icon={<Receipt size={16} color="var(--accent-purple)" />} tint="#8b5cf618" title="Material Description & Commercial / Proforma Invoices" delay={1}>
             <div style={gridStyle}>
-              <Field label="Material / Product Description">
+              <Field label="Material / Product Description" span>
                 <SearchableSelect
                   ariaLabel="Material / Product Description"
                   value={formData.material}
@@ -1049,8 +1069,9 @@ export default function ShipmentEntryAndHistoryPage() {
                 {!activeMasterNames('materials').length && <MasterSetupLink masterType="materials" />}
               </Field>
 
+              {/* Invoices & Proforma Invoices displayed side-by-side per row */}
               <DocumentEntryFields
-                title="Invoices"
+                title="Invoices & Proforma Invoices"
                 numberLabel="Invoice number"
                 dateLabel="Invoice date"
                 id="invoiceNo"
@@ -1060,42 +1081,23 @@ export default function ShipmentEntryAndHistoryPage() {
                 required
                 numberValues={splitDocumentValues(formData.invoiceNo, documentCounts.invoiceNo)}
                 dateValues={splitDocumentValues(formData.invoiceDate, documentCounts.invoiceNo)}
-                error={errors.invoiceNo ?? errors.invoiceDate}
+                error={errors.invoiceNo ?? errors.invoiceDate ?? errors.proformaInvoiceNo ?? errors.proformaInvoiceDate}
                 numberError={errors.invoiceNo}
                 dateRequired={paymentDueDateBasis === 'Invoice Date'}
                 dateError={errors.invoiceDate}
+                proformaRequired={proformaRequired}
+                proformaNumbers={splitDocumentValues(formData.proformaInvoiceNo, documentCounts.invoiceNo)}
+                proformaDates={splitDocumentValues(formData.proformaInvoiceDate, documentCounts.invoiceNo)}
+                proformaNumberError={errors.proformaInvoiceNo}
+                proformaDateError={errors.proformaInvoiceDate}
                 onCountChange={(count) => changeDocumentCount('invoiceNo', count)}
                 onNumberChange={(index, value) => updateDocumentValue('invoiceNo', index, value)}
                 onDateChange={(index, value) => updateDocumentValue('invoiceDate', index, value)}
+                onProformaNumberChange={(index, value) => updateDocumentValue('proformaInvoiceNo', index, value)}
+                onProformaDateChange={(index, value) => updateDocumentValue('proformaInvoiceDate', index, value)}
               />
 
-              {proformaRequired && (
-                <>
-                  <DocumentEntryFields
-                    title="Proforma Invoices"
-                    numberLabel="Proforma invoice number"
-                    dateLabel="Proforma invoice date"
-                    id="proformaInvoiceNo"
-                    count={documentCounts.invoiceNo}
-                    minimum={1}
-                    fullWidth
-                    required
-                    numberValues={splitDocumentValues(formData.proformaInvoiceNo, documentCounts.invoiceNo)}
-                    dateValues={splitDocumentValues(formData.proformaInvoiceDate, documentCounts.invoiceNo)}
-                    error={errors.proformaInvoiceNo ?? errors.proformaInvoiceDate}
-                    numberError={errors.proformaInvoiceNo}
-                    dateRequired
-                    dateError={errors.proformaInvoiceDate}
-                    onNumberChange={(index, value) => updateDocumentValue('proformaInvoiceNo', index, value)}
-                    onDateChange={(index, value) => updateDocumentValue('proformaInvoiceDate', index, value)}
-                  />
-                  <div style={{ ...hintStyle, gridColumn: '1 / -1' }}>
-                    Enter one proforma invoice number and date for each commercial invoice. Due dates use the proforma invoice date.
-                  </div>
-                </>
-              )}
-
-              <Field label="Invoice Document File">
+              <Field label="Invoice Document File" span>
                 <FileUploadZone
                   docName={formData.invoiceDocName}
                   onFileChange={(e) => handleFileSimulate('invoiceDocName', e)}
@@ -1288,6 +1290,38 @@ export default function ShipmentEntryAndHistoryPage() {
                     setField('paymentTermChoice', value);
                     const selectedTerm = activeMasterNames('payment-terms').find((entry) => entry.name === value);
                     setField('paymentType', selectedTerm?.payment_type === 'LC' ? 'LC' : 'Others');
+
+                    // Auto-populate Proforma Invoice if the selected payment term requires it
+                    const isPFRequired = selectedTerm?.credit_basis === 'PROFORMA_INVOICE_DATE' || hasProformaInvoiceTerm(value);
+                    if (isPFRequired) {
+                      setFormData((curr) => {
+                        const invValues = splitDocumentValues(curr.invoiceNo, documentCounts.invoiceNo);
+                        const invDates = splitDocumentValues(curr.invoiceDate, documentCounts.invoiceNo);
+                        const pfValues = splitDocumentValues(curr.proformaInvoiceNo, documentCounts.invoiceNo);
+                        const pfDates = splitDocumentValues(curr.proformaInvoiceDate, documentCounts.invoiceNo);
+
+                        let updatedPFNo = [...pfValues];
+                        let updatedPFDate = [...pfDates];
+
+                        invValues.forEach((val, i) => {
+                          if ((!updatedPFNo[i] || !updatedPFNo[i].trim()) && val.trim()) {
+                            updatedPFNo[i] = val;
+                          }
+                        });
+
+                        invDates.forEach((dt, i) => {
+                          if ((!updatedPFDate[i] || !updatedPFDate[i].trim()) && dt.trim()) {
+                            updatedPFDate[i] = dt;
+                          }
+                        });
+
+                        return {
+                          ...curr,
+                          proformaInvoiceNo: joinDocumentValues(updatedPFNo),
+                          proformaInvoiceDate: joinDocumentValues(updatedPFDate),
+                        };
+                      });
+                    }
                   }}
                   options={masterSelectOptions('payment-terms')}
                   placeholder="Search payment terms"
@@ -2698,7 +2732,7 @@ function Section({
   );
 }
 
-/* Number + date entries for one independently managed document type. */
+/* Number + date entries for one independently managed document type with side-by-side Commercial vs Proforma alignment */
 function DocumentEntryFields({
   title,
   numberLabel,
@@ -2714,9 +2748,16 @@ function DocumentEntryFields({
   numberError,
   dateRequired,
   dateError,
+  proformaRequired,
+  proformaNumbers,
+  proformaDates,
+  proformaNumberError,
+  proformaDateError,
   onCountChange,
   onNumberChange,
   onDateChange,
+  onProformaNumberChange,
+  onProformaDateChange,
 }: {
   title: string;
   numberLabel: string;
@@ -2732,11 +2773,20 @@ function DocumentEntryFields({
   numberError?: string;
   dateRequired: boolean;
   dateError?: string;
+  proformaRequired?: boolean;
+  proformaNumbers?: string[];
+  proformaDates?: string[];
+  proformaNumberError?: string;
+  proformaDateError?: string;
   onCountChange?: (count: number) => void;
   onNumberChange: (index: number, value: string) => void;
   onDateChange: (index: number, value: string) => void;
+  onProformaNumberChange?: (index: number, value: string) => void;
+  onProformaDateChange?: (index: number, value: string) => void;
 }) {
   const maxNumberLength = numberLabel === 'BOE number' ? 40 : 80;
+  const hasProformaFields = proformaNumbers && proformaDates && onProformaNumberChange && onProformaDateChange;
+
   return (
     <Field
       label={title}
@@ -2771,33 +2821,81 @@ function DocumentEntryFields({
           )}
         </div>
       )}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '8px 12px', width: '100%' }}>
-        {numberValues.flatMap((number, index) => [
-          <label key={`${id}-number-${index}`} style={documentEntryLabelStyle}>
-              {numberLabel} {index + 1}{required && <span style={{ color: 'var(--accent-red)' }}> *</span>}
-              <input
-                type="text"
-                maxLength={maxNumberLength}
-                placeholder={`Enter ${numberLabel.toLowerCase()}`}
-                value={number}
-                aria-invalid={Boolean(numberError)}
-                onChange={(event) => onNumberChange(index, event.target.value)}
-                className="document-entry-input"
-                style={withError(documentEntryInputStyle, numberError)}
-              />
-          </label>,
-          <label key={`${id}-date-${index}`} style={documentEntryLabelStyle}>
-              {dateLabel} {index + 1}{dateRequired && <span style={{ color: 'var(--accent-red)' }}> *</span>}
-              <input
-                type="date"
-                value={dateValues[index] ?? ''}
-                aria-invalid={Boolean(dateError)}
-                onChange={(event) => onDateChange(index, event.target.value)}
-                className="document-entry-input"
-                style={withError(documentEntryInputStyle, dateError)}
-              />
-          </label>,
-        ])}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '100%' }}>
+        {numberValues.map((number, index) => (
+          <div
+            key={`${id}-row-${index}`}
+            style={{
+              display: 'grid',
+              gridTemplateColumns: hasProformaFields ? 'repeat(auto-fit, minmax(280px, 1fr))' : '1fr',
+              gap: '12px',
+              padding: '10px',
+              background: 'var(--bg-card)',
+              borderRadius: '8px',
+              border: '1px solid var(--border)',
+            }}
+          >
+            {/* Column 1: Commercial Invoice Number & Date */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '8px 12px', width: '100%' }}>
+              <label style={documentEntryLabelStyle}>
+                {numberLabel} {index + 1}{required && <span style={{ color: 'var(--accent-red)' }}> *</span>}
+                <input
+                  type="text"
+                  maxLength={maxNumberLength}
+                  placeholder={`Enter ${numberLabel.toLowerCase()}`}
+                  value={number}
+                  aria-invalid={Boolean(numberError)}
+                  onChange={(event) => onNumberChange(index, event.target.value)}
+                  className="document-entry-input"
+                  style={withError(documentEntryInputStyle, numberError)}
+                />
+              </label>
+
+              <label style={documentEntryLabelStyle}>
+                {dateLabel} {index + 1}{dateRequired && <span style={{ color: 'var(--accent-red)' }}> *</span>}
+                <input
+                  type="date"
+                  value={dateValues[index] ?? ''}
+                  aria-invalid={Boolean(dateError)}
+                  onChange={(event) => onDateChange(index, event.target.value)}
+                  className="document-entry-input"
+                  style={withError(documentEntryInputStyle, dateError)}
+                />
+              </label>
+            </div>
+
+            {/* Column 2: Proforma Invoice Number & Date (Positioned in adjacent grid column on Desktop) */}
+            {hasProformaFields && (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '8px 12px', width: '100%' }}>
+                <label style={documentEntryLabelStyle}>
+                  Proforma Invoice Number {index + 1}{proformaRequired && <span style={{ color: 'var(--accent-red)' }}> *</span>}
+                  <input
+                    type="text"
+                    maxLength={maxNumberLength}
+                    placeholder="Enter proforma invoice number"
+                    value={proformaNumbers[index] ?? ''}
+                    aria-invalid={Boolean(proformaNumberError)}
+                    onChange={(event) => onProformaNumberChange(index, event.target.value)}
+                    className="document-entry-input"
+                    style={withError(documentEntryInputStyle, proformaNumberError)}
+                  />
+                </label>
+
+                <label style={documentEntryLabelStyle}>
+                  Proforma Invoice Date {index + 1}{proformaRequired && <span style={{ color: 'var(--accent-red)' }}> *</span>}
+                  <input
+                    type="date"
+                    value={proformaDates[index] ?? ''}
+                    aria-invalid={Boolean(proformaDateError)}
+                    onChange={(event) => onProformaDateChange(index, event.target.value)}
+                    className="document-entry-input"
+                    style={withError(documentEntryInputStyle, proformaDateError)}
+                  />
+                </label>
+              </div>
+            )}
+          </div>
+        ))}
       </div>
     </Field>
   );

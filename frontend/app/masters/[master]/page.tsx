@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { CSSProperties, FormEvent } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { AlertCircle, ArrowLeft, CheckCircle, Loader2, Pencil, Plus, RefreshCw, Save, Trash2, X } from 'lucide-react';
+import { AlertCircle, ArrowLeft, CheckCircle, Loader2, Pencil, Plus, RefreshCw, Save, Search, Trash2, X } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { BASE_URL } from '@/data/ENUM';
 import { MASTER_LABELS, MASTER_TYPES, type MasterEntry, type MasterType } from '@/data/masterData';
@@ -35,6 +35,7 @@ export default function MasterEntryPage() {
   const [creditDays, setCreditDays] = useState('');
   const [creditBasis, setCreditBasis] = useState('');
   const [needsReview, setNeedsReview] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [actionId, setActionId] = useState<number | null>(null);
@@ -68,6 +69,7 @@ export default function MasterEntryPage() {
     setCreditDays('');
     setCreditBasis('');
     setNeedsReview(false);
+    setSearchTerm('');
   }, [masterType]);
 
   useEffect(() => {
@@ -96,6 +98,26 @@ export default function MasterEntryPage() {
   }, [canManage, fetchEntries, router]);
 
   const activeEntries = useMemo(() => entries.filter((entry) => Boolean(entry.is_active)), [entries]);
+
+  /* Filter entries using real-time search */
+  const filteredEntries = useMemo(() => {
+    const query = searchTerm.trim().toLowerCase();
+    if (!query) return entries;
+    return entries.filter((entry) => {
+      const entryName = entry.name.toLowerCase();
+      const statusStr = entry.is_active ? 'active' : 'inactive';
+      const paymentTypeStr = (entry.payment_type ?? '').toLowerCase();
+      const creditBasisStr = (entry.credit_basis ?? '').toLowerCase();
+      const creditDaysStr = entry.credit_days != null ? String(entry.credit_days) : '';
+      return (
+        entryName.includes(query) ||
+        statusStr.includes(query) ||
+        paymentTypeStr.includes(query) ||
+        creditBasisStr.includes(query) ||
+        creditDaysStr.includes(query)
+      );
+    });
+  }, [entries, searchTerm]);
 
   const saveEntry = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -281,32 +303,87 @@ export default function MasterEntryPage() {
         )}
       </form>
 
+      {/* Table Section with Header Search Controls and Fixed Max-Height Scroll Area */}
       <div className="card" style={{ overflow: 'hidden' }}>
-        <div style={{ padding: '0.9rem 1rem', borderBottom: '1px solid var(--border)', color: 'var(--text-primary)', fontWeight: 750 }}>
-          {title} ({activeEntries.length} active)
+        <div style={{
+          padding: '0.8rem 1rem', borderBottom: '1px solid var(--border)',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          flexWrap: 'wrap', gap: '0.75rem', background: 'var(--bg-secondary)',
+        }}>
+          <div style={{ color: 'var(--text-primary)', fontWeight: 750 }}>
+            {title} ({activeEntries.length} active / {entries.length} total)
+          </div>
+
+          {/* Search Input Control */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: '1', maxWidth: 320 }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 6, width: '100%',
+              background: 'var(--bg-primary)', border: '1px solid var(--border)',
+              borderRadius: 7, padding: '0.35rem 0.65rem',
+            }}>
+              <Search size={14} color="var(--text-muted)" />
+              <input
+                type="text"
+                placeholder={`Search ${title.toLowerCase()}...`}
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                style={{
+                  width: '100%', border: 'none', outline: 'none',
+                  background: 'transparent', color: 'var(--text-primary)',
+                  fontSize: '0.82rem',
+                }}
+              />
+              {searchTerm && (
+                <button
+                  type="button"
+                  onClick={() => setSearchTerm('')}
+                  style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--text-muted)' }}
+                  title="Clear search"
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+          </div>
         </div>
+
         {loading ? (
           <div style={{ padding: '2rem', display: 'flex', justifyContent: 'center', color: 'var(--text-muted)' }}><Loader2 className="animate-spin" size={20} /></div>
-        ) : entries.length === 0 ? (
-          <div style={{ padding: '1.5rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>No entries yet. Add the first value above.</div>
+        ) : filteredEntries.length === 0 ? (
+          <div style={{ padding: '1.5rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+            {entries.length === 0 ? 'No entries yet. Add the first value above.' : `No ${title.toLowerCase()} entries matching "${searchTerm}".`}
+          </div>
         ) : (
-          <div style={{ overflowX: 'auto' }}>
+          /* Table Container with Sticky Headers & Vertical Scroll */
+          <div style={{ overflowX: 'auto', maxHeight: '480px', overflowY: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.84rem' }}>
-              <thead><tr style={{ textAlign: 'left', color: 'var(--text-muted)', background: 'var(--bg-secondary)' }}>
-                <th style={cellStyle}>Name</th>
-                {masterType === 'payment-terms' && <><th style={cellStyle}>Type</th><th style={cellStyle}>Credit</th><th style={cellStyle}>Review</th></>}
-                <th style={cellStyle}>Status</th><th style={cellStyle}>Action</th>
-              </tr></thead>
+              <thead>
+                <tr style={{ textAlign: 'left', color: 'var(--text-muted)', background: 'var(--bg-secondary)', position: 'sticky', top: 0, zIndex: 2, boxShadow: '0 1px 0 var(--border)' }}>
+                  <th style={cellStyle}>Name</th>
+                  {masterType === 'payment-terms' && <><th style={cellStyle}>Type</th><th style={cellStyle}>Credit</th><th style={cellStyle}>Review</th></>}
+                  <th style={cellStyle}>Status</th>
+                  <th style={cellStyle}>Action</th>
+                </tr>
+              </thead>
               <tbody>
-                {entries.map((entry) => (
+                {filteredEntries.map((entry) => (
                   <tr key={entry.id} style={{ borderTop: '1px solid var(--border)' }}>
-                    <td style={cellStyle}>{entry.name}</td>
+                    <td style={{ ...cellStyle, fontWeight: 600, color: 'var(--text-primary)' }}>{entry.name}</td>
                     {masterType === 'payment-terms' && <>
                       <td style={cellStyle}>{entry.payment_type ?? '-'}</td>
                       <td style={cellStyle}>{entry.credit_days != null ? `${entry.credit_days} days from ${entry.credit_basis ?? ''}` : '-'}</td>
                       <td style={cellStyle}>{entry.needs_review ? 'Yes' : 'No'}</td>
                     </>}
-                    <td style={cellStyle}>{entry.is_active ? 'Active' : 'Inactive'}</td>
+                    <td style={cellStyle}>
+                      <span style={{
+                        display: 'inline-block', padding: '2px 8px', borderRadius: 6,
+                        background: entry.is_active ? '#10b98115' : '#ef444415',
+                        color: entry.is_active ? '#059669' : '#dc2626',
+                        fontWeight: 700, fontSize: '0.78rem',
+                      }}>
+                        {entry.is_active ? 'Active' : 'Inactive'}
+                      </span>
+                    </td>
                     <td style={cellStyle}>
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                         {masterType !== 'prw' && (
