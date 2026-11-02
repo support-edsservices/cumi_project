@@ -1541,7 +1541,7 @@ export default function ShipmentDashboardPage() {
     });
 
     const etaSurpassedNotArrivedList = filtered.filter(s => {
-      if (s.materialStatus !== 'In Transit') return false;
+      if (s.materialStatus === 'Arrived') return false;
       const eta = s.eta ? toLocalDate(s.eta) : null;
       return eta ? eta < today : false;
     });
@@ -1747,7 +1747,7 @@ export default function ShipmentDashboardPage() {
           color={ACCENT.orange}
           delay={0.3}
           pulsing={kpis.etaSurpassedNotArrived.length > 0}
-          onClick={() => setActiveModal({ title: 'ETA Surpassed – Still In Transit', color: ACCENT.orange, data: kpis.etaSurpassedNotArrived })}
+          onClick={() => setActiveModal({ title: 'ETA Passed – Not Arrived', color: ACCENT.orange, data: kpis.etaSurpassedNotArrived })}
         />
       </div>
 
