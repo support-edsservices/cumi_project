@@ -1636,7 +1636,7 @@ export default function ShipmentDashboardPage() {
               History
             </button>
           </Link>
-          <Link href="/shipments/entry" style={{ textDecoration: 'none' }}>
+          <Link href="/shipments" style={{ textDecoration: 'none' }}>
             <button style={{
               display: 'flex', alignItems: 'center', gap: 6,
               padding: '0.5rem 1rem', borderRadius: 8,
