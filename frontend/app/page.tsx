@@ -1028,7 +1028,10 @@ function MonthlyPoAndPaymentAnalytics({
 
 /* ── Supplier-Wise Chart + Interactive Product Pie Chart ── */
 function SupplierAndProductAnalytics({ data }: { data: Shipment[] }) {
-  const supplierData = useMemo(() => {
+  const [supplierPage, setSupplierPage] = useState(0);
+  const pageSize = 10;
+
+  const fullSupplierData = useMemo(() => {
     const map = new Map<string, number>();
     data.forEach(s => {
       map.set(s.supplier, (map.get(s.supplier) || 0) + 1);
@@ -1038,9 +1041,24 @@ function SupplierAndProductAnalytics({ data }: { data: Shipment[] }) {
       .sort((a, b) => b.count - a.count);
   }, [data]);
 
+  const totalPages = Math.ceil(fullSupplierData.length / pageSize) || 1;
+
+  // Ensure supplierPage stays within bounds when data updates
+  useEffect(() => {
+    if (supplierPage >= totalPages) {
+      setSupplierPage(Math.max(0, totalPages - 1));
+    }
+  }, [totalPages, supplierPage]);
+
+  // Paginated 10 suppliers per page
+  const supplierData = useMemo(() => {
+    const start = supplierPage * pageSize;
+    return fullSupplierData.slice(start, start + pageSize);
+  }, [fullSupplierData, supplierPage, pageSize]);
+
   const [selectedSupplier, setSelectedSupplier] = useState<string | null>(null);
 
-  const activeSupplier = selectedSupplier || supplierData[0]?.supplier || '';
+  const activeSupplier = selectedSupplier || supplierData[0]?.supplier || fullSupplierData[0]?.supplier || '';
 
   const productPieData = useMemo(() => {
     if (!activeSupplier) return [];
@@ -1059,10 +1077,58 @@ function SupplierAndProductAnalytics({ data }: { data: Shipment[] }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '0.875rem' }}>
       <div className="card fade-up delay-1" style={{ padding: '1.125rem', minWidth: 0 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-          <div className="section-title" style={{ margin: 0 }}>Supplier-Wise Shipments</div>
-          <div style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)' }}>Tap bar to choose supplier</div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <div className="section-title" style={{ margin: 0 }}>Supplier-Wise Shipments</div>
+            <span style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)' }}>
+              ({fullSupplierData.length} total)
+            </span>
+          </div>
+
+          {/* Pagination Arrow Controls */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <button
+              onClick={() => setSupplierPage(p => Math.max(0, p - 1))}
+              disabled={supplierPage === 0}
+              style={{
+                background: 'var(--bg-secondary)',
+                border: '1px solid var(--border)',
+                borderRadius: 6,
+                padding: '0.25rem 0.5rem',
+                cursor: supplierPage === 0 ? 'not-allowed' : 'pointer',
+                opacity: supplierPage === 0 ? 0.4 : 1,
+                display: 'flex',
+                alignItems: 'center',
+                color: 'var(--text-primary)',
+              }}
+              title="Previous 10 suppliers"
+            >
+              <ChevronLeft size={16} />
+            </button>
+            <span style={{ fontSize: 'var(--font-size-compact)', fontWeight: 700, color: 'var(--text-secondary)' }}>
+              {supplierPage + 1} / {totalPages}
+            </span>
+            <button
+              onClick={() => setSupplierPage(p => Math.min(totalPages - 1, p + 1))}
+              disabled={supplierPage >= totalPages - 1}
+              style={{
+                background: 'var(--bg-secondary)',
+                border: '1px solid var(--border)',
+                borderRadius: 6,
+                padding: '0.25rem 0.5rem',
+                cursor: supplierPage >= totalPages - 1 ? 'not-allowed' : 'pointer',
+                opacity: supplierPage >= totalPages - 1 ? 0.4 : 1,
+                display: 'flex',
+                alignItems: 'center',
+                color: 'var(--text-primary)',
+              }}
+              title="Next 10 suppliers"
+            >
+              <ChevronRight size={16} />
+            </button>
+          </div>
         </div>
+
         <ResponsiveContainer width="100%" height={240}>
           <BarChart
             accessibilityLayer={false}
@@ -1108,7 +1174,7 @@ function SupplierAndProductAnalytics({ data }: { data: Shipment[] }) {
                 fontWeight: 700, outline: 'none', cursor: 'pointer', maxWidth: 160,
               }}
             >
-              {supplierData.map(s => (
+              {fullSupplierData.map(s => (
                 <option key={s.supplier} value={s.supplier}>
                   {s.supplier} ({s.count})
                 </option>
@@ -1362,7 +1428,7 @@ function DuePaymentsTable({ data }: { data: Shipment[] }) {
         if (b.daysLeft === null) return -1;
         return a.daysLeft - b.daysLeft;
       })
-      .slice(0, 10);
+      .slice(0, 100);
   }, [data]);
 
   const cell: React.CSSProperties = { padding: '0.55rem 0.875rem' };
