@@ -721,131 +721,133 @@ function PaymentCalendar({
   for (let d = 1; d <= daysInMonth; d++) cells.push(d);
 
   return (
-    <div className="card fade-up delay-2" style={{ padding: '1.125rem', minWidth: 0, width: '100%' }}>
-      <div style={{
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        marginBottom: '0.75rem',
-      }}>
-        <div className="section-title" style={{ margin: 0 }}>Calendar View (Payments & ETA)</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <button onClick={prevMonth} aria-label="Previous month" style={{
-            background: 'var(--bg-secondary)', border: '1px solid var(--border)',
-            borderRadius: 6, cursor: 'pointer', padding: '0.25rem',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: 'var(--text-secondary)',
-          }}>
-            <ChevronLeft size={14} />
-          </button>
-          <span style={{
-            fontSize: 'var(--font-size-body)', fontWeight: 700,
-            color: 'var(--text-primary)', minWidth: 100, textAlign: 'center',
-          }}>
-            {calDate.toLocaleString('en-US', { month: 'long', year: 'numeric' })}
-          </span>
-          <button onClick={nextMonth} aria-label="Next month" style={{
-            background: 'var(--bg-secondary)', border: '1px solid var(--border)',
-            borderRadius: 6, cursor: 'pointer', padding: '0.25rem',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: 'var(--text-secondary)',
-          }}>
-            <ChevronRight size={14} />
-          </button>
-        </div>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2, marginBottom: 2 }}>
-        {weekDays.map(w => (
-          <div key={w} style={{
-            textAlign: 'center', fontSize: 'var(--font-size-compact)',
-            fontWeight: 700, color: 'var(--text-muted)', padding: '0.25rem 0',
-          }}>
-            {w}
+    <div className="card fade-up delay-2" style={{ padding: '1.125rem', minWidth: 0, width: '100%', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', boxSizing: 'border-box' }}>
+      <div>
+        <div style={{
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          marginBottom: '0.75rem',
+        }}>
+          <div className="section-title" style={{ margin: 0 }}>Calendar View (Payments & ETA)</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <button onClick={prevMonth} aria-label="Previous month" style={{
+              background: 'var(--bg-secondary)', border: '1px solid var(--border)',
+              borderRadius: 6, cursor: 'pointer', padding: '0.25rem',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: 'var(--text-secondary)',
+            }}>
+              <ChevronLeft size={14} />
+            </button>
+            <span style={{
+              fontSize: 'var(--font-size-body)', fontWeight: 700,
+              color: 'var(--text-primary)', minWidth: 100, textAlign: 'center',
+            }}>
+              {calDate.toLocaleString('en-US', { month: 'long', year: 'numeric' })}
+            </span>
+            <button onClick={nextMonth} aria-label="Next month" style={{
+              background: 'var(--bg-secondary)', border: '1px solid var(--border)',
+              borderRadius: 6, cursor: 'pointer', padding: '0.25rem',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: 'var(--text-secondary)',
+            }}>
+              <ChevronRight size={14} />
+            </button>
           </div>
-        ))}
-      </div>
+        </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2 }}>
-        {cells.map((day, idx) => {
-          if (day === null) return <div key={`empty-${idx}`} />;
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2, marginBottom: 2 }}>
+          {weekDays.map(w => (
+            <div key={w} style={{
+              textAlign: 'center', fontSize: 'var(--font-size-compact)',
+              fontWeight: 700, color: 'var(--text-muted)', padding: '0.25rem 0',
+            }}>
+              {w}
+            </div>
+          ))}
+        </div>
 
-          const cellData = dayMap.get(day);
-          const cellDate = new Date(year, month, day);
-          const isToday = isSameDay(today, cellDate);
-          const isSelected = selectedDate ? isSameDay(selectedDate, cellDate) : false;
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2 }}>
+          {cells.map((day, idx) => {
+            if (day === null) return <div key={`empty-${idx}`} />;
 
-          return (
-            <div
-              key={day}
-              onClick={() => onSelectDate(cellDate)}
-              style={{
-                position: 'relative',
-                minHeight: 40,
-                borderRadius: 6,
-                padding: '4px 2px',
-                border: isSelected
-                  ? `2px solid ${ACCENT.purple}`
-                  : isToday
-                    ? `2px solid ${ACCENT.blue}`
-                    : '1px solid transparent',
-                background: isSelected
-                  ? 'rgba(139, 92, 246, 0.15)'
-                  : cellData
-                    ? 'var(--bg-secondary)'
-                    : 'transparent',
-                display: 'flex', flexDirection: 'column',
-                alignItems: 'center', justifyContent: 'flex-start',
-                cursor: 'pointer',
-                transition: 'all 0.15s ease',
-              }}
-            >
-              <span style={{
-                fontSize: 'var(--font-size-compact)',
-                fontWeight: isSelected || isToday ? 800 : 500,
-                color: isSelected ? ACCENT.purple : isToday ? ACCENT.blue : 'var(--text-secondary)',
-              }}>
-                {day}
-              </span>
+            const cellData = dayMap.get(day);
+            const cellDate = new Date(year, month, day);
+            const isToday = isSameDay(today, cellDate);
+            const isSelected = selectedDate ? isSameDay(selectedDate, cellDate) : false;
 
-              {cellData?.etaShipments && cellData.etaShipments.length > 0 && (
-                <div style={{
-                  position: 'absolute', top: 10, right: 4,
-                  display: 'flex', alignItems: 'center', gap: 2, zIndex: 1,
+            return (
+              <div
+                key={day}
+                onClick={() => onSelectDate(cellDate)}
+                style={{
+                  position: 'relative',
+                  minHeight: 40,
+                  borderRadius: 6,
+                  padding: '4px 2px',
+                  border: isSelected
+                    ? `2px solid ${ACCENT.purple}`
+                    : isToday
+                      ? `2px solid ${ACCENT.blue}`
+                      : '1px solid transparent',
+                  background: isSelected
+                    ? 'rgba(139, 92, 246, 0.15)'
+                    : cellData
+                      ? 'var(--bg-secondary)'
+                      : 'transparent',
+                  display: 'flex', flexDirection: 'column',
+                  alignItems: 'center', justifyContent: 'flex-start',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <span style={{
+                  fontSize: 'var(--font-size-compact)',
+                  fontWeight: isSelected || isToday ? 800 : 500,
+                  color: isSelected ? ACCENT.purple : isToday ? ACCENT.blue : 'var(--text-secondary)',
                 }}>
-                  {cellData.etaShipments.map(s => {
-                    const isArrived = s.materialStatus === 'Arrived';
-                    return (
-                      <span
-                        key={`eta-dot-${s.id}`}
-                        title={`ETA Shipment ${s.id}: ${s.materialStatus}`}
+                  {day}
+                </span>
+
+                {cellData?.etaShipments && cellData.etaShipments.length > 0 && (
+                  <div style={{
+                    position: 'absolute', top: 10, right: 4,
+                    display: 'flex', alignItems: 'center', gap: 2, zIndex: 1,
+                  }}>
+                    {cellData.etaShipments.map(s => {
+                      const isArrived = s.materialStatus === 'Arrived';
+                      return (
+                        <span
+                          key={`eta-dot-${s.id}`}
+                          title={`ETA Shipment ${s.id}: ${s.materialStatus}`}
+                          style={{
+                            width: 8, height: 8, borderRadius: '50%',
+                            background: isArrived ? ACCENT.green : ACCENT.red,
+                            display: 'inline-block', flexShrink: 0,
+                            boxShadow: '0 0 2px rgba(0,0,0,0.3)',
+                          }}
+                        />
+                      );
+                    })}
+                  </div>
+                )}
+
+                {cellData?.dueShipments && cellData.dueShipments.length > 0 && (
+                  <div style={{ display: 'flex', gap: 2, marginTop: 4, flexWrap: 'wrap', justifyContent: 'center' }}>
+                    {cellData.dueShipments.map(s => (
+                      <div
+                        key={`due-${s.id}`}
+                        title={`Payment Due: ${s.paymentStatus}`}
                         style={{
-                          width: 8, height: 8, borderRadius: '50%',
-                          background: isArrived ? ACCENT.green : ACCENT.red,
-                          display: 'inline-block', flexShrink: 0,
-                          boxShadow: '0 0 2px rgba(0,0,0,0.3)',
+                          width: 10, height: 4, borderRadius: 1,
+                          background: PAYMENT_STATUS_COLOR[s.paymentStatus],
                         }}
                       />
-                    );
-                  })}
-                </div>
-              )}
-
-              {cellData?.dueShipments && cellData.dueShipments.length > 0 && (
-                <div style={{ display: 'flex', gap: 2, marginTop: 4, flexWrap: 'wrap', justifyContent: 'center' }}>
-                  {cellData.dueShipments.map(s => (
-                    <div
-                      key={`due-${s.id}`}
-                      title={`Payment Due: ${s.paymentStatus}`}
-                      style={{
-                        width: 10, height: 4, borderRadius: 1,
-                        background: PAYMENT_STATUS_COLOR[s.paymentStatus],
-                      }}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          );
-        })}
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       <div style={{
@@ -1044,14 +1046,12 @@ function SupplierAndProductAnalytics({ data }: { data: Shipment[] }) {
 
   const totalPages = Math.ceil(fullSupplierData.length / pageSize) || 1;
 
-  // Ensure supplierPage stays within bounds when data updates
   useEffect(() => {
     if (supplierPage >= totalPages) {
       setSupplierPage(Math.max(0, totalPages - 1));
     }
   }, [totalPages, supplierPage]);
 
-  // Paginated 10 suppliers per page
   const supplierData = useMemo(() => {
     const start = supplierPage * pageSize;
     return fullSupplierData.slice(start, start + pageSize);
@@ -1086,7 +1086,6 @@ function SupplierAndProductAnalytics({ data }: { data: Shipment[] }) {
             </span>
           </div>
 
-          {/* Pagination Arrow Controls */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
             <button
               onClick={() => setSupplierPage(p => Math.max(0, p - 1))}
@@ -1262,7 +1261,7 @@ function PaymentDonut({ data }: { data: Shipment[] }) {
   return (
     <div className="card fade-up delay-3" style={{
       padding: '1.125rem', display: 'flex', flexDirection: 'column',
-      alignItems: 'center', minWidth: 0, width: '100%',
+      alignItems: 'center', justifyContent: 'space-between', minWidth: 0, width: '100%', height: '100%', boxSizing: 'border-box',
     }}>
       <div className="section-title" style={{ alignSelf: 'flex-start' }}>PRW Status</div>
       <ResponsiveContainer width="100%" height={160}>
@@ -1368,12 +1367,12 @@ function MaterialStatusBreakdown({
   const maxCount = Math.max(...statusCounts.map(s => s.count), 1);
 
   return (
-    <div className="card fade-up delay-2" style={{ padding: '1.125rem', minWidth: 0, width: '100%' }}>
+    <div className="card fade-up delay-2" style={{ padding: '1.125rem', minWidth: 0, width: '100%', height: '100%', display: 'flex', flexDirection: 'column', boxSizing: 'border-box' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div className="section-title" style={{ margin: 0 }}>Material Status</div>
         <span style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)' }}>Tap status to inspect</span>
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem', marginTop: '0.75rem'}}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem', marginTop: '0.75rem', flex: 1, justifyContent: 'space-around' }}>
         {statusCounts.map(s => (
           <div
             key={s.status}
@@ -1415,7 +1414,10 @@ function MaterialStatusBreakdown({
 
 /* ── Upcoming Due Payments Table ── */
 function DuePaymentsTable({ data }: { data: Shipment[] }) {
-  const rows = useMemo(() => {
+  const [currentPage, setCurrentPage] = useState(0);
+  const pageSize = 10;
+
+  const allRows = useMemo(() => {
     return data
       .map(s => ({
         shipment: s,
@@ -1428,15 +1430,78 @@ function DuePaymentsTable({ data }: { data: Shipment[] }) {
         if (a.daysLeft === null) return 1;
         if (b.daysLeft === null) return -1;
         return a.daysLeft - b.daysLeft;
-      })
-      .slice(0, 100);
+      });
   }, [data]);
+
+  const totalPages = Math.ceil(allRows.length / pageSize) || 1;
+
+  useEffect(() => {
+    if (currentPage >= totalPages) {
+      setCurrentPage(Math.max(0, totalPages - 1));
+    }
+  }, [totalPages, currentPage]);
+
+  const rows = useMemo(() => {
+    const start = currentPage * pageSize;
+    return allRows.slice(start, start + pageSize);
+  }, [allRows, currentPage, pageSize]);
 
   const cell: React.CSSProperties = { padding: '0.55rem 0.875rem' };
 
   return (
     <div className="card fade-up delay-1" style={{ padding: '1.125rem' }}>
-      <div className="section-title">Upcoming Due Payments</div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <div className="section-title" style={{ margin: 0 }}>Upcoming Due Payments</div>
+          <span style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)' }}>
+            ({allRows.length} total)
+          </span>
+        </div>
+
+        {/* Pagination Arrow Controls */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+          <button
+            onClick={() => setCurrentPage(p => Math.max(0, p - 1))}
+            disabled={currentPage === 0}
+            style={{
+              background: 'var(--bg-secondary)',
+              border: '1px solid var(--border)',
+              borderRadius: 6,
+              padding: '0.25rem 0.5rem',
+              cursor: currentPage === 0 ? 'not-allowed' : 'pointer',
+              opacity: currentPage === 0 ? 0.4 : 1,
+              display: 'flex',
+              alignItems: 'center',
+              color: 'var(--text-primary)',
+            }}
+            title="Previous page"
+          >
+            <ChevronLeft size={16} />
+          </button>
+          <span style={{ fontSize: 'var(--font-size-compact)', fontWeight: 700, color: 'var(--text-secondary)' }}>
+            {currentPage + 1} / {totalPages}
+          </span>
+          <button
+            onClick={() => setCurrentPage(p => Math.min(totalPages - 1, p + 1))}
+            disabled={currentPage >= totalPages - 1}
+            style={{
+              background: 'var(--bg-secondary)',
+              border: '1px solid var(--border)',
+              borderRadius: 6,
+              padding: '0.25rem 0.5rem',
+              cursor: currentPage >= totalPages - 1 ? 'not-allowed' : 'pointer',
+              opacity: currentPage >= totalPages - 1 ? 0.4 : 1,
+              display: 'flex',
+              alignItems: 'center',
+              color: 'var(--text-primary)',
+            }}
+            title="Next page"
+          >
+            <ChevronRight size={16} />
+          </button>
+        </div>
+      </div>
+
       <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--font-size-body)' }}>
           <thead>
@@ -1556,6 +1621,51 @@ function DuePaymentsTable({ data }: { data: Shipment[] }) {
           </tbody>
         </table>
       </div>
+      <div style={{ display: 'flex', justifyContent: 'end', alignItems: 'center', marginTop: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+        {/* Pagination Arrow Controls */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+          <button
+            onClick={() => setCurrentPage(p => Math.max(0, p - 1))}
+            disabled={currentPage === 0}
+            style={{
+              background: 'var(--bg-secondary)',
+              border: '1px solid var(--border)',
+              borderRadius: 6,
+              padding: '0.25rem 0.5rem',
+              cursor: currentPage === 0 ? 'not-allowed' : 'pointer',
+              opacity: currentPage === 0 ? 0.4 : 1,
+              display: 'flex',
+              alignItems: 'center',
+              color: 'var(--text-primary)',
+            }}
+            title="Previous page"
+          >
+            <ChevronLeft size={16} />
+          </button>
+          <span style={{ fontSize: 'var(--font-size-compact)', fontWeight: 700, color: 'var(--text-secondary)' }}>
+            {currentPage + 1} / {totalPages}
+          </span>
+          <button
+            onClick={() => setCurrentPage(p => Math.min(totalPages - 1, p + 1))}
+            disabled={currentPage >= totalPages - 1}
+            style={{
+              background: 'var(--bg-secondary)',
+              border: '1px solid var(--border)',
+              borderRadius: 6,
+              padding: '0.25rem 0.5rem',
+              cursor: currentPage >= totalPages - 1 ? 'not-allowed' : 'pointer',
+              opacity: currentPage >= totalPages - 1 ? 0.4 : 1,
+              display: 'flex',
+              alignItems: 'center',
+              color: 'var(--text-primary)',
+            }}
+            title="Next page"
+          >
+            <ChevronRight size={16} />
+          </button>
+        </div>
+      </div>
+      
     </div>
   );
 }
@@ -1831,8 +1941,8 @@ export default function ShipmentDashboardPage() {
         />
       )}
 
-      {/* Analytics Rows */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '0.5rem' }}>
+      {/* Analytics Rows - Row 2 height-stretched cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '0.5rem', alignItems: 'stretch' }}>
         <PaymentCalendar
           data={filtered}
           selectedDate={selectedCalendarDate}
