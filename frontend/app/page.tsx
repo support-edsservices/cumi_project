@@ -1227,7 +1227,7 @@ function MaterialStatusBreakdown({
         <div className="section-title" style={{ margin: 0 }}>Material Status</div>
         <span style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)' }}>Tap status to inspect</span>
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem', marginTop: '0.75rem' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem', marginTop: '0.75rem'}}>
         {statusCounts.map(s => (
           <div
             key={s.status}
@@ -1490,12 +1490,12 @@ export default function ShipmentDashboardPage() {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
 
       {/* ── Page header ── */}
       <div style={{
         display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
-        flexWrap: 'wrap', gap: '0.75rem',
+        flexWrap: 'wrap', gap: '0.55rem',
       }}>
         <div>
           <h2 style={{
@@ -1517,7 +1517,7 @@ export default function ShipmentDashboardPage() {
               boxShadow: 'var(--card-shadow)',
               transition: 'transform 0.15s',
             }}>
-              History & Export
+              History
             </button>
           </Link>
           <Link href="/shipments/entry" style={{ textDecoration: 'none' }}>
@@ -1592,7 +1592,7 @@ export default function ShipmentDashboardPage() {
         borderRadius: 10, padding: '0.65rem 0.875rem', boxShadow: 'var(--card-shadow)',
       }}>
         <label style={{ display: 'grid', gap: 4, color: 'var(--text-secondary)', fontSize: 'var(--font-size-label)', fontWeight: 700 }}>
-          PO Date From
+          From Date
           <input
             type="date"
             aria-label="Dashboard PO date from"
@@ -1603,7 +1603,7 @@ export default function ShipmentDashboardPage() {
           />
         </label>
         <label style={{ display: 'grid', gap: 4, color: 'var(--text-secondary)', fontSize: 'var(--font-size-label)', fontWeight: 700 }}>
-          PO Date To
+          To Date
           <input
             type="date"
             aria-label="Dashboard PO date to"
@@ -1620,9 +1620,7 @@ export default function ShipmentDashboardPage() {
         >
           This year
         </button>
-        <span style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-size-compact)' }}>
-          Dashboard is filtered by PO date
-        </span>
+        
       </div>
 
       {/* ── ROW 1: KPI Summary Cards (Mobile Responsive Grid & Interactive Modals) ── */}

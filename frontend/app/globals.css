@@ -9,7 +9,7 @@
   --font-size-compact: 0.87rem;
   --font-size-small: 0.88rem;
   --font-size-small-plus: 0.85rem;
-  --font-size-label: 0.82rem;
+  --font-size-label: 1rem;
   --font-size-body-small: 0.75rem;
   --font-size-body-compact: 0.76rem;
   --font-size-body: 0.8rem;
@@ -24,8 +24,8 @@
   --font-size-chart-label: 12px;
   --font-size-chart-legend: 14px;
   --font-size-chart-tooltip: 12px;
-  --font-size-svg-tiny: 8px;
-  --font-size-svg-small: 9px;
+  --font-size-svg-tiny: 12px;
+  --font-size-svg-small: 12px;
   --font-size-svg-body: 12px;
   --font-size-svg-label: 13px;
   --font-size-svg-metric: 22px;
@@ -36,7 +36,7 @@
   --bg-topbar:       #ffffff;
   --text-primary:    #0f172a;
   --text-secondary:  #475569;
-  --text-muted:      #94a3b8;
+  --text-muted:      #060606;
   --text-sidebar:    #94a3b8;
   --border:          #dde4ef;
   --accent-blue:     #2563eb;
@@ -59,7 +59,7 @@
   --bg-topbar:       #161b22;
   --text-primary:    #e2e8f0;
   --text-secondary:  #94a3b8;
-  --text-muted:      #64748b;
+  --text-muted:      #ffffff;
   --text-sidebar:    #94a3b8;
   --border:          #30363d;
   --accent-blue:     #3b82f6;
@@ -315,7 +315,6 @@ body {
 .section-title {
   font-size: var(--font-size-label);
   font-weight: 700;
-  letter-spacing: 0.07em;
   text-transform: uppercase;
   color: var(--text-muted);
   margin-bottom: 0.75rem;
