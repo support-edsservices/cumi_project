@@ -71,6 +71,17 @@ class ShipmentInput(BaseModel):
     createdAt: str | None = None
 
 
+class ShipmentImportRow(BaseModel):
+    rowNumber: int = Field(ge=2)
+    shipmentId: str = Field(min_length=1, max_length=40)
+    shipment: ShipmentInput
+
+
+class ShipmentImportBatch(BaseModel):
+    rows: list[ShipmentImportRow] = Field(min_length=1, max_length=500)
+    fiscalYearCode: str | None = Field(default=None, max_length=7)
+
+
 class InvoicePaymentInput(BaseModel):
     amount: Decimal = Field(gt=0, max_digits=15, decimal_places=2)
     paidDate: str
@@ -306,7 +317,14 @@ def _payment_status(cursor, data: ShipmentInput) -> tuple[str, str | None]:
     return mapping[value]
 
 
-def _shipment_input_values(cursor, data: ShipmentInput, *, creating: bool, actor: str | None) -> dict[str, Any]:
+def _shipment_input_values(
+    cursor,
+    data: ShipmentInput,
+    *,
+    creating: bool,
+    actor: str | None,
+    allow_missing_po_dates: bool = False,
+) -> dict[str, Any]:
     supplier_id, supplier_folder = _supplier(cursor, data.supplier)
     loading_port_id = _lookup_id(cursor, DB_TABLES["ports"], data.portOfLoading)
     landing_port_id = _lookup_id(cursor, DB_TABLES["ports"], data.portOfLanding)
@@ -348,7 +366,7 @@ def _shipment_input_values(cursor, data: ShipmentInput, *, creating: bool, actor
 
     child_rows = {
         DB_TABLES["shipment_pos"]: _document_rows(
-            data.poNo, data.poDate, "PO number", "PO date", 80, require_dates=True
+            data.poNo, data.poDate, "PO number", "PO date", 80, require_dates=not allow_missing_po_dates
         ),
         DB_TABLES["shipment_invoices"]: _document_rows(data.invoiceNo, data.invoiceDate, "invoice number", "invoice date", 80),
         DB_TABLES["shipment_bls"]: _document_rows(data.blNo, data.blDate, "BL number", "BL date", 80),
@@ -886,20 +904,94 @@ def create_invoice_payment(
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 def create_shipment(data: ShipmentInput, user: dict[str, Any] = Depends(require_writer)):
+    return _create_shipment_record(data, user)
+
+
+@router.post("/import")
+def import_shipments(batch: ShipmentImportBatch, user: dict[str, Any] = Depends(require_writer)):
+    fiscal_year_code = _import_fiscal_year_code(batch.fiscalYearCode)
+    results = []
+    for row in batch.rows:
+        try:
+            shipment = _create_shipment_record(
+                row.shipment,
+                user,
+                allow_missing_po_dates=True,
+                requested_shipment_id=row.shipmentId,
+                fiscal_year_code=fiscal_year_code,
+                skip_existing_shipment_id=True,
+            )
+            if shipment is None:
+                results.append({"rowNumber": row.rowNumber, "skipped": True})
+                continue
+            results.append({"rowNumber": row.rowNumber, "shipment": shipment})
+        except HTTPException as exc:
+            results.append({
+                "rowNumber": row.rowNumber,
+                "error": exc.detail,
+                "statusCode": exc.status_code,
+            })
+    return {"results": results}
+
+
+def _import_fiscal_year_code(value: str | None) -> str:
+    if value:
+        code = value.strip().upper()
+        match = re.fullmatch(r"FY(\d{2})T(\d{2})", code)
+        if not match or (int(match.group(1)) + 1) % 100 != int(match.group(2)):
+            raise HTTPException(status_code=422, detail="Invalid workbook fiscal year.")
+        return code
+
+    today = date.today()
+    start_year = today.year if today.month >= 4 else today.year - 1
+    return f"FY{start_year % 100:02d}T{(start_year + 1) % 100:02d}"
+
+
+def _create_shipment_record(
+    data: ShipmentInput,
+    user: dict[str, Any],
+    *,
+    allow_missing_po_dates: bool = False,
+    requested_shipment_id: str | None = None,
+    fiscal_year_code: str | None = None,
+    skip_existing_shipment_id: bool = False,
+):
+    if requested_shipment_id is not None and not re.fullmatch(
+        r"[A-Za-z0-9][A-Za-z0-9_-]{0,39}",
+        requested_shipment_id.strip(),
+    ):
+        raise HTTPException(status_code=422, detail="SH. No must contain only letters, numbers, hyphens, or underscores.")
     conn = _connection()
     cursor = None
     try:
         cursor = conn.cursor(dictionary=True)
+        if requested_shipment_id is not None and skip_existing_shipment_id:
+            cursor.execute(
+                f"SELECT 1 FROM {DB_TABLES['shipments']} WHERE sh_no = %s LIMIT 1",
+                (requested_shipment_id.strip(),),
+            )
+            if cursor.fetchone():
+                return None
         actor = _actor(user)
-        values = _shipment_input_values(cursor, data, creating=True, actor=actor)
-        cursor.execute(
-            f"CALL {DB_PROCEDURES['next_shipment_number']}(%s, %s, @generated_sh_no, @generated_fy_code)",
-            (values["supplier_id"], date.today()),
+        values = _shipment_input_values(
+            cursor,
+            data,
+            creating=True,
+            actor=actor,
+            allow_missing_po_dates=allow_missing_po_dates,
         )
-        cursor.execute("SELECT @generated_sh_no AS sh_no, @generated_fy_code AS fy_code")
-        generated = cursor.fetchone()
-        sh_no = str(generated["sh_no"])
-        fy_code = str(generated["fy_code"])
+        if requested_shipment_id is None:
+            cursor.execute(
+                f"CALL {DB_PROCEDURES['next_shipment_number']}(%s, %s, @generated_sh_no, @generated_fy_code)",
+                (values["supplier_id"], date.today()),
+            )
+            cursor.execute("SELECT @generated_sh_no AS sh_no, @generated_fy_code AS fy_code")
+            generated = cursor.fetchone()
+            sh_no = str(generated["sh_no"])
+            fy_code = str(generated["fy_code"])
+        else:
+            sh_no = requested_shipment_id.strip()
+            fy_code = fiscal_year_code or _import_fiscal_year_code(None)
         docs_folder_path = f"fy{fy_code[2:4]}-{fy_code[5:7]}_docs/{values['supplier_folder']}/{sh_no}"
         cursor.execute(
             f"""
@@ -936,8 +1028,25 @@ def create_shipment(data: ShipmentInput, user: dict[str, Any] = Depends(require_
         raise
     except mysql.connector.IntegrityError as exc:
         conn.rollback()
-        logger.warning("Shipment insert rejected by a database constraint (%s)", type(exc).__name__)
-        raise HTTPException(status_code=409, detail="Shipment conflicts with an existing database record") from exc
+        if requested_shipment_id is not None and skip_existing_shipment_id:
+            cursor.execute(
+                f"SELECT 1 FROM {DB_TABLES['shipments']} WHERE sh_no = %s LIMIT 1",
+                (requested_shipment_id.strip(),),
+            )
+            if cursor.fetchone():
+                return None
+        logger.warning(
+            "Shipment insert rejected by a database constraint "
+            "(MySQL errno=%s, SQLSTATE=%s): %s",
+            exc.errno,
+            exc.sqlstate,
+            exc.msg,
+        )
+        detail = (
+            f"Database constraint rejected this shipment (MySQL error {exc.errno}). "
+            "Check the backend log for the constraint details."
+        )
+        raise HTTPException(status_code=409, detail=detail) from exc
     except mysql.connector.Error as exc:
         conn.rollback()
         logger.exception("Could not create shipment")

@@ -10,7 +10,7 @@
    - History & Records table with search, filters, Excel / CSV export
    - Row details open in a right-side drawer (50% width, 100% height)
 ───────────────────────────────────────────────────────────────────────────── */
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import * as XLSX from 'xlsx';
 import {
@@ -66,11 +66,17 @@ import {
   toISODate,
 } from '@/data/shipmentData';
 import { useShipments } from '@/hooks/useShipments';
-import type { ShipmentDocumentType } from '@/hooks/useShipments';
+import type { ShipmentDocumentType, ShipmentImportResult } from '@/hooks/useShipments';
 import { useAuth } from '@/context/AuthContext';
 import { MASTER_LABELS, MASTER_PATHS, MASTER_TYPES, type MasterEntry, type MasterType } from '@/data/masterData';
 import { BASE_URL } from '@/data/ENUM';
 import SearchableSelect, { type SearchableSelectOption } from '@/components/SearchableSelect';
+import {
+  buildShipmentImportRecord,
+  parseShipmentExcel,
+  shipmentImportRowIssues,
+  type ShipmentExcelPreview,
+} from '@/utils/shipmentExcelImport';
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Form state
@@ -328,13 +334,24 @@ function validate(
    Page Component
 ═══════════════════════════════════════════════════════════════════════════ */
 export default function ShipmentEntryAndHistoryPage() {
-  const { shipments, ready, error, addShipment, updateShipment, deleteShipment, uploadAttachment } = useShipments();
+  const { shipments, ready, error, addShipment, importShipments, updateShipment, deleteShipment, uploadAttachment } = useShipments();
   const { fetchWithAuth } = useAuth();
 
   const [activeTab, setActiveTab] = useState<'entry' | 'history'>('entry');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [masterOptions, setMasterOptions] = useState<Partial<Record<MasterType, MasterEntry[]>>>({});
   const [masterDataError, setMasterDataError] = useState<string | null>(null);
+  const [importPreview, setImportPreview] = useState<ShipmentExcelPreview | null>(null);
+  const [importFileName, setImportFileName] = useState('');
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importProgress, setImportProgress] = useState<string | null>(null);
+  const [importReport, setImportReport] = useState<{
+    imported: number;
+    skipped: number;
+    mastersCreated: Partial<Record<MasterType, number>>;
+    failures: { rowNumber: number; message: string }[];
+  } | null>(null);
+  const importFileInput = useRef<HTMLInputElement>(null);
 
   const [formData, setFormData] = useState<FormState>(emptyForm);
   const [documentCounts, setDocumentCounts] = useState<DocumentCounts>(DEFAULT_DOCUMENT_COUNTS);
@@ -358,6 +375,10 @@ export default function ShipmentEntryAndHistoryPage() {
   const selectedShipment = useMemo(
     () => previewShipment ?? (shipments.find((s) => s.id === selectedId) ?? null),
     [shipments, selectedId, previewShipment]
+  );
+  const existingShipmentIds = useMemo(
+    () => new Set(shipments.map((shipment) => shipment.id.trim().toLocaleLowerCase())),
+    [shipments],
   );
 
   const activeMasterNames = (masterType: MasterType) =>
@@ -426,6 +447,247 @@ export default function ShipmentEntryAndHistoryPage() {
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 4000);
+  };
+
+  const normalizeMasterName = (value: string) => value.trim().replace(/\s+/g, ' ').toLocaleLowerCase();
+
+  const ensureMasterEntries = async (masterType: MasterType, names: string[]) => {
+    const currentEntries = masterOptions[masterType] ?? [];
+    const entries = new Map<string, MasterEntry>();
+    currentEntries.forEach((entry) => entries.set(normalizeMasterName(entry.name), entry));
+    const uniqueNames = new Map<string, string>();
+    names.map((name) => name.trim()).filter(Boolean).forEach((name) => {
+      const key = normalizeMasterName(name);
+      if (!entries.has(key) && !uniqueNames.has(key)) uniqueNames.set(key, name);
+    });
+
+    const failures = new Map<string, string>();
+    const created: MasterEntry[] = [];
+    const valuesToCreate = Array.from(uniqueNames.entries());
+    let nextIndex = 0;
+    const worker = async () => {
+      while (nextIndex < valuesToCreate.length) {
+        const [key, name] = valuesToCreate[nextIndex];
+        nextIndex += 1;
+        try {
+          const response = await fetchWithAuth(`${BASE_URL}/api/masters/${masterType}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name,
+              ...(masterType === 'payment-terms'
+                ? { paymentType: 'OTHER', needsReview: true }
+                : {}),
+            }),
+          });
+          if (!response.ok) {
+            const payload: unknown = await response.json().catch(() => null);
+            const detail = payload && typeof payload === 'object' && 'detail' in payload
+              && typeof payload.detail === 'string'
+              ? payload.detail
+              : `Could not add ${MASTER_LABELS[masterType]} entry "${name}".`;
+            failures.set(key, detail);
+            continue;
+          }
+          const payload: unknown = await response.json();
+          if (!payload || typeof payload !== 'object' || !('id' in payload) || !('name' in payload)) {
+            failures.set(key, `The ${MASTER_LABELS[masterType]} API returned an invalid response for "${name}".`);
+            continue;
+          }
+          const entry = {
+            id: Number(payload.id),
+            name: String(payload.name),
+            is_active: true,
+            ...(masterType === 'payment-terms'
+              ? {
+                payment_type: 'OTHER',
+                credit_days: null,
+                credit_basis: null,
+                needs_review: true,
+              }
+              : {}),
+          };
+          if (!Number.isInteger(entry.id) || !entry.name.trim()) {
+            failures.set(key, `The ${MASTER_LABELS[masterType]} API returned an invalid response for "${name}".`);
+            continue;
+          }
+          entries.set(key, entry);
+          created.push(entry);
+        } catch (requestError) {
+          failures.set(
+            key,
+            requestError instanceof Error ? requestError.message : `Could not add "${name}" to ${MASTER_LABELS[masterType]}.`,
+          );
+        }
+      }
+    };
+
+    const concurrency = masterType === 'suppliers' ? 1 : 4;
+    await Promise.all(Array.from(
+      { length: Math.min(concurrency, valuesToCreate.length) },
+      () => worker(),
+    ));
+    if (created.length) {
+      setMasterOptions((current) => ({
+        ...current,
+        [masterType]: [...(current[masterType] ?? []), ...created],
+      }));
+    }
+    return { entries, failures, createdCount: created.length };
+  };
+
+  const handleImportFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    setImportError(null);
+    setImportReport(null);
+    setImportPreview(null);
+    setImportFileName(file?.name ?? '');
+    if (!file) return;
+    try {
+      const preview = parseShipmentExcel(await file.arrayBuffer());
+      setImportPreview(preview);
+      if (preview.missingRequiredColumns.length) {
+        setImportError(`Required Excel columns not found: ${preview.missingRequiredColumns.join(', ')}.`);
+      }
+    } catch (parseError) {
+      setImportError(parseError instanceof Error ? parseError.message : 'Could not read the selected Excel workbook.');
+    }
+  };
+
+  const handleImportShipments = async () => {
+    if (!importPreview || importPreview.missingRequiredColumns.length || !importPreview.rows.length) return;
+    setImportError(null);
+    setImportReport(null);
+    setImportProgress('Adding missing lookup values to their master lists…');
+
+    const existingRows = importPreview.rows.filter((row) => (
+      existingShipmentIds.has(row.shipmentId.trim().toLocaleLowerCase())
+    ));
+    const rowsToProcess = importPreview.rows.filter((row) => (
+      !existingShipmentIds.has(row.shipmentId.trim().toLocaleLowerCase())
+    ));
+    const failures = rowsToProcess.flatMap((row) => (
+      shipmentImportRowIssues(row).map((message) => ({ rowNumber: row.rowNumber, message }))
+    ));
+    const rowsToImport = rowsToProcess.filter((row) => shipmentImportRowIssues(row).length === 0);
+
+    try {
+      const [
+        supplierMasters,
+        materialMasters,
+        portMasters,
+        chaMasters,
+        modeMasters,
+        countryMasters,
+        paymentTermMasters,
+        warehouseMasters,
+      ] = await Promise.all([
+        ensureMasterEntries('suppliers', rowsToProcess.map((row) => row.fields.supplier ?? '')),
+        ensureMasterEntries('materials', rowsToProcess.map((row) => row.fields.material ?? '')),
+        ensureMasterEntries('ports', rowsToProcess.flatMap((row) => [
+          row.fields.portOfLoading ?? '',
+          row.fields.portOfLanding ?? '',
+        ])),
+        ensureMasterEntries('chas', rowsToProcess.map((row) => row.fields.cha ?? '')),
+        ensureMasterEntries('modes', rowsToProcess.map((row) => row.fields.modeOfShipment ?? '')),
+        ensureMasterEntries('countries', rowsToProcess.map((row) => row.fields.country ?? '')),
+        ensureMasterEntries('payment-terms', rowsToProcess.map((row) => row.fields.paymentTerms ?? '')),
+        ensureMasterEntries('warehouses', rowsToProcess.map((row) => row.fields.warehouseName ?? '')),
+      ]);
+      const importMasters = {
+        ...masterOptions,
+        suppliers: Array.from(supplierMasters.entries.values()),
+        materials: Array.from(materialMasters.entries.values()),
+        ports: Array.from(portMasters.entries.values()),
+        chas: Array.from(chaMasters.entries.values()),
+        modes: Array.from(modeMasters.entries.values()),
+        countries: Array.from(countryMasters.entries.values()),
+        'payment-terms': Array.from(paymentTermMasters.entries.values()),
+        warehouses: Array.from(warehouseMasters.entries.values()),
+      };
+      const seenShipmentIds = new Set<string>();
+      const payloadRows: { rowNumber: number; shipmentId: string; shipment: Shipment }[] = [];
+      for (const row of rowsToImport) {
+        const shipmentIdKey = row.shipmentId.trim().toLocaleLowerCase();
+        if (seenShipmentIds.has(shipmentIdKey)) {
+          failures.push({ rowNumber: row.rowNumber, message: `Duplicate SH. No "${row.shipmentId}" in this workbook.` });
+          continue;
+        }
+        seenShipmentIds.add(shipmentIdKey);
+
+        const supplierError = supplierMasters.failures.get(normalizeMasterName(row.fields.supplier ?? ''));
+        const materialError = row.fields.material?.trim()
+          ? materialMasters.failures.get(normalizeMasterName(row.fields.material))
+          : undefined;
+        if (supplierError || materialError) {
+          failures.push({
+            rowNumber: row.rowNumber,
+            message: [supplierError, materialError].filter(Boolean).join(' '),
+          });
+          continue;
+        }
+        try {
+          payloadRows.push({
+            rowNumber: row.rowNumber,
+            shipmentId: row.shipmentId,
+            shipment: buildShipmentImportRecord(row, importMasters),
+          });
+        } catch (rowError) {
+          failures.push({
+            rowNumber: row.rowNumber,
+            message: rowError instanceof Error ? rowError.message : 'Invalid shipment data.',
+          });
+        }
+      }
+
+      const importedResults: ShipmentImportResult[] = [];
+      let batchFailureMessage: string | null = null;
+      const batchSize = 25;
+      for (let offset = 0; offset < payloadRows.length; offset += batchSize) {
+        const batch = payloadRows.slice(offset, offset + batchSize);
+        setImportProgress(`Importing shipment rows ${offset + 1}–${offset + batch.length} of ${payloadRows.length}…`);
+        try {
+          const batchResults = await importShipments(batch, importPreview.fiscalYearCode);
+          importedResults.push(...batchResults);
+          batchResults.forEach((result) => {
+            if (result.error) failures.push({ rowNumber: result.rowNumber, message: result.error });
+          });
+        } catch (batchError) {
+          batchFailureMessage = batchError instanceof Error ? batchError.message : 'Shipment import request failed.';
+          payloadRows.slice(offset).forEach((row) => {
+            failures.push({
+              rowNumber: row.rowNumber,
+              message: `Import request failed; check whether SH. No "${row.shipmentId}" was saved before retrying. ${batchFailureMessage}`,
+            });
+          });
+          break;
+        }
+      }
+
+      const imported = importedResults.filter((result) => result.shipment).length;
+      setImportReport({
+        imported,
+        skipped: existingRows.length + importedResults.filter((result) => result.skipped).length,
+        mastersCreated: {
+          suppliers: supplierMasters.createdCount,
+          materials: materialMasters.createdCount,
+          ports: portMasters.createdCount,
+          chas: chaMasters.createdCount,
+          modes: modeMasters.createdCount,
+          countries: countryMasters.createdCount,
+          'payment-terms': paymentTermMasters.createdCount,
+          warehouses: warehouseMasters.createdCount,
+        },
+        failures: failures.sort((a, b) => a.rowNumber - b.rowNumber),
+      });
+      if (batchFailureMessage) setImportError(batchFailureMessage);
+      showToast(`Imported ${imported} shipment${imported === 1 ? '' : 's'}; ${failures.length} row${failures.length === 1 ? '' : 's'} need attention.`);
+    } catch (runError) {
+      setImportError(runError instanceof Error ? runError.message : 'Shipment import failed.');
+    } finally {
+      setImportProgress(null);
+    }
   };
 
   const setField = <K extends keyof FormState>(field: K, value: FormState[K]) => {
@@ -609,6 +871,13 @@ export default function ShipmentEntryAndHistoryPage() {
     const wasEditing = editingId !== null;
 
     try {
+      if (formData.material.trim()) {
+        const materialName = formData.material.trim();
+        const materialResult = await ensureMasterEntries('materials', [materialName]);
+        const materialError = materialResult.failures.get(normalizeMasterName(materialName));
+        if (materialError) throw new Error(materialError);
+      }
+
       let savedRecord: Shipment;
       if (editingId) {
         const prev = shipments.find((s) => s.id === editingId);
@@ -1515,6 +1784,38 @@ export default function ShipmentEntryAndHistoryPage() {
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
+                <input
+                  ref={importFileInput}
+                  type="file"
+                  accept=".xlsx,.xls"
+                  onChange={handleImportFile}
+                  style={{ display: 'none' }}
+                  aria-label="Select shipment Excel workbook"
+                />
+                <button
+                  type="button"
+                  onClick={() => importFileInput.current?.click()}
+                  disabled={Boolean(importProgress)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.45rem',
+                    padding: '0.5rem 0.875rem',
+                    borderRadius: 8,
+                    background: 'var(--bg-secondary)',
+                    border: '1px solid var(--border)',
+                    color: 'var(--text-primary)',
+                    fontSize: 'var(--font-size-compact)',
+                    fontWeight: 700,
+                    cursor: importProgress ? 'not-allowed' : 'pointer',
+                    fontFamily: 'inherit',
+                    opacity: importProgress ? 0.6 : 1,
+                  }}
+                  title="Import shipment rows from an Excel workbook"
+                >
+                  <UploadCloud size={14} color="var(--accent-blue)" />
+                  <span>Import Excel</span>
+                </button>
                 <button
                   type="button"
                   onClick={handleExportCSV}
@@ -1563,6 +1864,137 @@ export default function ShipmentEntryAndHistoryPage() {
                 </button>
               </div>
             </div>
+
+            {(importError || importPreview || importProgress || importReport) && (
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.6rem',
+                padding: '0.85rem 1rem',
+                borderRadius: 10,
+                border: '1px solid var(--border)',
+                background: 'var(--bg-secondary)',
+              }}>
+                {importFileName && <strong style={{ color: 'var(--text-primary)' }}>{importFileName}</strong>}
+                {importError && (
+                  <div role="alert" style={{ color: 'var(--accent-red)', fontSize: 'var(--font-size-body-compact)' }}>
+                    {importError}
+                  </div>
+                )}
+                {importPreview && (
+                  <>
+                    <div style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-size-body-compact)' }}>
+                      Sheet: <strong>{importPreview.sheetName}</strong> · {importPreview.rows.length} rows with shipment data ·{' '}
+                      {importPreview.rows.filter((row) => shipmentImportRowIssues(row).length === 0).length} rows have SH. No, Supplier, PO No, and Invoice No.
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {importPreview.matchedColumns.map(({ field, header }) => (
+                        <span key={field} style={{
+                          padding: '0.2rem 0.45rem',
+                          borderRadius: 5,
+                          background: 'var(--bg-card)',
+                          color: 'var(--text-secondary)',
+                          fontSize: '0.72rem',
+                        }}>
+                          {header} → {field === 'shipmentId' ? 'shipment ID' : field.replace(/[A-Z]/g, (letter) => ` ${letter.toLowerCase()}`)}
+                        </span>
+                      ))}
+                    </div>
+                    {!importPreview.matchedColumns.some(({ field }) => field === 'poDate') && (
+                      <div style={{ color: 'var(--accent-orange)', fontSize: 'var(--font-size-compact)' }}>
+                        This workbook has no PO Date column. Imports will keep PO dates blank; normal form entries still require PO dates.
+                      </div>
+                    )}
+                    <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-compact)' }}>
+                      SH. No values will be preserved. Rows with existing IDs or invalid master values will be reported. New suppliers and materials will be added to their master tables. ETA/ETD text in the Material status column is recognized. Workbook Link paths are not copied as attachments.
+                    </div>
+                    {importPreview.rows.length > 0 && (
+                      <div style={{ overflowX: 'auto' }}>
+                        <table style={{ borderCollapse: 'collapse', minWidth: 520, width: '100%', fontSize: 'var(--font-size-compact)' }}>
+                          <thead>
+                            <tr>
+                              {['Excel row', 'SH. No', 'Supplier', 'PO No', 'Invoice No'].map((label) => (
+                                <th key={label} style={{ textAlign: 'left', padding: '0.35rem', borderBottom: '1px solid var(--border)', color: 'var(--text-muted)' }}>{label}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {importPreview.rows.slice(0, 5).map((row) => (
+                              <tr key={row.rowNumber}>
+                                <td style={{ padding: '0.35rem' }}>{row.rowNumber}</td>
+                                <td style={{ padding: '0.35rem' }}>{row.shipmentId || '-'}</td>
+                                <td style={{ padding: '0.35rem' }}>{row.fields.supplier || '-'}</td>
+                                <td style={{ padding: '0.35rem' }}>{row.fields.poNo || '-'}</td>
+                                <td style={{ padding: '0.35rem' }}>{row.fields.invoiceNo || '-'}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                    <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+                      <button
+                        type="button"
+                        onClick={() => void handleImportShipments()}
+                        disabled={
+                          Boolean(importProgress)
+                          || Boolean(importPreview.missingRequiredColumns.length)
+                          || !importPreview.rows.some((row) => (
+                            existingShipmentIds.has(row.shipmentId.trim().toLocaleLowerCase())
+                            || shipmentImportRowIssues(row).length === 0
+                          ))
+                          || !MASTER_TYPES.every((type) => Array.isArray(masterOptions[type]))
+                        }
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 7,
+                          border: 'none',
+                          borderRadius: 8,
+                          background: 'var(--accent-blue)',
+                          color: '#fff',
+                          fontFamily: 'inherit',
+                          fontSize: 'var(--font-size-compact)',
+                          fontWeight: 700,
+                          cursor: importProgress ? 'not-allowed' : 'pointer',
+                          padding: '0.5rem 0.85rem',
+                          opacity: importProgress ? 0.6 : 1,
+                        }}
+                      >
+                        <UploadCloud size={15} />
+                        Import {importPreview.rows.filter((row) => (
+                          !existingShipmentIds.has(row.shipmentId.trim().toLocaleLowerCase())
+                          && shipmentImportRowIssues(row).length === 0
+                        )).length} new rows
+                      </button>
+                      {importProgress && <span role="status" style={{ color: 'var(--accent-blue)', fontSize: 'var(--font-size-compact)' }}>{importProgress}</span>}
+                    </div>
+                  </>
+                )}
+                {importReport && (
+                  <div role="status" style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-size-body-compact)' }}>
+                    Imported {importReport.imported} shipments; skipped {importReport.skipped} existing shipment IDs without changing them.
+                    {MASTER_TYPES.filter((type) => Boolean(importReport.mastersCreated[type])).map((type) => (
+                      <span key={type}> Added {importReport.mastersCreated[type]} {MASTER_LABELS[type].toLocaleLowerCase()} to master data.</span>
+                    ))}
+                    {(importReport.mastersCreated['payment-terms'] ?? 0) > 0 && (
+                      <span> New payment terms were saved as OTHER and marked for business review; credit days/date basis were not guessed.</span>
+                    )}
+                    {importReport.failures.length > 0 && (
+                      <div style={{ marginTop: 6, color: 'var(--accent-red)' }}>
+                        {importReport.failures.length} row(s) need attention:
+                        <ul style={{ margin: '0.35rem 0 0', paddingLeft: '1.25rem', maxHeight: 180, overflowY: 'auto' }}>
+                          {importReport.failures.slice(0, 30).map((failure, index) => (
+                            <li key={`${failure.rowNumber}-${index}`}>Excel row {failure.rowNumber}: {failure.message}</li>
+                          ))}
+                        </ul>
+                        {importReport.failures.length > 30 && <span>Showing the first 30 errors.</span>}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
 
             <div style={{ display: 'flex', alignItems: 'end', flexWrap: 'wrap', gap: '0.75rem', borderTop: '1px solid var(--border)', paddingTop: '0.75rem' }}>
               <label style={{ ...labelStyle, display: 'grid', gap: 4, marginBottom: 0 }}>

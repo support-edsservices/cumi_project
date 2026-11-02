@@ -7,6 +7,14 @@ import { useAuth } from '@/context/AuthContext';
 
 export type ShipmentDocumentType = 'PO' | 'INVOICE' | 'BL' | 'MAWB' | 'HAWB' | 'BOE' | 'OTHER';
 
+export interface ShipmentImportResult {
+  rowNumber: number;
+  shipment?: Shipment;
+  skipped?: boolean;
+  error?: string;
+  statusCode?: number;
+}
+
 const DOCUMENT_PROPERTIES: Partial<Record<ShipmentDocumentType, keyof Shipment>> = {
   PO: 'poDocument',
   INVOICE: 'invoiceDocument',
@@ -20,6 +28,14 @@ async function responseError(response: Response, fallback: string): Promise<Erro
   const data: unknown = await response.json().catch(() => null);
   if (data && typeof data === 'object' && 'detail' in data && typeof data.detail === 'string') {
     return new Error(data.detail);
+  }
+  if (data && typeof data === 'object' && 'detail' in data && Array.isArray(data.detail)) {
+    const messages = data.detail.flatMap((item: unknown) => (
+      item && typeof item === 'object' && 'msg' in item && typeof item.msg === 'string'
+        ? [item.msg]
+        : []
+    ));
+    if (messages.length) return new Error(messages.join('; '));
   }
   return new Error(fallback);
 }
@@ -80,6 +96,28 @@ export function useShipments() {
     return saved;
   }, [fetchWithAuth]);
 
+  const importShipments = useCallback(async (
+    rows: { rowNumber: number; shipmentId: string; shipment: Shipment }[],
+    fiscalYearCode: string | null,
+  ): Promise<ShipmentImportResult[]> => {
+    const response = await fetchWithAuth(`${BASE_URL}/api/shipments/import`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rows, fiscalYearCode }),
+    });
+    if (!response.ok) throw await responseError(response, 'Could not import shipments.');
+
+    const data: { results: ShipmentImportResult[] } = await response.json();
+    const imported = data.results
+      .filter((result): result is ShipmentImportResult & { shipment: Shipment } => Boolean(result.shipment))
+      .map((result) => shipmentFromApi(result.shipment));
+    if (imported.length) {
+      setShipments((current) => [...imported, ...current]);
+      setError(null);
+    }
+    return data.results;
+  }, [fetchWithAuth]);
+
   const updateShipment = useCallback(async (record: Shipment): Promise<Shipment> => {
     const response = await fetchWithAuth(`${BASE_URL}/api/shipments/${encodeURIComponent(record.id)}`, {
       method: 'PUT',
@@ -128,5 +166,5 @@ export function useShipments() {
     return document;
   }, [fetchWithAuth]);
 
-  return { shipments, ready, error, addShipment, updateShipment, deleteShipment, uploadAttachment };
+  return { shipments, ready, error, addShipment, importShipments, updateShipment, deleteShipment, uploadAttachment };
 }

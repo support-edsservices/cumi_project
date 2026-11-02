@@ -30,6 +30,7 @@ Database table names are centralized in `config/settings.py` under `DB_TABLES`; 
 - `GET /api/shipments` and `GET /api/shipments/{sh_no}`: authenticated users.
 - `GET /api/shipments/{sh_no}/invoices` and `GET /api/shipments/{sh_no}/invoices/{invoice_id}/payments`: authenticated users.
 - `POST /api/shipments` and `PUT /api/shipments/{sh_no}`: manager, admin, or superadmin.
+- `POST /api/shipments/import`: manager, admin, or superadmin; imports up to 500 rows, preserves supplied shipment IDs, skips IDs that already exist without changing those shipments, allows blank PO dates for Excel imports, and returns row-level errors. Normal shipment creation still requires a PO date.
 - `POST /api/shipments/{sh_no}/invoices/{invoice_id}/payments`: manager, admin, or superadmin.
 - `DELETE /api/shipments/{sh_no}` and `DELETE /api/shipments/{sh_no}/attachments/{id}`: admin or superadmin (soft deletes).
 - `POST /api/shipments/{sh_no}/attachments?type=PO|INVOICE|BL|MAWB|HAWB|BOE|OTHER`: manager, admin, or superadmin.
@@ -37,6 +38,6 @@ Database table names are centralized in `config/settings.py` under `DB_TABLES`; 
 - `GET /api/masters/{suppliers|ports|chas|warehouses|payment-terms|modes|countries|prw|materials}`: authenticated users.
 - `POST /api/masters/{master_type}`, `PUT` and `DELETE /api/masters/{master_type}/{id}`, and `PATCH /api/masters/{master_type}/{id}/activate` or `/deactivate`: manager, admin, or superadmin.
 
-Each master has a separate page under `/masters/`: suppliers, ports (used for both loading and landing), CHA agents, shipment modes, countries, payment terms, PRW/payment statuses, warehouses, and materials. Add/activate values on those pages; shipment entry uses searchable selectors for active master values and does not create missing values automatically. Shipment modes are maintained as names; PRW values remain fixed system statuses.
+Each master has a separate page under `/masters/`: suppliers, ports (used for both loading and landing), CHA agents, shipment modes, countries, payment terms, PRW/payment statuses, warehouses, and materials. Shipment Excel import adds missing supplier, material, port, CHA, mode, country, warehouse, and payment-term entries before importing rows. Payment terms created by import default to `OTHER`, have no credit days/date basis, and are marked for business review; import does not infer financial settings from the term label. Shipment entry also adds a newly entered material to the Materials master. PRW values remain fixed system statuses.
 
 The API uses the schema's stored procedure to allocate shipment numbers in the same transaction as the shipment insert. In shipment entry, use the Add buttons to independently add PO, invoice, BL, and BOE values; the page creates one number/date row per value and joins them with `_` for the API, which inserts separate child-table rows. At least one PO and invoice are required. BL and BOE are optional and start with no rows. Proforma invoice number/date entries stay paired with the commercial invoice entries for due-date tracking. Enter one number per field; dates can be omitted unless the selected payment-term date basis requires them.
