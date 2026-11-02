@@ -5,7 +5,7 @@
    Reads from the shared store (useShipments), so entries added, edited or
    deleted on the entry / history page show up here straight away.
 ───────────────────────────────────────────────────────────────────────────── */
-import { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -13,7 +13,7 @@ import {
 } from 'recharts';
 import {
   Package, Ship, AlertCircle, Clock, Search, Plus,
-  ChevronLeft, ChevronRight, Anchor, Plane, FileText, X, Filter, PackageX, MoreVertical, ChevronDown, ChevronUp,
+  ChevronLeft, ChevronRight, Anchor, Plane, FileText, X, Filter, PackageX, MoreVertical,
 } from 'lucide-react';
 
 import { Shipment, MaterialStatus, PaymentStatus, PAYMENT_STATUSES } from '@/types/shipment';
@@ -115,6 +115,142 @@ function toLocalDate(v: unknown): Date | null {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   Interactive Additional Parameters Dropdown Menu
+═══════════════════════════════════════════════════════════════════════════ */
+function ActionMenu({ shipment: s }: { shipment: Shipment }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen]);
+
+  return (
+    <div ref={menuRef} style={{ position: 'relative', display: 'inline-block' }}>
+      <button
+        onClick={() => setIsOpen((prev) => !prev)}
+        style={{
+          background: isOpen ? 'var(--bg-card)' : 'transparent',
+          border: '1px solid var(--border)',
+          borderRadius: 6,
+          padding: '4px 6px',
+          cursor: 'pointer',
+          color: 'var(--text-primary)',
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+        title="Toggle additional shipment details"
+        aria-expanded={isOpen}
+      >
+        <MoreVertical size={16} />
+      </button>
+
+      {isOpen && (
+        <div
+          style={{
+            position: 'absolute',
+            right: 0,
+            top: '2.2rem',
+            background: 'var(--bg-card)',
+            border: '1px solid var(--border)',
+            borderRadius: 8,
+            boxShadow: '0 10px 25px rgba(0,0,0,0.3)',
+            padding: '0.85rem',
+            zIndex: 100,
+            width: 280,
+            textAlign: 'left',
+            fontSize: 'var(--font-size-compact)',
+            color: 'var(--text-primary)',
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              fontWeight: 800,
+              marginBottom: 6,
+              borderBottom: '1px solid var(--border)',
+              paddingBottom: 4,
+              color: ACCENT.blue,
+            }}
+          >
+            <span>Additional Parameters</span>
+            <button
+              onClick={() => setIsOpen(false)}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                cursor: 'pointer',
+                color: 'var(--text-muted)',
+                padding: 0,
+                display: 'flex',
+              }}
+              title="Close parameter list"
+            >
+              <X size={14} />
+            </button>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 4 }}>
+            <div><strong>Material:</strong> {s.material || '—'}</div>
+            <div><strong>Mode of Shipment:</strong> {s.modeOfShipment}</div>
+            {s.proformaInvoiceNo && (
+              <>
+                <div><strong>Proforma Invoice No:</strong> {s.proformaInvoiceNo}</div>
+                <div><strong>Proforma Invoice Date:</strong> {s.proformaInvoiceDate ? formatDMY(s.proformaInvoiceDate) : '—'}</div>
+              </>
+            )}
+            <div><strong>Port of Loading:</strong> {s.portOfLoading || '—'}</div>
+            <div><strong>Port of Landing:</strong> {s.portOfLanding || '—'}</div>
+            <div><strong>CHA Agent:</strong> {s.cha || '—'}</div>
+            <div><strong>BOE No:</strong> {s.boeNo || '—'}</div>
+            <div><strong>BOE Date:</strong> {s.boeDate ? formatDMY(s.boeDate) : '—'}</div>
+            <div><strong>Warehouse:</strong> {s.warehouseName || '—'}</div>
+            <div><strong>Bank Ref:</strong> {s.bankReferenceNo || '—'}</div>
+            <div><strong>Lead Time:</strong> {s.leadTime} days</div>
+            {s.docsFolderPath && <div><strong>Folder:</strong> {s.docsFolderPath}</div>}
+            {s.link && (
+              <div style={{ marginTop: 4 }}>
+                <a
+                  href={s.link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ color: ACCENT.blue, fontWeight: 700, textDecoration: 'none' }}
+                >
+                  Open Document →
+                </a>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
    Sub-components
 ═══════════════════════════════════════════════════════════════════════════ */
 
@@ -128,7 +264,7 @@ function KpiCard({
   const pct = Math.min((value / Math.max(total, 1)) * 100, 100);
   return (
     <div
-      className={`stat-card fade-up`}
+      className="stat-card fade-up"
       onClick={onClick}
       style={{
         animationDelay: `${delay}s`,
@@ -192,7 +328,7 @@ function KpiCard({
   );
 }
 
-/* ── Generic Modal Dialog Box (Dark Mode Suitable, 90% Width/Height, Fixed Header Search) ── */
+/* ── Generic Modal Dialog Box ── */
 function ShipmentListModal({
   title,
   shipments,
@@ -217,13 +353,6 @@ function ShipmentListModal({
     paymentStatus: '',
     materialStatus: '',
   });
-
-  // Track expanded rows for three-dot menu
-  const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
-
-  const toggleRowExpanded = (id: string) => {
-    setExpandedRows(prev => ({ ...prev, [id]: !prev[id] }));
-  };
 
   const handleFilterChange = (col: keyof typeof colFilters, val: string) => {
     setColFilters(prev => ({ ...prev, [col]: val.toLowerCase() }));
@@ -339,7 +468,7 @@ function ShipmentListModal({
           </button>
         </div>
 
-        {/* Modal Body Table with Always-Visible Header & Search Inputs */}
+        {/* Modal Body Table */}
         <div style={{ overflow: 'auto', flex: 1, border: '1px solid var(--border)', borderRadius: 8 }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 'var(--font-size-body-small)' }}>
             <thead>
@@ -469,132 +598,78 @@ function ShipmentListModal({
                   </td>
                 </tr>
               ) : (
-                filteredModalShipments.map((s, idx) => {
-                  const isExpanded = !!expandedRows[s.id];
-                  return (
-                    <tr key={s.id} style={{ borderBottom: '1px solid var(--border)', background: idx % 2 === 1 ? 'var(--bg-secondary)' : 'transparent' }}>
-                      <td style={{ padding: '0.625rem 0.75rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                        {s.id}
-                      </td>
-                      <td style={{ padding: '0.625rem 0.75rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                        {s.supplier}
-                      </td>
-                      <td style={{ padding: '0.625rem 0.75rem', color: 'var(--text-secondary)' }}>
-                        {s.country || '—'}
-                      </td>
-                      <td style={{ padding: '0.625rem 0.75rem', color: 'var(--text-secondary)' }}>
-                        <div>{s.poNo}</div>
-                        <div style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)' }}>{s.poDate ? formatDMY(s.poDate) : '—'}</div>
-                      </td>
-                      <td style={{ padding: '0.625rem 0.75rem', color: 'var(--text-secondary)' }}>
-                        <div>{s.invoiceNo}</div>
-                        <div style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)' }}>{s.invoiceDate ? formatDMY(s.invoiceDate) : '—'}</div>
-                        {s.proformaInvoiceNo && (
-                          <div style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)' }}>
-                            Proforma: {s.proformaInvoiceNo} · {formatDMY(s.proformaInvoiceDate) || '—'}
-                          </div>
-                        )}
-                      </td>
-                      <td style={{ padding: '0.625rem 0.75rem', color: 'var(--text-secondary)' }}>
-                        <div>{s.blNo || '—'}</div>
-                        <div style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)' }}>{s.blDate ? formatDMY(s.blDate) : '—'}</div>
-                      </td>
-                      <td style={{ padding: '0.625rem 0.75rem', color: 'var(--text-secondary)' }}>
-                        <div>ETD: {s.etd ? formatDMY(s.etd) : '—'}</div>
-                        <div>ETA: {s.eta ? formatDMY(s.eta) : '—'}</div>
-                        {s.arrivedDate && <div>Arrived: {formatDMY(s.arrivedDate)}</div>}
-                      </td>
-                      <td style={{ padding: '0.625rem 0.75rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-                        {getPaymentTermsLabel(s)}
-                      </td>
-                      <td style={{ padding: '0.625rem 0.75rem', color: 'var(--text-secondary)' }}>
-                        {getPaymentDueDate(s) ? formatDMY(getPaymentDueDate(s)) : '—'}
-                      </td>
-                      <td style={{ padding: '0.625rem 0.75rem' }}>
-                        <span style={{
-                          display: 'inline-block', padding: '3px 8px', borderRadius: 8,
-                          background: `${PAYMENT_STATUS_COLOR[s.paymentStatus]}18`, color: PAYMENT_STATUS_COLOR[s.paymentStatus],
-                          fontWeight: 800, fontSize: 'var(--font-size-tiny)',
-                        }}>
-                          {s.paymentStatus}
-                        </span>
-                      </td>
-                      <td style={{ padding: '0.625rem 0.75rem' }}>
-                        <span style={{
-                          display: 'inline-block', padding: '3px 8px', borderRadius: 8,
-                          background: `${MATERIAL_STATUS_COLOR[s.materialStatus]}18`, color: MATERIAL_STATUS_COLOR[s.materialStatus],
-                          fontWeight: 800, fontSize: 'var(--font-size-tiny)',
-                        }}>
-                          {s.materialStatus}
-                        </span>
-                      </td>
-                      <td style={{ padding: '0.625rem 0.75rem', textAlign: 'center', position: 'relative' }}>
-                        <button
-                          onClick={() => toggleRowExpanded(s.id)}
-                          style={{
-                            background: isExpanded ? 'var(--bg-card)' : 'transparent',
-                            border: '1px solid var(--border)',
-                            borderRadius: 6,
-                            padding: '4px 6px',
-                            cursor: 'pointer',
-                            color: 'var(--text-primary)',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                          }}
-                          title="View additional shipment details"
-                        >
-                          <MoreVertical size={16} />
-                        </button>
-
-                        {/* Three-Dot Append Parameters Overlay Dropdown */}
-                        {isExpanded && (
-                          <div style={{
-                            position: 'absolute', right: '0.75rem', top: '2.5rem',
-                            background: 'var(--bg-card)', border: '1px solid var(--border)',
-                            borderRadius: 8, boxShadow: '0 10px 25px rgba(0,0,0,0.3)',
-                            padding: '0.85rem', zIndex: 10, width: 280, textAlign: 'left',
-                            fontSize: 'var(--font-size-compact)', color: 'var(--text-primary)',
-                          }}>
-                            <div style={{ fontWeight: 800, marginBottom: 6, borderBottom: '1px solid var(--border)', paddingBottom: 4, color: ACCENT.blue }}>
-                              Additional Parameters
-                            </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 4 }}>
-                              <div><strong>Material:</strong> {s.material || '—'}</div>
-                              <div><strong>Mode of Shipment:</strong> {s.modeOfShipment}</div>
-                              <div><strong>Port of Loading:</strong> {s.portOfLoading || '—'}</div>
-                              <div><strong>Port of Landing:</strong> {s.portOfLanding || '—'}</div>
-                              <div><strong>CHA Agent:</strong> {s.cha || '—'}</div>
-                              <div><strong>BOE No:</strong> {s.boeNo || '—'}</div>
-                              <div><strong>BOE Date:</strong> {s.boeDate ? formatDMY(s.boeDate) : '—'}</div>
-                              <div><strong>Warehouse:</strong> {s.warehouseName || '—'}</div>
-                              <div><strong>Bank Ref:</strong> {s.bankReferenceNo || '—'}</div>
-                              <div><strong>Lead Time:</strong> {s.leadTime} days</div>
-                              {s.docsFolderPath && <div><strong>Folder:</strong> {s.docsFolderPath}</div>}
-                              {s.link && (
-                                <div style={{ marginTop: 4 }}>
-                                  <a href={s.link} target="_blank" rel="noopener noreferrer" style={{ color: ACCENT.blue, fontWeight: 700, textDecoration: 'none' }}>
-                                    Open Document →
-                                  </a>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })
+                filteredModalShipments.map((s, idx) => (
+                  <tr key={s.id} style={{ borderBottom: '1px solid var(--border)', background: idx % 2 === 1 ? 'var(--bg-secondary)' : 'transparent' }}>
+                    <td style={{ padding: '0.625rem 0.75rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                      {s.id}
+                    </td>
+                    <td style={{ padding: '0.625rem 0.75rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                      {s.supplier}
+                    </td>
+                    <td style={{ padding: '0.625rem 0.75rem', color: 'var(--text-secondary)' }}>
+                      {s.country || '—'}
+                    </td>
+                    <td style={{ padding: '0.625rem 0.75rem', color: 'var(--text-secondary)' }}>
+                      <div>{s.poNo}</div>
+                      <div style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)' }}>{s.poDate ? formatDMY(s.poDate) : '—'}</div>
+                    </td>
+                    <td style={{ padding: '0.625rem 0.75rem', color: 'var(--text-secondary)' }}>
+                      <div>{s.invoiceNo}</div>
+                      <div style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)' }}>{s.invoiceDate ? formatDMY(s.invoiceDate) : '—'}</div>
+                      {s.proformaInvoiceNo && (
+                        <div style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)' }}>
+                          Proforma: {s.proformaInvoiceNo} · {formatDMY(s.proformaInvoiceDate) || '—'}
+                        </div>
+                      )}
+                    </td>
+                    <td style={{ padding: '0.625rem 0.75rem', color: 'var(--text-secondary)' }}>
+                      <div>{s.blNo || '—'}</div>
+                      <div style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)' }}>{s.blDate ? formatDMY(s.blDate) : '—'}</div>
+                    </td>
+                    <td style={{ padding: '0.625rem 0.75rem', color: 'var(--text-secondary)' }}>
+                      <div>ETD: {s.etd ? formatDMY(s.etd) : '—'}</div>
+                      <div>ETA: {s.eta ? formatDMY(s.eta) : '—'}</div>
+                      {s.arrivedDate && <div>Arrived: {formatDMY(s.arrivedDate)}</div>}
+                    </td>
+                    <td style={{ padding: '0.625rem 0.75rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                      {getPaymentTermsLabel(s)}
+                    </td>
+                    <td style={{ padding: '0.625rem 0.75rem', color: 'var(--text-secondary)' }}>
+                      {getPaymentDueDate(s) ? formatDMY(getPaymentDueDate(s)) : '—'}
+                    </td>
+                    <td style={{ padding: '0.625rem 0.75rem' }}>
+                      <span style={{
+                        display: 'inline-block', padding: '3px 8px', borderRadius: 8,
+                        background: `${PAYMENT_STATUS_COLOR[s.paymentStatus]}18`, color: PAYMENT_STATUS_COLOR[s.paymentStatus],
+                        fontWeight: 800, fontSize: 'var(--font-size-tiny)',
+                      }}>
+                        {s.paymentStatus}
+                      </span>
+                    </td>
+                    <td style={{ padding: '0.625rem 0.75rem' }}>
+                      <span style={{
+                        display: 'inline-block', padding: '3px 8px', borderRadius: 8,
+                        background: `${MATERIAL_STATUS_COLOR[s.materialStatus]}18`, color: MATERIAL_STATUS_COLOR[s.materialStatus],
+                        fontWeight: 800, fontSize: 'var(--font-size-tiny)',
+                      }}>
+                        {s.materialStatus}
+                      </span>
+                    </td>
+                    <td style={{ padding: '0.625rem 0.75rem', textAlign: 'center' }}>
+                      <ActionMenu shipment={s} />
+                    </td>
+                  </tr>
+                ))
               )}
             </tbody>
           </table>
         </div>
       </div>
-    </div >
+    </div>
   );
 }
 
-/* ── Interactive Calendar View (Top-Right Corner ETA Dots + Center Payment Bars) ── */
+/* ── Interactive Calendar View ── */
 function PaymentCalendar({
   data,
   selectedDate,
@@ -611,12 +686,10 @@ function PaymentCalendar({
   const firstDay = getFirstDayOfMonth(year, month);
   const today = new Date();
 
-  /* Build map: day → due shipments & ETA shipments */
   const dayMap = useMemo(() => {
     const map = new Map<number, { dueShipments: Shipment[]; etaShipments: Shipment[] }>();
 
     data.forEach(s => {
-      // Due payments
       const due = getPaymentDueDate(s);
       if (isPaymentCalendarEligible(s) && due && due.getFullYear() === year && due.getMonth() === month) {
         const day = due.getDate();
@@ -625,7 +698,6 @@ function PaymentCalendar({
         map.set(day, existing);
       }
 
-      // ETA (Estimated Time of Arrival)
       const etaDate = s.eta ? toLocalDate(s.eta) : null;
       if (etaDate && etaDate.getFullYear() === year && etaDate.getMonth() === month) {
         const day = etaDate.getDate();
@@ -680,7 +752,6 @@ function PaymentCalendar({
         </div>
       </div>
 
-      {/* Weekday headers */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2, marginBottom: 2 }}>
         {weekDays.map(w => (
           <div key={w} style={{
@@ -692,7 +763,6 @@ function PaymentCalendar({
         ))}
       </div>
 
-      {/* Day cells */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2 }}>
         {cells.map((day, idx) => {
           if (day === null) return <div key={`empty-${idx}`} />;
@@ -727,7 +797,6 @@ function PaymentCalendar({
                 transition: 'all 0.15s ease',
               }}
             >
-              {/* Day Number */}
               <span style={{
                 fontSize: 'var(--font-size-compact)',
                 fontWeight: isSelected || isToday ? 800 : 500,
@@ -736,16 +805,10 @@ function PaymentCalendar({
                 {day}
               </span>
 
-              {/* 1. TOP-RIGHT CORNER: ETA Status Dots */}
               {cellData?.etaShipments && cellData.etaShipments.length > 0 && (
                 <div style={{
-                  position: 'absolute',
-                  top: 10,
-                  right: 4,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 2,
-                  zIndex: 1,
+                  position: 'absolute', top: 10, right: 4,
+                  display: 'flex', alignItems: 'center', gap: 2, zIndex: 1,
                 }}>
                   {cellData.etaShipments.map(s => {
                     const isArrived = s.materialStatus === 'Arrived';
@@ -754,12 +817,9 @@ function PaymentCalendar({
                         key={`eta-dot-${s.id}`}
                         title={`ETA Shipment ${s.id}: ${s.materialStatus}`}
                         style={{
-                          width: 8,
-                          height: 8,
-                          borderRadius: '50%',
+                          width: 8, height: 8, borderRadius: '50%',
                           background: isArrived ? ACCENT.green : ACCENT.red,
-                          display: 'inline-block',
-                          flexShrink: 0,
+                          display: 'inline-block', flexShrink: 0,
                           boxShadow: '0 0 2px rgba(0,0,0,0.3)',
                         }}
                       />
@@ -768,7 +828,6 @@ function PaymentCalendar({
                 </div>
               )}
 
-              {/* 2. BOTTOM CENTER: Payment Due Status Bars */}
               {cellData?.dueShipments && cellData.dueShipments.length > 0 && (
                 <div style={{ display: 'flex', gap: 2, marginTop: 4, flexWrap: 'wrap', justifyContent: 'center' }}>
                   {cellData.dueShipments.map(s => (
@@ -788,7 +847,6 @@ function PaymentCalendar({
         })}
       </div>
 
-      {/* Legend */}
       <div style={{
         display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.75rem',
         fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)', flexWrap: 'wrap', gap: 8,
@@ -814,7 +872,7 @@ function PaymentCalendar({
   );
 }
 
-/* ── Selected Date Details Modal/Panel ── */
+/* ── Selected Date Details Modal ── */
 function DatePaymentDetails({
   selectedDate,
   data,
@@ -856,7 +914,6 @@ function MonthlyPoAndPaymentAnalytics({
 }) {
   const [clickedMonthIndex, setClickedMonthIndex] = useState<number | null>(null);
 
-  /* Aggregate month-wise PO Raised and Payment statuses */
   const monthlyData = useMemo(() => {
     const list = MONTH_NAMES.map((m, idx) => ({
       month: m,
@@ -887,7 +944,6 @@ function MonthlyPoAndPaymentAnalytics({
     return list;
   }, [data, selectedYear]);
 
-  /* Get shipments for clicked month */
   const monthShipments = useMemo(() => {
     if (clickedMonthIndex === null) return [];
     return data.filter(s => {
@@ -899,14 +955,9 @@ function MonthlyPoAndPaymentAnalytics({
   return (
     <>
       <div className="card fade-up delay-1" style={{ padding: '1.125rem', minWidth: 0, width: '100%' }}>
-        {/* Header with Title and Number Input Field for Year */}
         <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: '1rem',
-          flexWrap: 'wrap',
-          gap: '0.5rem',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <Filter size={18} color={ACCENT.purple} />
@@ -924,21 +975,14 @@ function MonthlyPoAndPaymentAnalytics({
               value={selectedYear}
               onChange={e => onYearChange(Number(e.target.value) || new Date().getFullYear())}
               style={{
-                background: 'var(--bg-secondary)',
-                border: '1px solid var(--border)',
-                borderRadius: 6,
-                padding: '0.3rem 0.6rem',
-                fontSize: 'var(--font-size-body-small)',
-                color: 'var(--text-primary)',
-                fontWeight: 800,
-                outline: 'none',
-                width: 80,
+                background: 'var(--bg-secondary)', border: '1px solid var(--border)',
+                borderRadius: 6, padding: '0.3rem 0.6rem', fontSize: 'var(--font-size-body-small)',
+                color: 'var(--text-primary)', fontWeight: 800, outline: 'none', width: 80,
               }}
             />
           </div>
         </div>
 
-        {/* Chart */}
         <ResponsiveContainer width="100%" height={260}>
           <BarChart
             accessibilityLayer={false}
@@ -955,11 +999,7 @@ function MonthlyPoAndPaymentAnalytics({
           >
             <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
             <XAxis dataKey="month" tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} />
-            <YAxis
-              width={35}
-              allowDecimals={false}
-              tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }}
-            />
+            <YAxis width={35} allowDecimals={false} tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} />
             <Tooltip content={<ChartTooltip />} />
             <Legend wrapperStyle={{ fontSize: FONT_SIZES.chartLabel, paddingTop: 10 }} />
 
@@ -974,7 +1014,6 @@ function MonthlyPoAndPaymentAnalytics({
         </ResponsiveContainer>
       </div>
 
-      {/* Modal Popup on Chart Click */}
       {clickedMonthIndex !== null && (
         <ShipmentListModal
           title={`Shipments for ${MONTH_NAMES[clickedMonthIndex]} ${selectedYear}`}
@@ -1019,7 +1058,6 @@ function SupplierAndProductAnalytics({ data }: { data: Shipment[] }) {
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '0.875rem' }}>
-      {/* 1st Chart: Supplier Wise Shipments Bar Chart */}
       <div className="card fade-up delay-1" style={{ padding: '1.125rem', minWidth: 0 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
           <div className="section-title" style={{ margin: 0 }}>Supplier-Wise Shipments</div>
@@ -1039,18 +1077,8 @@ function SupplierAndProductAnalytics({ data }: { data: Shipment[] }) {
             }}
           >
             <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-            <XAxis
-              dataKey="supplier"
-              tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }}
-              interval={0}
-              angle={-20}
-              textAnchor="end"
-            />
-            <YAxis
-              width={35}
-              allowDecimals={false}
-              tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }}
-            />
+            <XAxis dataKey="supplier" tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} interval={0} angle={-20} textAnchor="end" />
+            <YAxis width={35} allowDecimals={false} tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} />
             <Tooltip content={<ChartTooltip />} />
             <Bar dataKey="count" name="Shipments" radius={[6, 6, 0, 0]} cursor="pointer">
               {supplierData.map((entry) => (
@@ -1065,7 +1093,6 @@ function SupplierAndProductAnalytics({ data }: { data: Shipment[] }) {
         </ResponsiveContainer>
       </div>
 
-      {/* 2nd Chart: Supplier Product Breakdown Pie Chart */}
       <div className="card fade-up delay-2" style={{ padding: '1.125rem', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.5rem' }}>
           <div className="section-title" style={{ margin: 0 }}>Product Breakdown</div>
@@ -1076,16 +1103,9 @@ function SupplierAndProductAnalytics({ data }: { data: Shipment[] }) {
               value={activeSupplier}
               onChange={(e) => setSelectedSupplier(e.target.value)}
               style={{
-                background: 'var(--bg-secondary)',
-                border: '1px solid var(--border)',
-                borderRadius: 6,
-                padding: '0.25rem 0.5rem',
-                fontSize: 'var(--font-size-compact)',
-                color: 'var(--text-primary)',
-                fontWeight: 700,
-                outline: 'none',
-                cursor: 'pointer',
-                maxWidth: 160,
+                background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 6,
+                padding: '0.25rem 0.5rem', fontSize: 'var(--font-size-compact)', color: 'var(--text-primary)',
+                fontWeight: 700, outline: 'none', cursor: 'pointer', maxWidth: 160,
               }}
             >
               {supplierData.map(s => (
@@ -1106,13 +1126,9 @@ function SupplierAndProductAnalytics({ data }: { data: Shipment[] }) {
             <PieChart style={{ outline: 'none' }}>
               <Pie
                 data={productPieData}
-                cx="50%"
-                cy="50%"
-                innerRadius={45}
-                outerRadius={75}
-                paddingAngle={4}
-                dataKey="value"
-                stroke="none"
+                cx="50%" cy="50%"
+                innerRadius={45} outerRadius={75}
+                paddingAngle={4} dataKey="value" stroke="none"
                 label={({ name, percent }: any) => `${name} (${(percent * 100).toFixed(0)}%)`}
               >
                 {productPieData.map((entry) => (
@@ -1147,18 +1163,8 @@ function ShipmentsByCountry({ data }: { data: Shipment[] }) {
       <ResponsiveContainer width="100%" height={210}>
         <BarChart accessibilityLayer={false} data={countryData} barSize={28} margin={{ top: 10, right: 10, left: 0, bottom: 20 }} style={{ outline: 'none' }}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-          <XAxis
-            dataKey="country"
-            tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }}
-            interval={0}
-            angle={-15}
-            textAnchor="end"
-          />
-          <YAxis
-            width={35}
-            allowDecimals={false}
-            tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }}
-          />
+          <XAxis dataKey="country" tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} interval={0} angle={-15} textAnchor="end" />
+          <YAxis width={35} allowDecimals={false} tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} />
           <Tooltip content={<ChartTooltip />} />
           <Bar dataKey="count" name="Shipments" radius={[6, 6, 0, 0]}>
             {countryData.map((entry, index) => (
@@ -1194,16 +1200,7 @@ function PaymentDonut({ data }: { data: Shipment[] }) {
       <div className="section-title" style={{ alignSelf: 'flex-start' }}>PRW Status</div>
       <ResponsiveContainer width="100%" height={160}>
         <PieChart style={{ outline: 'none' }}>
-          <Pie
-            data={slices}
-            cx="50%"
-            cy="50%"
-            innerRadius={45}
-            outerRadius={65}
-            paddingAngle={3}
-            dataKey="value"
-            stroke="none"
-          >
+          <Pie data={slices} cx="50%" cy="50%" innerRadius={45} outerRadius={65} paddingAngle={3} dataKey="value" stroke="none">
             {slices.map((entry) => (
               <Cell key={entry.name} fill={entry.color} stroke="none" />
             ))}
@@ -1213,13 +1210,8 @@ function PaymentDonut({ data }: { data: Shipment[] }) {
       </ResponsiveContainer>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem', width: '100%' }}>
         {slices.map(s => (
-          <div key={s.name} style={{
-            display: 'flex', alignItems: 'center', gap: '0.5rem',
-            fontSize: 'var(--font-size-body-small)',
-          }}>
-            <div style={{
-              width: 10, height: 10, borderRadius: 3, background: s.color, flexShrink: 0,
-            }} />
+          <div key={s.name} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: 'var(--font-size-body-small)' }}>
+            <div style={{ width: 10, height: 10, borderRadius: 3, background: s.color, flexShrink: 0 }} />
             <span style={{ flex: 1, color: 'var(--text-secondary)' }}>{s.name}</span>
             <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{s.value}</span>
             <span style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-compact)' }}>
@@ -1232,7 +1224,7 @@ function PaymentDonut({ data }: { data: Shipment[] }) {
   );
 }
 
-/* ── Shipments by Mode (Recharts Bar) ── */
+/* ── Shipments by Mode ── */
 function ShipmentsByMode({ data }: { data: Shipment[] }) {
   const modeData = useMemo(() => {
     const counts = new Map<string, number>();
@@ -1258,11 +1250,7 @@ function ShipmentsByMode({ data }: { data: Shipment[] }) {
         <BarChart accessibilityLayer={false} data={modeData} barSize={36} barCategoryGap="40%" margin={{ top: 10, right: 10, left: 0, bottom: 0 }} style={{ outline: 'none' }}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
           <XAxis dataKey="mode" tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} />
-          <YAxis
-            width={35}
-            allowDecimals={false}
-            tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }}
-          />
+          <YAxis width={35} allowDecimals={false} tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} />
           <Tooltip content={<ChartTooltip />} />
           <Bar dataKey="count" name="Shipments" radius={[6, 6, 0, 0]}>
             {modeData.map((entry, i) => (
@@ -1271,16 +1259,11 @@ function ShipmentsByMode({ data }: { data: Shipment[] }) {
           </Bar>
         </BarChart>
       </ResponsiveContainer>
-      <div style={{
-        display: 'flex', justifyContent: 'center', gap: '1.5rem', marginTop: '0.5rem', flexWrap: 'wrap',
-      }}>
+      <div style={{ display: 'flex', justifyContent: 'center', gap: '1.5rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
         {modeData.map(m => (
           <div key={m.mode} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             {modeIcon(m.mode, m.color)}
-            <span style={{
-              fontSize: 'var(--font-size-body-small)', fontWeight: 700,
-              color: 'var(--text-primary)',
-            }}>
+            <span style={{ fontSize: 'var(--font-size-body-small)', fontWeight: 700, color: 'var(--text-primary)' }}>
               {m.count}
             </span>
             <span style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)' }}>
@@ -1332,10 +1315,7 @@ function MaterialStatusBreakdown({
             onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-secondary)')}
             onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
           >
-            <div style={{
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              marginBottom: 4,
-            }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <span style={{
                   display: 'inline-block', padding: '2px 8px', borderRadius: 10,
@@ -1346,19 +1326,13 @@ function MaterialStatusBreakdown({
                 </span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{
-                  fontSize: 'var(--font-size-body-small)', fontWeight: 800,
-                  color: 'var(--text-primary)',
-                }}>
+                <span style={{ fontSize: 'var(--font-size-body-small)', fontWeight: 800, color: 'var(--text-primary)' }}>
                   {s.count}
                 </span>
                 <span style={{ fontSize: 'var(--font-size-compact)', color: ACCENT.blue }}>→</span>
               </div>
             </div>
-            <div style={{
-              height: 6, borderRadius: 3, background: 'var(--bg-secondary)',
-              overflow: 'hidden',
-            }}>
+            <div style={{ height: 6, borderRadius: 3, background: 'var(--bg-secondary)', overflow: 'hidden' }}>
               <div style={{
                 height: '100%', borderRadius: 3,
                 width: `${(s.count / maxCount) * 100}%`,
@@ -1374,12 +1348,6 @@ function MaterialStatusBreakdown({
 
 /* ── Upcoming Due Payments Table ── */
 function DuePaymentsTable({ data }: { data: Shipment[] }) {
-  const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
-
-  const toggleRowExpanded = (id: string) => {
-    setExpandedRows(prev => ({ ...prev, [id]: !prev[id] }));
-  };
-
   const rows = useMemo(() => {
     return data
       .map(s => ({
@@ -1436,7 +1404,6 @@ function DuePaymentsTable({ data }: { data: Shipment[] }) {
 
               const daysColor = overdue ? ACCENT.red : urgent ? ACCENT.orange : ACCENT.green;
               const statusColor = PAYMENT_STATUS_COLOR[s.paymentStatus];
-              const isExpanded = !!expandedRows[s.id];
 
               return (
                 <tr key={s.id} style={{
@@ -1513,59 +1480,8 @@ function DuePaymentsTable({ data }: { data: Shipment[] }) {
                       {s.materialStatus}
                     </span>
                   </td>
-                  <td style={{ ...cell, textAlign: 'center', position: 'relative' }}>
-                    <button
-                      onClick={() => toggleRowExpanded(s.id)}
-                      style={{
-                        background: isExpanded ? 'var(--bg-card)' : 'transparent',
-                        border: '1px solid var(--border)',
-                        borderRadius: 6,
-                        padding: '4px 6px',
-                        cursor: 'pointer',
-                        color: 'var(--text-primary)',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}
-                      title="View additional shipment details"
-                    >
-                      <MoreVertical size={16} />
-                    </button>
-
-                    {/* Three-Dot Overlay Dropdown */}
-                    {isExpanded && (
-                      <div style={{
-                        position: 'absolute', right: '0.75rem', top: '2.5rem',
-                        background: 'var(--bg-card)', border: '1px solid var(--border)',
-                        borderRadius: 8, boxShadow: '0 10px 25px rgba(0,0,0,0.3)',
-                        padding: '0.85rem', zIndex: 10, width: 280, textAlign: 'left',
-                        fontSize: 'var(--font-size-compact)', color: 'var(--text-primary)',
-                      }}>
-                        <div style={{ fontWeight: 800, marginBottom: 6, borderBottom: '1px solid var(--border)', paddingBottom: 4, color: ACCENT.blue }}>
-                          Additional Parameters
-                        </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 4 }}>
-                          <div><strong>Material:</strong> {s.material || '—'}</div>
-                          <div><strong>Mode of Shipment:</strong> {s.modeOfShipment}</div>
-                          <div><strong>Port of Loading:</strong> {s.portOfLoading || '—'}</div>
-                          <div><strong>Port of Landing:</strong> {s.portOfLanding || '—'}</div>
-                          <div><strong>CHA Agent:</strong> {s.cha || '—'}</div>
-                          <div><strong>BOE No:</strong> {s.boeNo || '—'}</div>
-                          <div><strong>BOE Date:</strong> {s.boeDate ? formatDMY(s.boeDate) : '—'}</div>
-                          <div><strong>Warehouse:</strong> {s.warehouseName || '—'}</div>
-                          <div><strong>Bank Ref:</strong> {s.bankReferenceNo || '—'}</div>
-                          <div><strong>Lead Time:</strong> {s.leadTime} days</div>
-                          {s.docsFolderPath && <div><strong>Folder:</strong> {s.docsFolderPath}</div>}
-                          {s.link && (
-                            <div style={{ marginTop: 4 }}>
-                              <a href={s.link} target="_blank" rel="noopener noreferrer" style={{ color: ACCENT.blue, fontWeight: 700, textDecoration: 'none' }}>
-                                Open Document →
-                              </a>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
+                  <td style={{ ...cell, textAlign: 'center' }}>
+                    <ActionMenu shipment={s} />
                   </td>
                 </tr>
               );
@@ -1587,13 +1503,9 @@ export default function ShipmentDashboardPage() {
   const [dashboardPoDateRange, setDashboardPoDateRange] = useState(() => getDefaultPoDateRange('year'));
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<Date | null>(null);
 
-  /* Modal state for active KPI card click / Material Status click */
   const [activeModal, setActiveModal] = useState<{ title: string; color: string; data: Shipment[] } | null>(null);
-
-  /* Default year set to current year (2026) */
   const [selectedYear, setSelectedYear] = useState<number>(() => new Date().getFullYear());
 
-  /* Filtered data */
   const filtered = useMemo(() => {
     const q = searchTerm.toLowerCase();
     return shipments.filter(s =>
@@ -1611,27 +1523,23 @@ export default function ShipmentDashboardPage() {
     );
   }, [shipments, searchTerm, dashboardPoDateRange]);
 
-  /* Today date normalized */
   const today = useMemo(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), now.getDate());
   }, []);
 
-  /* KPI Groups */
   const kpis = useMemo(() => {
     const totalList = filtered;
     const inTransitList = filtered.filter(s => s.materialStatus === 'In Transit');
     const pendingPaymentsList = filtered.filter(s => s.paymentStatus === 'NOT PAID');
     const overduePaymentsList = filtered.filter(s => isPaymentOverdue(s));
 
-    // Card 5: ETD date surpassed but still not in transit (Pending Shipment)
     const etdSurpassedNotTransitList = filtered.filter(s => {
       if (s.materialStatus !== 'Pending Shipment') return false;
       const etd = s.etd ? toLocalDate(s.etd) : null;
       return etd ? etd < today : false;
     });
 
-    // Card 6: ETA date surpassed but not arrived (In Transit)
     const etaSurpassedNotArrivedList = filtered.filter(s => {
       if (s.materialStatus !== 'In Transit') return false;
       const eta = s.eta ? toLocalDate(s.eta) : null;
@@ -1648,7 +1556,6 @@ export default function ShipmentDashboardPage() {
     };
   }, [filtered, today]);
 
-  /* Update notification context with overdue payments and ETA arrived */
   useEffect(() => {
     setNotifications(kpis.overduePayments, kpis.etaSurpassedNotArrived);
   }, [kpis.overduePayments, kpis.etaSurpassedNotArrived, setNotifications]);
@@ -1664,7 +1571,7 @@ export default function ShipmentDashboardPage() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
 
-      {/* ── Page header (With Date Range Selector at Top Row) ── */}
+      {/* Header */}
       <div style={{
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         flexWrap: 'wrap', gap: '0.75rem', marginBottom: '0.25rem',
@@ -1677,7 +1584,6 @@ export default function ShipmentDashboardPage() {
             Shipment Dashboard
           </h2>
 
-          {/* Start and End Date Selection moved to Top Row */}
           <div style={{
             display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap',
             background: 'var(--bg-card)', border: '1px solid var(--border)',
@@ -1740,16 +1646,7 @@ export default function ShipmentDashboardPage() {
               fontFamily: 'inherit',
               boxShadow: `0 2px 8px ${ACCENT.blue}40`,
               transition: 'transform 0.15s, box-shadow 0.15s',
-            }}
-              onMouseEnter={e => {
-                (e.currentTarget as HTMLElement).style.transform = 'translateY(-1px)';
-                (e.currentTarget as HTMLElement).style.boxShadow = `0 4px 16px ${ACCENT.blue}50`;
-              }}
-              onMouseLeave={e => {
-                (e.currentTarget as HTMLElement).style.transform = 'translateY(0)';
-                (e.currentTarget as HTMLElement).style.boxShadow = `0 2px 8px ${ACCENT.blue}40`;
-              }}
-            >
+            }}>
               <Plus size={15} />
               New Entry
             </button>
@@ -1757,7 +1654,7 @@ export default function ShipmentDashboardPage() {
         </div>
       </div>
 
-      {/* ── Search / Filter bar ── */}
+      {/* Search Bar */}
       <div className="fade-up" style={{
         display: 'flex', alignItems: 'center', gap: '0.625rem',
         background: 'var(--bg-card)', border: '1px solid var(--border)',
@@ -1788,18 +1685,13 @@ export default function ShipmentDashboardPage() {
             Clear
           </button>
         )}
-        <span style={{
-          fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)',
-          whiteSpace: 'nowrap',
-        }}>
+        <span style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
           {filtered.length} shipment{filtered.length !== 1 ? 's' : ''}
         </span>
       </div>
 
-      {/* ── ROW 1: KPI Summary Cards (Mobile Responsive Grid & Interactive Modals) ── */}
-      <div style={{
-        display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.5rem',
-      }}>
+      {/* KPI Cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.5rem' }}>
         <KpiCard
           icon={Package}
           label="Total Shipments"
@@ -1859,7 +1751,6 @@ export default function ShipmentDashboardPage() {
         />
       </div>
 
-      {/* KPI & Material Detail Dialog Popup */}
       {activeModal && (
         <ShipmentListModal
           title={activeModal.title}
@@ -1869,10 +1760,8 @@ export default function ShipmentDashboardPage() {
         />
       )}
 
-      {/* ── ROW 2: Payment Calendar + Payment Status Donut + Interactive Material Status ── */}
-      <div style={{
-        display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '0.5rem',
-      }}>
+      {/* Analytics Rows */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '0.5rem' }}>
         <PaymentCalendar
           data={filtered}
           selectedDate={selectedCalendarDate}
@@ -1891,7 +1780,6 @@ export default function ShipmentDashboardPage() {
         />
       </div>
 
-      {/* Expanded Payment Details for selected date */}
       {selectedCalendarDate && (
         <DatePaymentDetails
           selectedDate={selectedCalendarDate}
@@ -1900,23 +1788,19 @@ export default function ShipmentDashboardPage() {
         />
       )}
 
-      {/* ── ROW 3: Monthly PO Raised vs Payment Status Breakdown ── */}
       <MonthlyPoAndPaymentAnalytics
         data={filtered}
         selectedYear={selectedYear}
         onYearChange={setSelectedYear}
       />
 
-      {/* ── ROW 4: Supplier Wise Bar Chart + Supplier Product Breakdown Pie Chart ── */}
       <SupplierAndProductAnalytics data={filtered} />
 
-      {/* ── ROW 5: Shipments by Mode + Country Breakdown ── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '0.5rem' }}>
         <ShipmentsByMode data={filtered} />
         <ShipmentsByCountry data={filtered} />
       </div>
 
-      {/* ── ROW 6: Upcoming Due Payments Table ── */}
       <DuePaymentsTable data={filtered} />
     </div>
   );

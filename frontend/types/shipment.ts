@@ -26,7 +26,7 @@ export const PAYMENT_STATUSES: readonly PaymentStatus[] = [
   'PARTIAL',
   'SR DATE',
 ];
-export type DocumentStatus = 'Pending' | 'Received' | 'In Process' | 'Completed';
+export type DocumentStatus = 'Provided' | 'Not Provided';
 export type MaterialStatus =
   | 'Pending Shipment'
   | 'In Transit'

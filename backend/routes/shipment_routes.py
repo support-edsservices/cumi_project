@@ -333,10 +333,8 @@ def _shipment_input_values(cursor, data: ShipmentInput, *, creating: bool, actor
     document_status = _enum(
         data.documentStatus,
         {
-            "pending": "NOT_PROVIDED",
-            "received": "PROVIDED",
-            "in process": "PARTIALLY_PROVIDED",
-            "completed": "PROVIDED",
+            "provided": "PROVIDED",
+            "not provided": "NOT_PROVIDED",
         },
         "document status",
     )
@@ -568,10 +566,10 @@ def _shape_shipment(row: dict[str, Any], attachments: list[dict[str, Any]]) -> d
         "hawbDocument": document_fields.get("hawbDocument"),
         "cha": row.get("cha_name") or "",
         "documentStatus": {
-            "NOT_PROVIDED": "Pending",
-            "PARTIALLY_PROVIDED": "In Process",
-            "PROVIDED": "Completed",
-        }.get(str(row.get("document_status")), "Pending"),
+            "NOT_PROVIDED": "Not Provided",
+            "PARTIALLY_PROVIDED": "Not Provided",
+            "PROVIDED": "Provided",
+        }.get(str(row.get("document_status")), "Not Provided"),
         "modeOfShipment": row.get("mode_name") or {
             "SEA": "Sea",
             "AIR": "Air",
