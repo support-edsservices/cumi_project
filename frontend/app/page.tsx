@@ -216,6 +216,7 @@ function ActionMenu({ shipment: s }: { shipment: Shipment }) {
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 4 }}>
+            <div><strong>Material ID:</strong> {s.materialId || 'IC'}</div>
             <div><strong>Material:</strong> {s.material || '—'}</div>
             <div><strong>Mode of Shipment:</strong> {s.modeOfShipment}</div>
             {s.proformaInvoiceNo && (
@@ -256,7 +257,7 @@ function ActionMenu({ shipment: s }: { shipment: Shipment }) {
    Sub-components
 ═══════════════════════════════════════════════════════════════════════════ */
 
-/* ── KPI Stat Card with Click Handler ── */
+/* ── KPI Stat Card with Corrected Width Percentage ── */
 function KpiCard({
   icon: Icon, label, value, total, color, delay, pulsing, onClick,
 }: {
@@ -330,7 +331,7 @@ function KpiCard({
   );
 }
 
-/* ── Generic Modal Dialog Box ── */
+/* ── Generic Modal Dialog Box with Excel-Style Column Filters ── */
 function ShipmentListModal({
   title,
   shipments,
@@ -344,8 +345,9 @@ function ShipmentListModal({
 }) {
   const [colFilters, setColFilters] = useState({
     shipmentId: '',
-    supplier: '',
-    country: '',
+    supplierCountry: '',
+    materialId: '',
+    cha: '',
     poDate: '',
     invoiceDate: '',
     blDate: '',
@@ -365,8 +367,9 @@ function ShipmentListModal({
   const filteredModalShipments = useMemo(() => {
     return shipments.filter(s => {
       const shipmentIdStr = s.id.toLowerCase();
-      const supplierStr = (s.supplier || '').toLowerCase();
-      const countryStr = (s.country || '').toLowerCase();
+      const supplierCountryStr = `${s.supplier || ''} ${s.country || ''} ${s.portOfLoading || ''}`.toLowerCase();
+      const materialIdStr = `${s.material || ''} ${s.materialId || 'IC'}`.toLowerCase();
+      const chaStr = (s.cha || '').toLowerCase();
       const poDateStr = `${s.poNo} ${s.poDate ? formatDMY(s.poDate) : ''}`.toLowerCase();
       const invoiceDateStr = (
         `${s.invoiceNo} ${s.invoiceDate ? formatDMY(s.invoiceDate) : ''} ` +
@@ -382,8 +385,9 @@ function ShipmentListModal({
 
       return (
         shipmentIdStr.includes(colFilters.shipmentId) &&
-        supplierStr.includes(colFilters.supplier) &&
-        countryStr.includes(colFilters.country) &&
+        supplierCountryStr.includes(colFilters.supplierCountry) &&
+        materialIdStr.includes(colFilters.materialId) &&
+        chaStr.includes(colFilters.cha) &&
         poDateStr.includes(colFilters.poDate) &&
         invoiceDateStr.includes(colFilters.invoiceDate) &&
         blDateStr.includes(colFilters.blDate) &&
@@ -398,15 +402,17 @@ function ShipmentListModal({
 
   const inputFilterStyle: React.CSSProperties = {
     width: '100%',
-    padding: '0.35rem 0.5rem',
+    padding: '0.25rem 0.4rem',
     marginTop: '0.35rem',
     fontSize: 'var(--font-size-compact)',
     background: 'var(--bg-card)',
-    border: '2px solid var(--border-input)',
-    borderRadius: 6,
+    border: '1px solid var(--border)',
+    borderRadius: 4,
     color: 'var(--text-primary)',
     outline: 'none',
     boxSizing: 'border-box',
+    fontWeight: 400,
+    textTransform: 'none',
   };
 
   return (
@@ -417,7 +423,7 @@ function ShipmentListModal({
       zIndex: 1000, padding: '1rem',
     }}>
       <div className="card fade-up" style={{
-        width: '90vw', height: '90vh', display: 'flex', flexDirection: 'column',
+        width: '95vw', height: '90vh', display: 'flex', flexDirection: 'column',
         background: 'var(--bg-card)', borderLeft: `6px solid ${color}`,
         border: '1px solid var(--border)',
         boxShadow: '0 20px 50px rgba(0,0,0,0.5)', padding: '1.25rem',
@@ -439,8 +445,9 @@ function ShipmentListModal({
               <button
                 onClick={() => setColFilters({
                   shipmentId: '',
-                  supplier: '',
-                  country: '',
+                  supplierCountry: '',
+                  materialId: '',
+                  cha: '',
                   poDate: '',
                   invoiceDate: '',
                   blDate: '',
@@ -475,41 +482,59 @@ function ShipmentListModal({
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 'var(--font-size-body-small)' }}>
             <thead>
               <tr style={{ borderBottom: '2px solid var(--border)', background: 'var(--bg-secondary)', position: 'sticky', top: 0, zIndex: 2 }}>
+                {/* 1st Col -> Sh.No */}
                 <th style={{ padding: '0.625rem 0.75rem', fontWeight: 700, color: 'var(--text-muted)', fontSize: 'var(--font-size-label)', textTransform: 'uppercase' }}>
-                  Shipment ID
+                  Sh. No
                   <input
                     type="text"
-                    placeholder="Search..."
+                    placeholder="Filter..."
                     value={colFilters.shipmentId}
                     onChange={e => handleFilterChange('shipmentId', e.target.value)}
                     style={inputFilterStyle}
                   />
                 </th>
+
+                {/* 2nd Col -> Supplier Name & Country [Port of Loading] */}
                 <th style={{ padding: '0.625rem 0.75rem', fontWeight: 700, color: 'var(--text-muted)', fontSize: 'var(--font-size-label)', textTransform: 'uppercase' }}>
-                  Supplier
+                  Supplier & Country [Port]
                   <input
                     type="text"
-                    placeholder="Search..."
-                    value={colFilters.supplier}
-                    onChange={e => handleFilterChange('supplier', e.target.value)}
+                    placeholder="Filter..."
+                    value={colFilters.supplierCountry}
+                    onChange={e => handleFilterChange('supplierCountry', e.target.value)}
                     style={inputFilterStyle}
                   />
                 </th>
+
+                {/* 3rd Col -> Material Name & Material ID */}
                 <th style={{ padding: '0.625rem 0.75rem', fontWeight: 700, color: 'var(--text-muted)', fontSize: 'var(--font-size-label)', textTransform: 'uppercase' }}>
-                  Country
+                  Material Name & ID
                   <input
                     type="text"
-                    placeholder="Search..."
-                    value={colFilters.country}
-                    onChange={e => handleFilterChange('country', e.target.value)}
+                    placeholder="Filter..."
+                    value={colFilters.materialId}
+                    onChange={e => handleFilterChange('materialId', e.target.value)}
                     style={inputFilterStyle}
                   />
                 </th>
+
+                {/* 4th Col -> CHA Name */}
+                <th style={{ padding: '0.625rem 0.75rem', fontWeight: 700, color: 'var(--text-muted)', fontSize: 'var(--font-size-label)', textTransform: 'uppercase' }}>
+                  CHA Clearance Agent
+                  <input
+                    type="text"
+                    placeholder="Filter..."
+                    value={colFilters.cha}
+                    onChange={e => handleFilterChange('cha', e.target.value)}
+                    style={inputFilterStyle}
+                  />
+                </th>
+
                 <th style={{ padding: '0.625rem 0.75rem', fontWeight: 700, color: 'var(--text-muted)', fontSize: 'var(--font-size-label)', textTransform: 'uppercase' }}>
                   PO & Date
                   <input
                     type="text"
-                    placeholder="Search..."
+                    placeholder="Filter..."
                     value={colFilters.poDate}
                     onChange={e => handleFilterChange('poDate', e.target.value)}
                     style={inputFilterStyle}
@@ -519,7 +544,7 @@ function ShipmentListModal({
                   Invoice & Date
                   <input
                     type="text"
-                    placeholder="Search..."
+                    placeholder="Filter..."
                     value={colFilters.invoiceDate}
                     onChange={e => handleFilterChange('invoiceDate', e.target.value)}
                     style={inputFilterStyle}
@@ -529,7 +554,7 @@ function ShipmentListModal({
                   BL & Date
                   <input
                     type="text"
-                    placeholder="Search..."
+                    placeholder="Filter..."
                     value={colFilters.blDate}
                     onChange={e => handleFilterChange('blDate', e.target.value)}
                     style={inputFilterStyle}
@@ -539,7 +564,7 @@ function ShipmentListModal({
                   ETD / ETA / Arrival
                   <input
                     type="text"
-                    placeholder="Search..."
+                    placeholder="Filter..."
                     value={colFilters.etdEta}
                     onChange={e => handleFilterChange('etdEta', e.target.value)}
                     style={inputFilterStyle}
@@ -549,17 +574,17 @@ function ShipmentListModal({
                   Payment Terms
                   <input
                     type="text"
-                    placeholder="Search..."
+                    placeholder="Filter..."
                     value={colFilters.paymentTerms}
                     onChange={e => handleFilterChange('paymentTerms', e.target.value)}
                     style={inputFilterStyle}
                   />
                 </th>
                 <th style={{ padding: '0.625rem 0.75rem', fontWeight: 700, color: 'var(--text-muted)', fontSize: 'var(--font-size-label)', textTransform: 'uppercase' }}>
-                  Payment Due Date
+                  Due Date
                   <input
                     type="text"
-                    placeholder="Search..."
+                    placeholder="Filter..."
                     value={colFilters.dueDate}
                     onChange={e => handleFilterChange('dueDate', e.target.value)}
                     style={inputFilterStyle}
@@ -569,7 +594,7 @@ function ShipmentListModal({
                   PRW Status
                   <input
                     type="text"
-                    placeholder="Search..."
+                    placeholder="Filter..."
                     value={colFilters.paymentStatus}
                     onChange={e => handleFilterChange('paymentStatus', e.target.value)}
                     style={inputFilterStyle}
@@ -579,21 +604,21 @@ function ShipmentListModal({
                   Material Status
                   <input
                     type="text"
-                    placeholder="Search..."
+                    placeholder="Filter..."
                     value={colFilters.materialStatus}
                     onChange={e => handleFilterChange('materialStatus', e.target.value)}
                     style={inputFilterStyle}
                   />
                 </th>
                 <th style={{ padding: '0.625rem 0.75rem', textAlign: 'center', fontWeight: 700, color: 'var(--text-muted)', fontSize: 'var(--font-size-label)', textTransform: 'uppercase' }}>
-                  More
+                  Actions
                 </th>
               </tr>
             </thead>
             <tbody>
               {filteredModalShipments.length === 0 ? (
                 <tr>
-                  <td colSpan={12} style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: 'var(--font-size-body)' }}>
+                  <td colSpan={13} style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: 'var(--font-size-body)' }}>
                     {shipments.length === 0
                       ? 'No shipments match this criteria.'
                       : 'No shipments match the applied column search filters.'}
@@ -602,15 +627,32 @@ function ShipmentListModal({
               ) : (
                 filteredModalShipments.map((s, idx) => (
                   <tr key={s.id} style={{ borderBottom: '1px solid var(--border)', background: idx % 2 === 1 ? 'var(--bg-secondary)' : 'transparent' }}>
-                    <td style={{ padding: '0.625rem 0.75rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                    {/* 1st Col -> Sh.No */}
+                    <td style={{ padding: '0.625rem 0.75rem', fontWeight: 700, color: 'var(--accent-blue)' }}>
                       {s.id}
                     </td>
+
+                    {/* 2nd Col -> Supplier Name & Country [Port of Loading] */}
                     <td style={{ padding: '0.625rem 0.75rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                      {s.supplier}
+                      <div>{s.supplier}</div>
+                      <div style={{ fontSize: 'var(--font-size-tiny)', color: 'var(--text-muted)', marginTop: 2 }}>
+                        {s.country || '—'} {s.portOfLoading ? `[${s.portOfLoading}]` : ''}
+                      </div>
                     </td>
-                    <td style={{ padding: '0.625rem 0.75rem', color: 'var(--text-secondary)' }}>
-                      {s.country || '—'}
+
+                    {/* 3rd Col -> Material Name & Material ID */}
+                    <td style={{ padding: '0.625rem 0.75rem', color: 'var(--text-primary)', fontWeight: 600 }}>
+                      <div>{s.material || '—'}</div>
+                      <div style={{ fontSize: 'var(--font-size-tiny)', color: 'var(--text-muted)', marginTop: 2 }}>
+                        ID: {s.materialId || 'IC'}
+                      </div>
                     </td>
+
+                    {/* 4th Col -> CHA Name */}
+                    <td style={{ padding: '0.625rem 0.75rem', color: 'var(--text-primary)', fontWeight: 600 }}>
+                      {s.cha || '—'}
+                    </td>
+
                     <td style={{ padding: '0.625rem 0.75rem', color: 'var(--text-secondary)' }}>
                       <div>{s.poNo}</div>
                       <div style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)' }}>{s.poDate ? formatDMY(s.poDate) : '—'}</div>
@@ -1211,6 +1253,44 @@ function SupplierAndProductAnalytics({ data }: { data: Shipment[] }) {
   );
 }
 
+/* ── REQUIREMENT 4: Material ID-Wise Shipment Count Bar Chart Component ── */
+function MaterialIdWiseShipments({ data }: { data: Shipment[] }) {
+  const materialIdData = useMemo(() => {
+    const map = new Map<string, number>();
+    data.forEach(s => {
+      const matId = s.materialId || 'IC';
+      map.set(matId, (map.get(matId) || 0) + 1);
+    });
+    return Array.from(map.entries())
+      .map(([materialId, count]) => ({ materialId, count }))
+      .sort((a, b) => b.count - a.count);
+  }, [data]);
+
+  return (
+    <div className="card fade-up delay-1" style={{ padding: '1.125rem', minWidth: 0, width: '100%', height: '100%', boxSizing: 'border-box' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+        <div className="section-title" style={{ margin: 0 }}>Material ID-Wise Shipments</div>
+        <span style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)' }}>
+          ({materialIdData.length} Material IDs)
+        </span>
+      </div>
+      <ResponsiveContainer width="100%" height={210}>
+        <BarChart accessibilityLayer={false} data={materialIdData} barSize={28} margin={{ top: 10, right: 10, left: 0, bottom: 15 }} style={{ outline: 'none' }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+          <XAxis dataKey="materialId" tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} interval={0} />
+          <YAxis width={35} allowDecimals={false} tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} />
+          <Tooltip content={<ChartTooltip />} />
+          <Bar dataKey="count" name="Shipments" radius={[6, 6, 0, 0]}>
+            {materialIdData.map((entry, index) => (
+              <Cell key={entry.materialId} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+            ))}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
 /* ── Country-Wise Shipments Chart Component ── */
 function ShipmentsByCountry({ data }: { data: Shipment[] }) {
   const countryData = useMemo(() => {
@@ -1225,7 +1305,7 @@ function ShipmentsByCountry({ data }: { data: Shipment[] }) {
   }, [data]);
 
   return (
-    <div className="card fade-up delay-1" style={{ padding: '1.125rem', minWidth: 0, width: '100%' }}>
+    <div className="card fade-up delay-1" style={{ padding: '1.125rem', minWidth: 0, width: '100%', height: '100%', boxSizing: 'border-box' }}>
       <div className="section-title">Country-Wise Shipments</div>
       <ResponsiveContainer width="100%" height={210}>
         <BarChart accessibilityLayer={false} data={countryData} barSize={28} margin={{ top: 10, right: 10, left: 0, bottom: 20 }} style={{ outline: 'none' }}>
@@ -1311,7 +1391,7 @@ function ShipmentsByMode({ data }: { data: Shipment[] }) {
         : <Package size={14} color={color} />;
 
   return (
-    <div className="card fade-up delay-1" style={{ padding: '1.125rem', minWidth: 0, width: '100%' }}>
+    <div className="card fade-up delay-1" style={{ padding: '1.125rem', minWidth: 0, width: '100%', height: '100%', boxSizing: 'border-box' }}>
       <div className="section-title">Shipments by Mode</div>
       <ResponsiveContainer width="100%" height={210}>
         <BarChart accessibilityLayer={false} data={modeData} barSize={36} barCategoryGap="40%" margin={{ top: 10, right: 10, left: 0, bottom: 0 }} style={{ outline: 'none' }}>
@@ -1343,7 +1423,7 @@ function ShipmentsByMode({ data }: { data: Shipment[] }) {
   );
 }
 
-/* ── Interactive Material Status Breakdown ── */
+/* ── Fixed Material Status Breakdown ── */
 function MaterialStatusBreakdown({
   data,
   onSelectStatus
@@ -1365,7 +1445,8 @@ function MaterialStatusBreakdown({
     }));
   }, [data]);
 
-  const maxCount = Math.max(...statusCounts.map(s => s.count), 1);
+  // FIX: Use total shipments count as denominator so 223/240 renders ~92.9% width instead of 100%
+  const totalShipmentsCount = Math.max(data.length, 1);
 
   return (
     <div className="card fade-up delay-2" style={{ padding: '1.125rem', minWidth: 0, width: '100%', height: '100%', display: 'flex', flexDirection: 'column', boxSizing: 'border-box' }}>
@@ -1374,51 +1455,74 @@ function MaterialStatusBreakdown({
         <span style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)' }}>Tap status to inspect</span>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem', marginTop: '0.75rem', flex: 1, justifyContent: 'space-around' }}>
-        {statusCounts.map(s => (
-          <div
-            key={s.status}
-            onClick={() => onSelectStatus(s.status, s.shipments)}
-            style={{ cursor: 'pointer', borderRadius: 6, padding: '5px 4px', transition: 'background 0.15s' }}
-            onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-secondary)')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <span style={{
-                  display: 'inline-block', padding: '2px 8px', borderRadius: 10,
-                  background: `${s.color}18`, color: s.color,
-                  fontSize: 'var(--font-size-compact)', fontWeight: 700,
-                }}>
-                  {s.status}
-                </span>
+        {statusCounts.map(s => {
+          const pct = ((s.count / totalShipmentsCount) * 100).toFixed(1);
+          return (
+            <div
+              key={s.status}
+              onClick={() => onSelectStatus(s.status, s.shipments)}
+              style={{ cursor: 'pointer', borderRadius: 6, padding: '5px 4px', transition: 'background 0.15s' }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-secondary)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <span style={{
+                    display: 'inline-block', padding: '2px 8px', borderRadius: 10,
+                    background: `${s.color}18`, color: s.color,
+                    fontSize: 'var(--font-size-compact)', fontWeight: 700,
+                  }}>
+                    {s.status}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 'var(--font-size-body-small)', fontWeight: 800, color: 'var(--text-primary)' }}>
+                    {s.count} <span style={{ fontSize: 'var(--font-size-compact)', fontWeight: 600, color: 'var(--text-muted)' }}>({pct}%)</span>
+                  </span>
+                  <span style={{ fontSize: 'var(--font-size-compact)', color: ACCENT.blue }}>→</span>
+                </div>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ fontSize: 'var(--font-size-body-small)', fontWeight: 800, color: 'var(--text-primary)' }}>
-                  {s.count}
-                </span>
-                <span style={{ fontSize: 'var(--font-size-compact)', color: ACCENT.blue }}>→</span>
+              <div style={{ height: 6, borderRadius: 3, background: 'var(--bg-secondary)', overflow: 'hidden' }}>
+                <div style={{
+                  height: '100%', borderRadius: 3,
+                  width: `${(s.count / totalShipmentsCount) * 100}%`,
+                  background: s.color, transition: 'width 0.6s ease',
+                }} />
               </div>
             </div>
-            <div style={{ height: 6, borderRadius: 3, background: 'var(--bg-secondary)', overflow: 'hidden' }}>
-              <div style={{
-                height: '100%', borderRadius: 3,
-                width: `${(s.count / maxCount) * 100}%`,
-                background: s.color, transition: 'width 0.6s ease',
-              }} />
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
 }
 
-/* ── Upcoming Due Payments Table ── */
+/* ── Upcoming & Overdue Payments Table with Full Search & Column Filters ── */
 function DuePaymentsTable({ data }: { data: Shipment[] }) {
   const [currentPage, setCurrentPage] = useState(0);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [colFilters, setColFilters] = useState({
+    shipmentId: '',
+    supplier: '',
+    country: '',
+    poDate: '',
+    invoiceDate: '',
+    blDate: '',
+    paymentTerms: '',
+    dueDate: '',
+    paymentStatus: '',
+    materialStatus: '',
+  });
+
   const pageSize = 10;
 
+  const handleFilterChange = (col: keyof typeof colFilters, val: string) => {
+    setColFilters(prev => ({ ...prev, [col]: val.toLowerCase() }));
+  };
+
   const allRows = useMemo(() => {
+    const q = searchTerm.toLowerCase().trim();
+
     return data
       .map(s => ({
         shipment: s,
@@ -1427,12 +1531,54 @@ function DuePaymentsTable({ data }: { data: Shipment[] }) {
         period: getPaymentPeriod(s),
       }))
       .filter(r => r.dueDate !== null && isPaymentCalendarEligible(r.shipment))
+      .filter(r => {
+        const s = r.shipment;
+        const shipmentIdStr = s.id.toLowerCase();
+        const supplierStr = (s.supplier || '').toLowerCase();
+        const countryStr = (s.country || '').toLowerCase();
+        const poDateStr = `${s.poNo} ${s.poDate ? formatDMY(s.poDate) : ''}`.toLowerCase();
+        const invoiceDateStr = `${s.invoiceNo} ${s.invoiceDate ? formatDMY(s.invoiceDate) : ''}`.toLowerCase();
+        const blDateStr = `${s.blNo || ''} ${s.blDate ? formatDMY(s.blDate) : ''}`.toLowerCase();
+        const paymentTermsStr = getPaymentTermsLabel(s).toLowerCase();
+        const dueDateStr = r.dueDate ? formatDMY(r.dueDate).toLowerCase() : '';
+        const paymentStatusStr = s.paymentStatus.toLowerCase();
+        const materialStatusStr = s.materialStatus.toLowerCase();
+
+        // General search bar check
+        const matchesGlobal = !q || (
+          shipmentIdStr.includes(q) ||
+          supplierStr.includes(q) ||
+          countryStr.includes(q) ||
+          poDateStr.includes(q) ||
+          invoiceDateStr.includes(q) ||
+          blDateStr.includes(q) ||
+          paymentTermsStr.includes(q) ||
+          dueDateStr.includes(q) ||
+          paymentStatusStr.includes(q) ||
+          materialStatusStr.includes(q)
+        );
+
+        // Column-wise Excel filter check
+        const matchesCol =
+          shipmentIdStr.includes(colFilters.shipmentId) &&
+          supplierStr.includes(colFilters.supplier) &&
+          countryStr.includes(colFilters.country) &&
+          poDateStr.includes(colFilters.poDate) &&
+          invoiceDateStr.includes(colFilters.invoiceDate) &&
+          blDateStr.includes(colFilters.blDate) &&
+          paymentTermsStr.includes(colFilters.paymentTerms) &&
+          dueDateStr.includes(colFilters.dueDate) &&
+          paymentStatusStr.includes(colFilters.paymentStatus) &&
+          materialStatusStr.includes(colFilters.materialStatus);
+
+        return matchesGlobal && matchesCol;
+      })
       .sort((a, b) => {
         if (a.daysLeft === null) return 1;
         if (b.daysLeft === null) return -1;
         return a.daysLeft - b.daysLeft;
       });
-  }, [data]);
+  }, [data, searchTerm, colFilters]);
 
   const totalPages = Math.ceil(allRows.length / pageSize) || 1;
 
@@ -1449,14 +1595,57 @@ function DuePaymentsTable({ data }: { data: Shipment[] }) {
 
   const cell: React.CSSProperties = { padding: '0.55rem 0.875rem' };
 
+  const inputFilterStyle: React.CSSProperties = {
+    width: '100%',
+    padding: '0.25rem 0.4rem',
+    marginTop: '0.35rem',
+    fontSize: 'var(--font-size-compact)',
+    background: 'var(--bg-card)',
+    border: '1px solid var(--border)',
+    borderRadius: 4,
+    color: 'var(--text-primary)',
+    outline: 'none',
+    boxSizing: 'border-box',
+    fontWeight: 400,
+    textTransform: 'none',
+  };
+
   return (
     <div className="card fade-up delay-1" style={{ padding: '1.125rem' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+      {/* Header & Main Search Input */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
           <div className="section-title" style={{ margin: 0 }}>Upcoming Due Payments</div>
           <span style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)' }}>
             ({allRows.length} total)
           </span>
+
+          {/* Quick Search Input */}
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '0.4rem',
+            background: 'var(--bg-secondary)', border: '1px solid var(--border)',
+            borderRadius: 6, padding: '0.2rem 0.5rem', minWidth: 220,
+          }}>
+            <Search size={14} color="var(--text-muted)" />
+            <input
+              type="text"
+              placeholder="Search due payments..."
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              style={{
+                border: 'none', outline: 'none', background: 'transparent',
+                fontSize: 'var(--font-size-compact)', color: 'var(--text-primary)', width: '100%',
+              }}
+            />
+            {searchTerm && (
+              <button
+                onClick={() => setSearchTerm('')}
+                style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 0 }}
+              >
+                <X size={12} />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Pagination Arrow Controls */}
@@ -1507,25 +1696,54 @@ function DuePaymentsTable({ data }: { data: Shipment[] }) {
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--font-size-body)' }}>
           <thead>
             <tr style={{ borderBottom: '2px solid var(--border)', background: 'var(--bg-secondary)' }}>
-              <th style={{ ...cell, textAlign: 'left', fontWeight: 700, fontSize: 'var(--font-size-small)', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Shipment ID</th>
-              <th style={{ ...cell, textAlign: 'left', fontWeight: 700, fontSize: 'var(--font-size-small)', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Supplier</th>
-              <th style={{ ...cell, textAlign: 'left', fontWeight: 700, fontSize: 'var(--font-size-small)', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Country</th>
-              <th style={{ ...cell, textAlign: 'left', fontWeight: 700, fontSize: 'var(--font-size-small)', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>PO & Date</th>
-              <th style={{ ...cell, textAlign: 'left', fontWeight: 700, fontSize: 'var(--font-size-small)', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Invoice & Date</th>
-              <th style={{ ...cell, textAlign: 'left', fontWeight: 700, fontSize: 'var(--font-size-small)', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>BL & Date</th>
-              <th style={{ ...cell, textAlign: 'left', fontWeight: 700, fontSize: 'var(--font-size-small)', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>ETD / ETA / Arrival</th>
-              <th style={{ ...cell, textAlign: 'left', fontWeight: 700, fontSize: 'var(--font-size-small)', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Payment Terms</th>
-              <th style={{ ...cell, textAlign: 'left', fontWeight: 700, fontSize: 'var(--font-size-small)', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Due Date</th>
-              <th style={{ ...cell, textAlign: 'left', fontWeight: 700, fontSize: 'var(--font-size-small)', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>PRW Status</th>
-              <th style={{ ...cell, textAlign: 'left', fontWeight: 700, fontSize: 'var(--font-size-small)', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Material Status</th>
+              <th style={{ ...cell, textAlign: 'left', fontWeight: 700, fontSize: 'var(--font-size-small)', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
+                Shipment ID
+                <input type="text" placeholder="Filter..." value={colFilters.shipmentId} onChange={e => handleFilterChange('shipmentId', e.target.value)} style={inputFilterStyle} />
+              </th>
+              <th style={{ ...cell, textAlign: 'left', fontWeight: 700, fontSize: 'var(--font-size-small)', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
+                Supplier
+                <input type="text" placeholder="Filter..." value={colFilters.supplier} onChange={e => handleFilterChange('supplier', e.target.value)} style={inputFilterStyle} />
+              </th>
+              <th style={{ ...cell, textAlign: 'left', fontWeight: 700, fontSize: 'var(--font-size-small)', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
+                Country
+                <input type="text" placeholder="Filter..." value={colFilters.country} onChange={e => handleFilterChange('country', e.target.value)} style={inputFilterStyle} />
+              </th>
+              <th style={{ ...cell, textAlign: 'left', fontWeight: 700, fontSize: 'var(--font-size-small)', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
+                PO & Date
+                <input type="text" placeholder="Filter..." value={colFilters.poDate} onChange={e => handleFilterChange('poDate', e.target.value)} style={inputFilterStyle} />
+              </th>
+              <th style={{ ...cell, textAlign: 'left', fontWeight: 700, fontSize: 'var(--font-size-small)', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
+                Invoice & Date
+                <input type="text" placeholder="Filter..." value={colFilters.invoiceDate} onChange={e => handleFilterChange('invoiceDate', e.target.value)} style={inputFilterStyle} />
+              </th>
+              <th style={{ ...cell, textAlign: 'left', fontWeight: 700, fontSize: 'var(--font-size-small)', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
+                BL & Date
+                <input type="text" placeholder="Filter..." value={colFilters.blDate} onChange={e => handleFilterChange('blDate', e.target.value)} style={inputFilterStyle} />
+              </th>
+              <th style={{ ...cell, textAlign: 'left', fontWeight: 700, fontSize: 'var(--font-size-small)', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
+                Payment Terms
+                <input type="text" placeholder="Filter..." value={colFilters.paymentTerms} onChange={e => handleFilterChange('paymentTerms', e.target.value)} style={inputFilterStyle} />
+              </th>
+              <th style={{ ...cell, textAlign: 'left', fontWeight: 700, fontSize: 'var(--font-size-small)', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
+                Due Date
+                <input type="text" placeholder="Filter..." value={colFilters.dueDate} onChange={e => handleFilterChange('dueDate', e.target.value)} style={inputFilterStyle} />
+              </th>
+              <th style={{ ...cell, textAlign: 'left', fontWeight: 700, fontSize: 'var(--font-size-small)', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
+                PRW Status
+                <input type="text" placeholder="Filter..." value={colFilters.paymentStatus} onChange={e => handleFilterChange('paymentStatus', e.target.value)} style={inputFilterStyle} />
+              </th>
+              <th style={{ ...cell, textAlign: 'left', fontWeight: 700, fontSize: 'var(--font-size-small)', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
+                Material Status
+                <input type="text" placeholder="Filter..." value={colFilters.materialStatus} onChange={e => handleFilterChange('materialStatus', e.target.value)} style={inputFilterStyle} />
+              </th>
               <th style={{ ...cell, textAlign: 'center', fontWeight: 700, fontSize: 'var(--font-size-small)', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>More</th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 && (
               <tr>
-                <td colSpan={12} style={{ ...cell, textAlign: 'center', color: 'var(--text-muted)', padding: '1.5rem' }}>
-                  No payments with a due date yet.
+                <td colSpan={11} style={{ ...cell, textAlign: 'center', color: 'var(--text-muted)', padding: '1.5rem' }}>
+                  No payments found matching search criteria.
                 </td>
               </tr>
             )}
@@ -1543,10 +1761,10 @@ function DuePaymentsTable({ data }: { data: Shipment[] }) {
                   borderBottom: '1px solid var(--border)',
                   background: i % 2 === 1 ? 'var(--bg-secondary)' : 'transparent',
                 }}>
-                  <td style={{ ...cell, fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap',fontSize: 'var(--font-size-body-small)' }}>
+                  <td style={{ ...cell, fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap', fontSize: 'var(--font-size-body-small)' }}>
                     {s.id}
                   </td>
-                  <td style={{ ...cell, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap',fontSize: 'var(--font-size-body-small)' }}>
+                  <td style={{ ...cell, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', fontSize: 'var(--font-size-body-small)' }}>
                     {s.supplier}
                   </td>
                   <td style={{ ...cell, color: 'var(--text-secondary)', fontSize: 'var(--font-size-body-small)' }}>
@@ -1559,30 +1777,15 @@ function DuePaymentsTable({ data }: { data: Shipment[] }) {
                   <td style={{ ...cell, color: 'var(--text-secondary)', fontSize: 'var(--font-size-body-small)' }}>
                     <div>{s.invoiceNo}</div>
                     <div style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)' }}>{s.invoiceDate ? formatDMY(s.invoiceDate) : '—'}</div>
-                    {s.proformaInvoiceNo && (
-                      <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-compact)' }}>
-                        Proforma: {s.proformaInvoiceNo} · {formatDMY(s.proformaInvoiceDate) || '—'}
-                      </div>
-                    )}
                   </td>
                   <td style={{ ...cell, color: 'var(--text-secondary)', fontSize: 'var(--font-size-body-small)' }}>
                     <div>{s.blNo || '—'}</div>
                     <div style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)' }}>{s.blDate ? formatDMY(s.blDate) : '—'}</div>
                   </td>
-                  <td style={{ ...cell, color: 'var(--text-secondary)', fontSize: 'var(--font-size-body-small)' }}>
-                    <div>ETD: {s.etd ? formatDMY(s.etd) : '—'}</div>
-                    <div>ETA: {s.eta ? formatDMY(s.eta) : '—'}</div>
-                    {s.arrivedDate && <div>Arrived: {formatDMY(s.arrivedDate)}</div>}
-                  </td>
                   <td style={{ ...cell, whiteSpace: 'nowrap' }}>
                     <div style={{ color: 'var(--text-primary)', fontWeight: 600, fontSize: 'var(--font-size-body-small)' }}>
                       {getPaymentTermsLabel(s)}
                     </div>
-                    {r.period && (
-                      <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-compact)' }}>
-                        {formatDMY(r.period.from)} → {formatDMY(r.period.to)}
-                      </div>
-                    )}
                   </td>
                   <td style={{ ...cell, color: 'var(--text-secondary)', fontSize: 'var(--font-size-body-small)', whiteSpace: 'nowrap' }}>
                     <div>{r.dueDate ? formatDMY(r.dueDate) : '—'}</div>
@@ -1598,8 +1801,7 @@ function DuePaymentsTable({ data }: { data: Shipment[] }) {
                     <span style={{
                       display: 'inline-block', padding: '2px 8px', borderRadius: 8,
                       background: `${statusColor}18`, color: statusColor,
-                      fontSize: 'var(--font-size-compact)', fontWeight: 700,
-                      whiteSpace: 'nowrap',
+                      fontSize: 'var(--font-size-compact)', fontWeight: 700, whiteSpace: 'nowrap',
                     }}>
                       {s.paymentStatus}
                     </span>
@@ -1622,51 +1824,6 @@ function DuePaymentsTable({ data }: { data: Shipment[] }) {
           </tbody>
         </table>
       </div>
-      <div style={{ display: 'flex', justifyContent: 'end', alignItems: 'center', marginTop: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-        {/* Pagination Arrow Controls */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-          <button
-            onClick={() => setCurrentPage(p => Math.max(0, p - 1))}
-            disabled={currentPage === 0}
-            style={{
-              background: 'var(--bg-secondary)',
-              border: '1px solid var(--border)',
-              borderRadius: 6,
-              padding: '0.25rem 0.5rem',
-              cursor: currentPage === 0 ? 'not-allowed' : 'pointer',
-              opacity: currentPage === 0 ? 0.4 : 1,
-              display: 'flex',
-              alignItems: 'center',
-              color: 'var(--text-primary)',
-            }}
-            title="Previous page"
-          >
-            <ChevronLeft size={16} />
-          </button>
-          <span style={{ fontSize: 'var(--font-size-compact)', fontWeight: 700, color: 'var(--text-secondary)' }}>
-            {currentPage + 1} / {totalPages}
-          </span>
-          <button
-            onClick={() => setCurrentPage(p => Math.min(totalPages - 1, p + 1))}
-            disabled={currentPage >= totalPages - 1}
-            style={{
-              background: 'var(--bg-secondary)',
-              border: '1px solid var(--border)',
-              borderRadius: 6,
-              padding: '0.25rem 0.5rem',
-              cursor: currentPage >= totalPages - 1 ? 'not-allowed' : 'pointer',
-              opacity: currentPage >= totalPages - 1 ? 0.4 : 1,
-              display: 'flex',
-              alignItems: 'center',
-              color: 'var(--text-primary)',
-            }}
-            title="Next page"
-          >
-            <ChevronRight size={16} />
-          </button>
-        </div>
-      </div>
-      
     </div>
   );
 }
@@ -1697,6 +1854,7 @@ export default function ShipmentDashboardPage() {
           s.supplier.toLowerCase().includes(q) ||
           s.invoiceNo.toLowerCase().includes(q) ||
           s.material.toLowerCase().includes(q) ||
+          (s.materialId ?? '').toLowerCase().includes(q) ||
           s.blNo.toLowerCase().includes(q) ||
           s.poNo.toLowerCase().includes(q) ||
           s.id.toLowerCase().includes(q) ||
@@ -1889,7 +2047,7 @@ export default function ShipmentDashboardPage() {
         </span>
       </div>
 
-      {/* KPI Cards */}
+      {/* REQUIREMENT 1 FIX: KPI Cards using kpis.total.length as total denominator */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.5rem' }}>
         <KpiCard
           icon={Package}
@@ -1995,8 +2153,10 @@ export default function ShipmentDashboardPage() {
 
       <SupplierAndProductAnalytics data={filtered} />
 
+      {/* REQUIREMENT 4: 5th Row containing Material ID-Wise Shipment Count Bar Chart */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '0.5rem' }}>
         <ShipmentsByMode data={filtered} />
+        <MaterialIdWiseShipments data={filtered} />
         <ShipmentsByCountry data={filtered} />
       </div>
 
