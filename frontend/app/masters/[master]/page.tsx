@@ -332,10 +332,6 @@ export default function MasterEntryPage() {
                 />
               </label>
             )}
-            <label style={{ ...fieldLabelStyle, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <input type="checkbox" checked={needsReview} onChange={(event) => setNeedsReview(event.target.checked)} />
-              Needs business review
-            </label>
           </>
         )}
         {masterType !== 'payment-terms' && (
