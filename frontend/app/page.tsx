@@ -14,6 +14,7 @@ import {
 import {
   Package, Ship, AlertCircle, Clock, Search, Plus,
   ChevronLeft, ChevronRight, Anchor, Plane, FileText, X, Filter, PackageX, MoreVertical,
+  Download, Maximize2,
 } from 'lucide-react';
 
 import { Shipment, MaterialStatus, PaymentStatus, PAYMENT_STATUSES } from '@/types/shipment';
@@ -47,7 +48,6 @@ const ACCENT = {
 } as const;
 
 const PIE_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#06b6d4', '#ec4899', '#f97316'];
-
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 const PAYMENT_STATUS_COLOR: Record<PaymentStatus, string> = {
@@ -66,6 +66,114 @@ const MATERIAL_STATUS_COLOR: Record<MaterialStatus, string> = {
   Arrived: ACCENT.green,
   'Pending Shipment': ACCENT.teal,
 };
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Excel Export Utility Function with Light Green Headers
+═══════════════════════════════════════════════════════════════════════════ */
+function exportToExcelWithGreenHeader(shipments: Shipment[], filenamePrefix = 'Shipments_Export') {
+  if (!shipments || shipments.length === 0) return;
+
+  const headers = [
+    'Shipment ID',
+    'Supplier',
+    'Country',
+    'Material Name',
+    'Material ID',
+    'CHA Agent',
+    'PO No',
+    'PO Date',
+    'Invoice No',
+    'Invoice Date',
+    'Proforma Invoice No',
+    'BL No',
+    'BL Date',
+    'Mode of Shipment',
+    'Payment Terms',
+    'Due Date',
+    'Payment Status',
+    'Material Status',
+    'Port of Loading',
+    'Port of Landing',
+    'Warehouse',
+  ];
+
+  const dataRows = shipments.map(s => {
+    const dueDate = getPaymentDueDate(s);
+    return [
+      s.id,
+      s.supplier || '',
+      s.country || '',
+      s.material || '',
+      s.materialId || 'IC',
+      s.cha || '',
+      s.poNo || '',
+      s.poDate ? formatDMY(s.poDate) : '',
+      s.invoiceNo || '',
+      s.invoiceDate ? formatDMY(s.invoiceDate) : '',
+      s.proformaInvoiceNo || '',
+      s.blNo || '',
+      s.blDate ? formatDMY(s.blDate) : '',
+      s.modeOfShipment || '',
+      getPaymentTermsLabel(s),
+      dueDate ? formatDMY(dueDate) : '',
+      s.paymentStatus || '',
+      s.materialStatus || '',
+      s.portOfLoading || '',
+      s.portOfLanding || '',
+      s.warehouseName || '',
+    ];
+  });
+
+  const headerHtml = headers.map(h => 
+    `<th style="background-color: #D1E7DD; color: #0F5132; font-weight: bold; border: 1px solid #A3CFBB; padding: 8px; text-align: left;">${h}</th>`
+  ).join('');
+
+  const bodyHtml = dataRows.map(row => 
+    `<tr>${row.map(cell => `<td style="border: 1px solid #DEE2E6; padding: 6px;">${String(cell).replace(/</g, '&lt;').replace(/>/g, '&gt;')}</td>`).join('')}</tr>`
+  ).join('');
+
+  const excelTable = `
+    <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+      <head>
+        <!--[if gte mso 9]>
+        <xml>
+          <x:ExcelWorkbook>
+            <x:ExcelWorksheets>
+              <x:ExcelWorksheet>
+                <x:Name>Shipments Data</x:Name>
+                <x:WorksheetOptions>
+                  <x:DisplayGridlines/>
+                </x:WorksheetOptions>
+              </x:ExcelWorksheet>
+            </x:ExcelWorksheets>
+          </x:ExcelWorkbook>
+        </xml>
+        <![endif]-->
+        <meta http-equiv="content-type" content="text/plain; charset=UTF-8"/>
+      </head>
+      <body>
+        <table style="border-collapse: collapse; font-family: Calibri, sans-serif;">
+          <thead>
+            <tr>${headerHtml}</tr>
+          </thead>
+          <tbody>
+            ${bodyHtml}
+          </tbody>
+        </table>
+      </body>
+    </html>
+  `;
+
+  const blob = new Blob([excelTable], { type: 'application/vnd.ms-excel;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.setAttribute('href', url);
+  link.setAttribute('download', `${filenamePrefix}_${new Date().toISOString().slice(0, 10)}.xls`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Recharts custom tooltip
@@ -91,6 +199,54 @@ function ChartTooltip({ active, payload, label }: any) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   Fullscreen Chart Modal Container Component
+═══════════════════════════════════════════════════════════════════════════ */
+function FullscreenChartModal({
+  title,
+  children,
+  onClose,
+}: {
+  title: string;
+  children: React.ReactNode;
+  onClose: () => void;
+}) {
+  return (
+    <div style={{
+      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+      background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(6px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      zIndex: 2000, padding: '1.5rem',
+    }}>
+      <div className="card fade-up" style={{
+        width: '90vw', height: '85vh', display: 'flex', flexDirection: 'column',
+        background: 'var(--bg-card)', border: '1px solid var(--border)',
+        boxShadow: '0 25px 60px rgba(0,0,0,0.6)', padding: '1.5rem',
+        borderRadius: 14,
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <Maximize2 size={18} color={ACCENT.blue} />
+            <h3 style={{ margin: 0, fontSize: '1.3rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+              {title} (Full Screen View)
+            </h3>
+          </div>
+          <button onClick={onClose} style={{
+            background: 'var(--bg-secondary)', border: '1px solid var(--border)',
+            borderRadius: 8, color: 'var(--text-muted)', cursor: 'pointer', padding: 8,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <X size={22} />
+          </button>
+        </div>
+        <div style={{ flex: 1, minHeight: 0, width: '100%' }}>
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
    Date helpers
 ═══════════════════════════════════════════════════════════════════════════ */
 function isSameDay(a: Date, b: Date): boolean {
@@ -105,7 +261,6 @@ function getFirstDayOfMonth(year: number, month: number): number {
   return new Date(year, month, 1).getDay();
 }
 
-/** Parses Date objects and 'yyyy-mm-dd' strings without timezone shifts. */
 function toLocalDate(v: unknown): Date | null {
   if (!v) return null;
   if (typeof v === 'string') {
@@ -171,44 +326,23 @@ function ActionMenu({ shipment: s }: { shipment: Shipment }) {
       {isOpen && (
         <div
           style={{
-            position: 'absolute',
-            right: 0,
-            top: '2.2rem',
-            background: 'var(--bg-card)',
-            border: '1px solid var(--border)',
-            borderRadius: 8,
-            boxShadow: '0 10px 25px rgba(0,0,0,0.3)',
-            padding: '0.85rem',
-            zIndex: 100,
-            width: 280,
-            textAlign: 'left',
-            fontSize: 'var(--font-size-compact)',
+            position: 'absolute', right: 0, top: '2.2rem',
+            background: 'var(--bg-card)', border: '1px solid var(--border)',
+            borderRadius: 8, boxShadow: '0 10px 25px rgba(0,0,0,0.3)',
+            padding: '0.85rem', zIndex: 100, width: 280,
+            textAlign: 'left', fontSize: 'var(--font-size-compact)',
             color: 'var(--text-primary)',
           }}
         >
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              fontWeight: 800,
-              marginBottom: 6,
-              borderBottom: '1px solid var(--border)',
-              paddingBottom: 4,
-              color: ACCENT.blue,
-            }}
-          >
+          <div style={{
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            fontWeight: 800, marginBottom: 6, borderBottom: '1px solid var(--border)',
+            paddingBottom: 4, color: ACCENT.blue,
+          }}>
             <span>Additional Parameters</span>
             <button
               onClick={() => setIsOpen(false)}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                cursor: 'pointer',
-                color: 'var(--text-muted)',
-                padding: 0,
-                display: 'flex',
-              }}
+              style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 0, display: 'flex' }}
               title="Close parameter list"
             >
               <X size={14} />
@@ -254,10 +388,8 @@ function ActionMenu({ shipment: s }: { shipment: Shipment }) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   Sub-components
+   KPI Stat Card Component
 ═══════════════════════════════════════════════════════════════════════════ */
-
-/* ── KPI Stat Card with Corrected Width Percentage ── */
 function KpiCard({
   icon: Icon, label, value, total, color, delay, pulsing, onClick,
 }: {
@@ -296,7 +428,7 @@ function KpiCard({
           <Icon size={18} color={color} className={pulsing ? 'pulse' : ''} />
         </div>
         <span style={{
-          fontSize: 'var(--font-size-label)', fontWeight: 600,
+          fontSize: 'var(--font-size-label)', fontWeight: 400,
           color: 'var(--text-muted)', lineHeight: 1.35, textAlign: 'right',
           maxWidth: '60%',
         }}>
@@ -309,7 +441,6 @@ function KpiCard({
       }}>
         {value}
       </div>
-      {/* Progress bar */}
       <div style={{
         marginTop: '0.625rem', height: 4, borderRadius: 2,
         background: 'var(--bg-secondary)', overflow: 'hidden',
@@ -331,7 +462,7 @@ function KpiCard({
   );
 }
 
-/* ── Generic Modal Dialog Box with Excel-Style Column Filters ── */
+/* ── Generic Modal Dialog Box: Exports ONLY the modal's filtered items ── */
 function ShipmentListModal({
   title,
   shipments,
@@ -430,8 +561,8 @@ function ShipmentListModal({
         borderRadius: 12,
       }}>
         {/* Modal Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
             <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)' }}>
               {title}
             </h3>
@@ -444,18 +575,9 @@ function ShipmentListModal({
             {hasActiveFilter && (
               <button
                 onClick={() => setColFilters({
-                  shipmentId: '',
-                  supplierCountry: '',
-                  materialId: '',
-                  cha: '',
-                  poDate: '',
-                  invoiceDate: '',
-                  blDate: '',
-                  paymentTerms: '',
-                  etdEta: '',
-                  dueDate: '',
-                  paymentStatus: '',
-                  materialStatus: '',
+                  shipmentId: '', supplierCountry: '', materialId: '', cha: '',
+                  poDate: '', invoiceDate: '', blDate: '', paymentTerms: '',
+                  etdEta: '', dueDate: '', paymentStatus: '', materialStatus: '',
                 })}
                 style={{
                   background: 'var(--bg-secondary)', border: '1px solid var(--border)',
@@ -468,13 +590,31 @@ function ShipmentListModal({
               </button>
             )}
           </div>
-          <button onClick={onClose} style={{
-            background: 'var(--bg-secondary)', border: '1px solid var(--border)',
-            borderRadius: 6, color: 'var(--text-muted)', cursor: 'pointer', padding: 6,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>
-            <X size={20} />
-          </button>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
+            {/* EXPORTS ONLY THIS MODAL'S FILTERED SHIPMENTS */}
+            <button
+              onClick={() => exportToExcelWithGreenHeader(filteredModalShipments, title.replace(/[^a-zA-Z0-9]/g, '_'))}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                background: '#198754', color: '#fff', border: 'none',
+                borderRadius: 6, padding: '0.4rem 0.8rem', cursor: 'pointer',
+                fontSize: 'var(--font-size-compact)', fontWeight: 700,
+                boxShadow: `0 2px 6px rgba(25, 135, 84, 0.4)`,
+              }}
+              title="Export current dialog box data to Excel with light green headers"
+            >
+              <Download size={15} />
+              Export Excel
+            </button>
+            <button onClick={onClose} style={{
+              background: 'var(--bg-secondary)', border: '1px solid var(--border)',
+              borderRadius: 6, color: 'var(--text-muted)', cursor: 'pointer', padding: 6,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <X size={20} />
+            </button>
+          </div>
         </div>
 
         {/* Modal Body Table */}
@@ -482,133 +622,53 @@ function ShipmentListModal({
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 'var(--font-size-body-small)' }}>
             <thead>
               <tr style={{ borderBottom: '2px solid var(--border)', background: 'var(--bg-secondary)', position: 'sticky', top: 0, zIndex: 2 }}>
-                {/* 1st Col -> Sh.No */}
                 <th style={{ padding: '0.625rem 0.75rem', fontWeight: 700, color: 'var(--text-muted)', fontSize: 'var(--font-size-label)', textTransform: 'uppercase' }}>
                   Sh. No
-                  <input
-                    type="text"
-                    placeholder="Filter..."
-                    value={colFilters.shipmentId}
-                    onChange={e => handleFilterChange('shipmentId', e.target.value)}
-                    style={inputFilterStyle}
-                  />
+                  <input type="text" placeholder="Filter..." value={colFilters.shipmentId} onChange={e => handleFilterChange('shipmentId', e.target.value)} style={inputFilterStyle} />
                 </th>
-
-                {/* 2nd Col -> Supplier Name & Country [Port of Loading] */}
                 <th style={{ padding: '0.625rem 0.75rem', fontWeight: 700, color: 'var(--text-muted)', fontSize: 'var(--font-size-label)', textTransform: 'uppercase' }}>
                   Supplier & Country [Port]
-                  <input
-                    type="text"
-                    placeholder="Filter..."
-                    value={colFilters.supplierCountry}
-                    onChange={e => handleFilterChange('supplierCountry', e.target.value)}
-                    style={inputFilterStyle}
-                  />
+                  <input type="text" placeholder="Filter..." value={colFilters.supplierCountry} onChange={e => handleFilterChange('supplierCountry', e.target.value)} style={inputFilterStyle} />
                 </th>
-
-                {/* 3rd Col -> Material Name & Material ID */}
                 <th style={{ padding: '0.625rem 0.75rem', fontWeight: 700, color: 'var(--text-muted)', fontSize: 'var(--font-size-label)', textTransform: 'uppercase' }}>
                   Material Name & ID
-                  <input
-                    type="text"
-                    placeholder="Filter..."
-                    value={colFilters.materialId}
-                    onChange={e => handleFilterChange('materialId', e.target.value)}
-                    style={inputFilterStyle}
-                  />
+                  <input type="text" placeholder="Filter..." value={colFilters.materialId} onChange={e => handleFilterChange('materialId', e.target.value)} style={inputFilterStyle} />
                 </th>
-
-                {/* 4th Col -> CHA Name */}
                 <th style={{ padding: '0.625rem 0.75rem', fontWeight: 700, color: 'var(--text-muted)', fontSize: 'var(--font-size-label)', textTransform: 'uppercase' }}>
                   CHA Clearance Agent
-                  <input
-                    type="text"
-                    placeholder="Filter..."
-                    value={colFilters.cha}
-                    onChange={e => handleFilterChange('cha', e.target.value)}
-                    style={inputFilterStyle}
-                  />
+                  <input type="text" placeholder="Filter..." value={colFilters.cha} onChange={e => handleFilterChange('cha', e.target.value)} style={inputFilterStyle} />
                 </th>
-
                 <th style={{ padding: '0.625rem 0.75rem', fontWeight: 700, color: 'var(--text-muted)', fontSize: 'var(--font-size-label)', textTransform: 'uppercase' }}>
                   PO & Date
-                  <input
-                    type="text"
-                    placeholder="Filter..."
-                    value={colFilters.poDate}
-                    onChange={e => handleFilterChange('poDate', e.target.value)}
-                    style={inputFilterStyle}
-                  />
+                  <input type="text" placeholder="Filter..." value={colFilters.poDate} onChange={e => handleFilterChange('poDate', e.target.value)} style={inputFilterStyle} />
                 </th>
                 <th style={{ padding: '0.625rem 0.75rem', fontWeight: 700, color: 'var(--text-muted)', fontSize: 'var(--font-size-label)', textTransform: 'uppercase' }}>
                   Invoice & Date
-                  <input
-                    type="text"
-                    placeholder="Filter..."
-                    value={colFilters.invoiceDate}
-                    onChange={e => handleFilterChange('invoiceDate', e.target.value)}
-                    style={inputFilterStyle}
-                  />
+                  <input type="text" placeholder="Filter..." value={colFilters.invoiceDate} onChange={e => handleFilterChange('invoiceDate', e.target.value)} style={inputFilterStyle} />
                 </th>
                 <th style={{ padding: '0.625rem 0.75rem', fontWeight: 700, color: 'var(--text-muted)', fontSize: 'var(--font-size-label)', textTransform: 'uppercase' }}>
                   BL & Date
-                  <input
-                    type="text"
-                    placeholder="Filter..."
-                    value={colFilters.blDate}
-                    onChange={e => handleFilterChange('blDate', e.target.value)}
-                    style={inputFilterStyle}
-                  />
+                  <input type="text" placeholder="Filter..." value={colFilters.blDate} onChange={e => handleFilterChange('blDate', e.target.value)} style={inputFilterStyle} />
                 </th>
                 <th style={{ padding: '0.625rem 0.75rem', fontWeight: 700, color: 'var(--text-muted)', fontSize: 'var(--font-size-label)', textTransform: 'uppercase' }}>
                   ETD / ETA / Arrival
-                  <input
-                    type="text"
-                    placeholder="Filter..."
-                    value={colFilters.etdEta}
-                    onChange={e => handleFilterChange('etdEta', e.target.value)}
-                    style={inputFilterStyle}
-                  />
+                  <input type="text" placeholder="Filter..." value={colFilters.etdEta} onChange={e => handleFilterChange('etdEta', e.target.value)} style={inputFilterStyle} />
                 </th>
                 <th style={{ padding: '0.625rem 0.75rem', fontWeight: 700, color: 'var(--text-muted)', fontSize: 'var(--font-size-label)', textTransform: 'uppercase' }}>
                   Payment Terms
-                  <input
-                    type="text"
-                    placeholder="Filter..."
-                    value={colFilters.paymentTerms}
-                    onChange={e => handleFilterChange('paymentTerms', e.target.value)}
-                    style={inputFilterStyle}
-                  />
+                  <input type="text" placeholder="Filter..." value={colFilters.paymentTerms} onChange={e => handleFilterChange('paymentTerms', e.target.value)} style={inputFilterStyle} />
                 </th>
                 <th style={{ padding: '0.625rem 0.75rem', fontWeight: 700, color: 'var(--text-muted)', fontSize: 'var(--font-size-label)', textTransform: 'uppercase' }}>
                   Due Date
-                  <input
-                    type="text"
-                    placeholder="Filter..."
-                    value={colFilters.dueDate}
-                    onChange={e => handleFilterChange('dueDate', e.target.value)}
-                    style={inputFilterStyle}
-                  />
+                  <input type="text" placeholder="Filter..." value={colFilters.dueDate} onChange={e => handleFilterChange('dueDate', e.target.value)} style={inputFilterStyle} />
                 </th>
                 <th style={{ padding: '0.625rem 0.75rem', fontWeight: 700, color: 'var(--text-muted)', fontSize: 'var(--font-size-label)', textTransform: 'uppercase' }}>
                   PRW Status
-                  <input
-                    type="text"
-                    placeholder="Filter..."
-                    value={colFilters.paymentStatus}
-                    onChange={e => handleFilterChange('paymentStatus', e.target.value)}
-                    style={inputFilterStyle}
-                  />
+                  <input type="text" placeholder="Filter..." value={colFilters.paymentStatus} onChange={e => handleFilterChange('paymentStatus', e.target.value)} style={inputFilterStyle} />
                 </th>
                 <th style={{ padding: '0.625rem 0.75rem', fontWeight: 700, color: 'var(--text-muted)', fontSize: 'var(--font-size-label)', textTransform: 'uppercase' }}>
                   Material Status
-                  <input
-                    type="text"
-                    placeholder="Filter..."
-                    value={colFilters.materialStatus}
-                    onChange={e => handleFilterChange('materialStatus', e.target.value)}
-                    style={inputFilterStyle}
-                  />
+                  <input type="text" placeholder="Filter..." value={colFilters.materialStatus} onChange={e => handleFilterChange('materialStatus', e.target.value)} style={inputFilterStyle} />
                 </th>
                 <th style={{ padding: '0.625rem 0.75rem', textAlign: 'center', fontWeight: 700, color: 'var(--text-muted)', fontSize: 'var(--font-size-label)', textTransform: 'uppercase' }}>
                   Actions
@@ -627,32 +687,18 @@ function ShipmentListModal({
               ) : (
                 filteredModalShipments.map((s, idx) => (
                   <tr key={s.id} style={{ borderBottom: '1px solid var(--border)', background: idx % 2 === 1 ? 'var(--bg-secondary)' : 'transparent' }}>
-                    {/* 1st Col -> Sh.No */}
-                    <td style={{ padding: '0.625rem 0.75rem', fontWeight: 700, color: 'var(--accent-blue)' }}>
-                      {s.id}
-                    </td>
-
-                    {/* 2nd Col -> Supplier Name & Country [Port of Loading] */}
+                    <td style={{ padding: '0.625rem 0.75rem', fontWeight: 700, color: 'var(--accent-blue)' }}>{s.id}</td>
                     <td style={{ padding: '0.625rem 0.75rem', fontWeight: 700, color: 'var(--text-primary)' }}>
                       <div>{s.supplier}</div>
                       <div style={{ fontSize: 'var(--font-size-tiny)', color: 'var(--text-muted)', marginTop: 2 }}>
                         {s.country || '—'} {s.portOfLoading ? `[${s.portOfLoading}]` : ''}
                       </div>
                     </td>
-
-                    {/* 3rd Col -> Material Name & Material ID */}
                     <td style={{ padding: '0.625rem 0.75rem', color: 'var(--text-primary)', fontWeight: 600 }}>
                       <div>{s.material || '—'}</div>
-                      <div style={{ fontSize: 'var(--font-size-tiny)', color: 'var(--text-muted)', marginTop: 2 }}>
-                        ID: {s.materialId || 'IC'}
-                      </div>
+                      <div style={{ fontSize: 'var(--font-size-tiny)', color: 'var(--text-muted)', marginTop: 2 }}>ID: {s.materialId || 'IC'}</div>
                     </td>
-
-                    {/* 4th Col -> CHA Name */}
-                    <td style={{ padding: '0.625rem 0.75rem', color: 'var(--text-primary)', fontWeight: 600 }}>
-                      {s.cha || '—'}
-                    </td>
-
+                    <td style={{ padding: '0.625rem 0.75rem', color: 'var(--text-primary)', fontWeight: 600 }}>{s.cha || '—'}</td>
                     <td style={{ padding: '0.625rem 0.75rem', color: 'var(--text-secondary)' }}>
                       <div>{s.poNo}</div>
                       <div style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)' }}>{s.poDate ? formatDMY(s.poDate) : '—'}</div>
@@ -675,9 +721,7 @@ function ShipmentListModal({
                       <div>ETA: {s.eta ? formatDMY(s.eta) : '—'}</div>
                       {s.arrivedDate && <div>Arrived: {formatDMY(s.arrivedDate)}</div>}
                     </td>
-                    <td style={{ padding: '0.625rem 0.75rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-                      {getPaymentTermsLabel(s)}
-                    </td>
+                    <td style={{ padding: '0.625rem 0.75rem', fontWeight: 600, color: 'var(--text-primary)' }}>{getPaymentTermsLabel(s)}</td>
                     <td style={{ padding: '0.625rem 0.75rem', color: 'var(--text-secondary)' }}>
                       {getPaymentDueDate(s) ? formatDMY(getPaymentDueDate(s)) : '—'}
                     </td>
@@ -766,10 +810,7 @@ function PaymentCalendar({
   return (
     <div className="card fade-up delay-2" style={{ padding: '1.125rem', minWidth: 0, width: '100%', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', boxSizing: 'border-box' }}>
       <div>
-        <div style={{
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-          marginBottom: '0.75rem',
-        }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
           <div className="section-title" style={{ margin: 0 }}>Calendar View (Payments & ETA)</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <button onClick={prevMonth} aria-label="Previous month" style={{
@@ -822,54 +863,33 @@ function PaymentCalendar({
                 key={day}
                 onClick={() => onSelectDate(cellDate)}
                 style={{
-                  position: 'relative',
-                  minHeight: 40,
-                  borderRadius: 6,
-                  padding: '4px 2px',
-                  border: isSelected
-                    ? `2px solid ${ACCENT.purple}`
-                    : isToday
-                      ? `2px solid ${ACCENT.blue}`
-                      : '1px solid transparent',
-                  background: isSelected
-                    ? 'rgba(139, 92, 246, 0.15)'
-                    : cellData
-                      ? 'var(--bg-secondary)'
-                      : 'transparent',
-                  display: 'flex', flexDirection: 'column',
-                  alignItems: 'center', justifyContent: 'flex-start',
-                  cursor: 'pointer',
-                  transition: 'all 0.15s ease',
+                  position: 'relative', minHeight: 40, borderRadius: 6, padding: '4px 2px',
+                  border: isSelected ? `2px solid ${ACCENT.purple}` : isToday ? `2px solid ${ACCENT.blue}` : '1px solid transparent',
+                  background: isSelected ? 'rgba(139, 92, 246, 0.15)' : cellData ? 'var(--bg-secondary)' : 'transparent',
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start',
+                  cursor: 'pointer', transition: 'all 0.15s ease',
                 }}
               >
                 <span style={{
-                  fontSize: 'var(--font-size-compact)',
-                  fontWeight: isSelected || isToday ? 800 : 500,
+                  fontSize: 'var(--font-size-compact)', fontWeight: isSelected || isToday ? 800 : 500,
                   color: isSelected ? ACCENT.purple : isToday ? ACCENT.blue : 'var(--text-secondary)',
                 }}>
                   {day}
                 </span>
 
                 {cellData?.etaShipments && cellData.etaShipments.length > 0 && (
-                  <div style={{
-                    position: 'absolute', top: 10, right: 4,
-                    display: 'flex', alignItems: 'center', gap: 2, zIndex: 1,
-                  }}>
-                    {cellData.etaShipments.map(s => {
-                      const isArrived = s.materialStatus === 'Arrived';
-                      return (
-                        <span
-                          key={`eta-dot-${s.id}`}
-                          title={`ETA Shipment ${s.id}: ${s.materialStatus}`}
-                          style={{
-                            width: 8, height: 8, borderRadius: '50%',
-                            background: isArrived ? ACCENT.green : ACCENT.red,
-                            display: 'inline-block', flexShrink: 0,
-                            boxShadow: '0 0 2px rgba(0,0,0,0.3)',
-                          }}
-                        />
-                      );
-                    })}
+                  <div style={{ position: 'absolute', top: 10, right: 4, display: 'flex', alignItems: 'center', gap: 2, zIndex: 1 }}>
+                    {cellData.etaShipments.map(s => (
+                      <span
+                        key={`eta-dot-${s.id}`}
+                        title={`ETA Shipment ${s.id}: ${s.materialStatus}`}
+                        style={{
+                          width: 8, height: 8, borderRadius: '50%',
+                          background: s.materialStatus === 'Arrived' ? ACCENT.green : ACCENT.red,
+                          display: 'inline-block', flexShrink: 0, boxShadow: '0 0 2px rgba(0,0,0,0.3)',
+                        }}
+                      />
+                    ))}
                   </div>
                 )}
 
@@ -879,10 +899,7 @@ function PaymentCalendar({
                       <div
                         key={`due-${s.id}`}
                         title={`Payment Due: ${s.paymentStatus}`}
-                        style={{
-                          width: 10, height: 4, borderRadius: 1,
-                          background: PAYMENT_STATUS_COLOR[s.paymentStatus],
-                        }}
+                        style={{ width: 10, height: 4, borderRadius: 1, background: PAYMENT_STATUS_COLOR[s.paymentStatus] }}
                       />
                     ))}
                   </div>
@@ -948,7 +965,7 @@ function DatePaymentDetails({
   );
 }
 
-/* ── Month-Wise PO Raised vs Payment Status with Material ID Filter ── */
+/* ── Month-Wise PO Raised vs Payment Status ── */
 function MonthlyPoAndPaymentAnalytics({
   data,
   selectedYear,
@@ -960,19 +977,16 @@ function MonthlyPoAndPaymentAnalytics({
 }) {
   const [clickedMonthIndex, setClickedMonthIndex] = useState<number | null>(null);
   const [selectedMaterialId, setSelectedMaterialId] = useState<string>('ALL');
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
-  // Extract all unique Material IDs from dataset
   const materialIdOptions = useMemo(() => {
     const set = new Set<string>();
     data.forEach(s => {
-      if (s.materialId?.trim()) {
-        set.add(s.materialId.trim());
-      }
+      if (s.materialId?.trim()) set.add(s.materialId.trim());
     });
     return Array.from(set).sort();
   }, [data]);
 
-  // Filter dataset by selected Material ID if not 'ALL'
   const filteredByMaterial = useMemo(() => {
     if (selectedMaterialId === 'ALL') return data;
     return data.filter(s => (s.materialId || 'IC').trim() === selectedMaterialId);
@@ -980,15 +994,8 @@ function MonthlyPoAndPaymentAnalytics({
 
   const monthlyData = useMemo(() => {
     const list = MONTH_NAMES.map((m, idx) => ({
-      month: m,
-      monthIndex: idx,
-      poRaised: 0,
-      paid: 0,
-      unpaid: 0,
-      partial: 0,
-      advance: 0,
-      twoWay: 0,
-      srDate: 0,
+      month: m, monthIndex: idx, poRaised: 0, paid: 0, unpaid: 0,
+      partial: 0, advance: 0, twoWay: 0, srDate: 0,
     }));
 
     filteredByMaterial.forEach(s => {
@@ -1016,50 +1023,75 @@ function MonthlyPoAndPaymentAnalytics({
     });
   }, [filteredByMaterial, selectedYear, clickedMonthIndex]);
 
+  const renderChart = (height: number) => (
+    <ResponsiveContainer width="100%" height={height}>
+      <BarChart
+        accessibilityLayer={false}
+        data={monthlyData}
+        barSize={isFullscreen ? 36 : 18}
+        margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+        style={{ outline: 'none' }}
+        onClick={(state: any) => {
+          if (state && state.activePayload && state.activePayload.length) {
+            setClickedMonthIndex(state.activePayload[0].payload.monthIndex);
+          }
+        }}
+      >
+        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+        <XAxis dataKey="month" tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} />
+        <YAxis width={35} allowDecimals={false} tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} />
+        <Tooltip content={<ChartTooltip />} />
+        <Legend wrapperStyle={{ fontSize: FONT_SIZES.chartLabel, paddingTop: 10 }} />
+
+        <Bar dataKey="poRaised" name="PO Raised" stackId="po" fill={ACCENT.blue} radius={[4, 4, 0, 0]} cursor="pointer" />
+        <Bar dataKey="paid" name="Paid" stackId="payments" fill={ACCENT.green} radius={[0, 0, 0, 0]} cursor="pointer" />
+        <Bar dataKey="partial" name="Partial" stackId="payments" fill={ACCENT.orange} radius={[0, 0, 0, 0]} cursor="pointer" />
+        <Bar dataKey="advance" name="Advance" stackId="payments" fill={ACCENT.blue} radius={[0, 0, 0, 0]} cursor="pointer" />
+        <Bar dataKey="twoWay" name="2 Way" stackId="payments" fill={ACCENT.purple} radius={[0, 0, 0, 0]} cursor="pointer" />
+        <Bar dataKey="srDate" name="SR Date" stackId="payments" fill={ACCENT.teal} radius={[0, 0, 0, 0]} cursor="pointer" />
+        <Bar dataKey="unpaid" name="Unpaid" stackId="payments" fill={ACCENT.red} radius={[4, 4, 0, 0]} cursor="pointer" />
+      </BarChart>
+    </ResponsiveContainer>
+  );
+
   return (
     <>
-      <div className="card fade-up delay-1" style={{ padding: '1.125rem', minWidth: 0, width: '100%' }}>
-        <div style={{
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-          marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem',
-        }}>
+      <div
+        className="card fade-up delay-1"
+        style={{ padding: '1.125rem', minWidth: 0, width: '100%', cursor: 'pointer' }}
+        onDoubleClick={() => setIsFullscreen(true)}
+        title="Double-click chart to view full screen"
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <Filter size={18} color={ACCENT.purple} />
             <div className="section-title" style={{ margin: 0 }}>
               Month-Wise PO & Payment Breakdown ({selectedYear})
             </div>
+            <span style={{ fontSize: 'var(--font-size-tiny)', color: 'var(--text-muted)' }}>(Double-click for Fullscreen)</span>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
-            {/* Material ID Filter Dropdown */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-              <label style={{ fontSize: 'var(--font-size-compact)', fontWeight: 700, color: 'var(--text-muted)' }}>
-                Material ID:
-              </label>
+              <label style={{ fontSize: 'var(--font-size-compact)', fontWeight: 700, color: 'var(--text-muted)' }}>Material ID:</label>
               <select
                 value={selectedMaterialId}
                 onChange={e => setSelectedMaterialId(e.target.value)}
                 style={{
                   background: 'var(--bg-secondary)', border: '1px solid var(--border)',
                   borderRadius: 6, padding: '0.3rem 0.6rem', fontSize: 'var(--font-size-body-small)',
-                  color: 'var(--text-primary)', fontWeight: 800, outline: 'none', cursor: 'pointer',
-                  maxWidth: 180,
+                  color: 'var(--text-primary)', fontWeight: 800, outline: 'none', cursor: 'pointer', maxWidth: 180,
                 }}
               >
                 <option value="ALL">All Material IDs</option>
                 {materialIdOptions.map(matId => (
-                  <option key={matId} value={matId}>
-                    {matId}
-                  </option>
+                  <option key={matId} value={matId}>{matId}</option>
                 ))}
               </select>
             </div>
 
-            {/* Year Selector */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-              <label style={{ fontSize: 'var(--font-size-compact)', fontWeight: 700, color: 'var(--text-muted)' }}>
-                Enter Year:
-              </label>
+              <label style={{ fontSize: 'var(--font-size-compact)', fontWeight: 700, color: 'var(--text-muted)' }}>Enter Year:</label>
               <input
                 type="number"
                 value={selectedYear}
@@ -1074,36 +1106,14 @@ function MonthlyPoAndPaymentAnalytics({
           </div>
         </div>
 
-        <ResponsiveContainer width="100%" height={260}>
-          <BarChart
-            accessibilityLayer={false}
-            data={monthlyData}
-            barSize={18}
-            margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
-            style={{ outline: 'none' }}
-            onClick={(state: any) => {
-              if (state && state.activePayload && state.activePayload.length) {
-                const monthIdx = state.activePayload[0].payload.monthIndex;
-                setClickedMonthIndex(monthIdx);
-              }
-            }}
-          >
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-            <XAxis dataKey="month" tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} />
-            <YAxis width={35} allowDecimals={false} tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} />
-            <Tooltip content={<ChartTooltip />} />
-            <Legend wrapperStyle={{ fontSize: FONT_SIZES.chartLabel, paddingTop: 10 }} />
-
-            <Bar dataKey="poRaised" name="PO Raised" stackId="po" fill={ACCENT.blue} radius={[4, 4, 0, 0]} cursor="pointer" />
-            <Bar dataKey="paid" name="Paid" stackId="payments" fill={ACCENT.green} radius={[0, 0, 0, 0]} cursor="pointer" />
-            <Bar dataKey="partial" name="Partial" stackId="payments" fill={ACCENT.orange} radius={[0, 0, 0, 0]} cursor="pointer" />
-            <Bar dataKey="advance" name="Advance" stackId="payments" fill={ACCENT.blue} radius={[0, 0, 0, 0]} cursor="pointer" />
-            <Bar dataKey="twoWay" name="2 Way" stackId="payments" fill={ACCENT.purple} radius={[0, 0, 0, 0]} cursor="pointer" />
-            <Bar dataKey="srDate" name="SR Date" stackId="payments" fill={ACCENT.teal} radius={[0, 0, 0, 0]} cursor="pointer" />
-            <Bar dataKey="unpaid" name="Unpaid" stackId="payments" fill={ACCENT.red} radius={[4, 4, 0, 0]} cursor="pointer" />
-          </BarChart>
-        </ResponsiveContainer>
+        {renderChart(260)}
       </div>
+
+      {isFullscreen && (
+        <FullscreenChartModal title={`Month-Wise PO & Payment Breakdown (${selectedYear})`} onClose={() => setIsFullscreen(false)}>
+          {renderChart(500)}
+        </FullscreenChartModal>
+      )}
 
       {clickedMonthIndex !== null && (
         <ShipmentListModal
@@ -1121,6 +1131,7 @@ function MonthlyPoAndPaymentAnalytics({
 function SupplierAndProductAnalytics({ data }: { data: Shipment[] }) {
   const [supplierPage, setSupplierPage] = useState(0);
   const pageSize = 10;
+  const [fullscreenChart, setFullscreenChart] = useState<'supplier' | 'product' | null>(null);
 
   const fullSupplierData = useMemo(() => {
     const map = new Map<string, number>();
@@ -1146,7 +1157,6 @@ function SupplierAndProductAnalytics({ data }: { data: Shipment[] }) {
   }, [fullSupplierData, supplierPage, pageSize]);
 
   const [selectedSupplier, setSelectedSupplier] = useState<string | null>(null);
-
   const activeSupplier = selectedSupplier || supplierData[0]?.supplier || fullSupplierData[0]?.supplier || '';
 
   const productPieData = useMemo(() => {
@@ -1157,133 +1167,161 @@ function SupplierAndProductAnalytics({ data }: { data: Shipment[] }) {
       map.set(prod, (map.get(prod) || 0) + 1);
     });
     return Array.from(map.entries()).map(([name, value], i) => ({
-      name,
-      value,
-      color: PIE_COLORS[i % PIE_COLORS.length],
+      name, value, color: PIE_COLORS[i % PIE_COLORS.length],
     }));
   }, [data, activeSupplier]);
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '0.875rem' }}>
-      <div className="card fade-up delay-1" style={{ padding: '1.125rem', minWidth: 0 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <div className="section-title" style={{ margin: 0 }}>Supplier-Wise Shipments</div>
-            <span style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)' }}>
-              ({fullSupplierData.length} total)
-            </span>
+    <>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '0.875rem' }}>
+        <div
+          className="card fade-up delay-1"
+          style={{ padding: '1.125rem', minWidth: 0, cursor: 'pointer' }}
+          onDoubleClick={() => setFullscreenChart('supplier')}
+          title="Double-click chart to view full screen"
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <div className="section-title" style={{ margin: 0 }}>Supplier-Wise Shipments</div>
+              <span style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)' }}>({fullSupplierData.length} total)</span>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <button
+                onClick={(e) => { e.stopPropagation(); setSupplierPage(p => Math.max(0, p - 1)); }}
+                disabled={supplierPage === 0}
+                style={{
+                  background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 6,
+                  padding: '0.25rem 0.5rem', cursor: supplierPage === 0 ? 'not-allowed' : 'pointer',
+                  opacity: supplierPage === 0 ? 0.4 : 1, display: 'flex', alignItems: 'center', color: 'var(--text-primary)',
+                }}
+              >
+                <ChevronLeft size={16} />
+              </button>
+              <span style={{ fontSize: 'var(--font-size-compact)', fontWeight: 700, color: 'var(--text-secondary)' }}>
+                {supplierPage + 1} / {totalPages}
+              </span>
+              <button
+                onClick={(e) => { e.stopPropagation(); setSupplierPage(p => Math.min(totalPages - 1, p + 1)); }}
+                disabled={supplierPage >= totalPages - 1}
+                style={{
+                  background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 6,
+                  padding: '0.25rem 0.5rem', cursor: supplierPage >= totalPages - 1 ? 'not-allowed' : 'pointer',
+                  opacity: supplierPage >= totalPages - 1 ? 0.4 : 1, display: 'flex', alignItems: 'center', color: 'var(--text-primary)',
+                }}
+              >
+                <ChevronRight size={16} />
+              </button>
+            </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-            <button
-              onClick={() => setSupplierPage(p => Math.max(0, p - 1))}
-              disabled={supplierPage === 0}
-              style={{
-                background: 'var(--bg-secondary)',
-                border: '1px solid var(--border)',
-                borderRadius: 6,
-                padding: '0.25rem 0.5rem',
-                cursor: supplierPage === 0 ? 'not-allowed' : 'pointer',
-                opacity: supplierPage === 0 ? 0.4 : 1,
-                display: 'flex',
-                alignItems: 'center',
-                color: 'var(--text-primary)',
+          <ResponsiveContainer width="100%" height={240}>
+            <BarChart
+              accessibilityLayer={false}
+              data={supplierData}
+              barSize={28}
+              margin={{ top: 10, right: 10, left: 0, bottom: 25 }}
+              style={{ outline: 'none' }}
+              onClick={(state: any) => {
+                if (state && state.activePayload && state.activePayload.length) {
+                  setSelectedSupplier(state.activePayload[0].payload.supplier);
+                }
               }}
-              title="Previous 10 suppliers"
             >
-              <ChevronLeft size={16} />
-            </button>
-            <span style={{ fontSize: 'var(--font-size-compact)', fontWeight: 700, color: 'var(--text-secondary)' }}>
-              {supplierPage + 1} / {totalPages}
-            </span>
-            <button
-              onClick={() => setSupplierPage(p => Math.min(totalPages - 1, p + 1))}
-              disabled={supplierPage >= totalPages - 1}
-              style={{
-                background: 'var(--bg-secondary)',
-                border: '1px solid var(--border)',
-                borderRadius: 6,
-                padding: '0.25rem 0.5rem',
-                cursor: supplierPage >= totalPages - 1 ? 'not-allowed' : 'pointer',
-                opacity: supplierPage >= totalPages - 1 ? 0.4 : 1,
-                display: 'flex',
-                alignItems: 'center',
-                color: 'var(--text-primary)',
-              }}
-              title="Next 10 suppliers"
-            >
-              <ChevronRight size={16} />
-            </button>
-          </div>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+              <XAxis dataKey="supplier" tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} interval={0} angle={-20} textAnchor="end" />
+              <YAxis width={35} allowDecimals={false} tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} />
+              <Tooltip content={<ChartTooltip />} />
+              <Bar dataKey="count" name="Shipments" radius={[6, 6, 0, 0]} cursor="pointer">
+                {supplierData.map((entry) => (
+                  <Cell
+                    key={entry.supplier}
+                    fill={entry.supplier === activeSupplier ? ACCENT.purple : ACCENT.blue}
+                    opacity={entry.supplier === activeSupplier ? 1 : 0.75}
+                  />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
         </div>
 
-        <ResponsiveContainer width="100%" height={240}>
-          <BarChart
-            accessibilityLayer={false}
-            data={supplierData}
-            barSize={28}
-            margin={{ top: 10, right: 10, left: 0, bottom: 25 }}
-            style={{ outline: 'none' }}
-            onClick={(state: any) => {
-              if (state && state.activePayload && state.activePayload.length) {
-                setSelectedSupplier(state.activePayload[0].payload.supplier);
-              }
-            }}
-          >
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-            <XAxis dataKey="supplier" tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} interval={0} angle={-20} textAnchor="end" />
-            <YAxis width={35} allowDecimals={false} tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} />
-            <Tooltip content={<ChartTooltip />} />
-            <Bar dataKey="count" name="Shipments" radius={[6, 6, 0, 0]} cursor="pointer">
-              {supplierData.map((entry) => (
-                <Cell
-                  key={entry.supplier}
-                  fill={entry.supplier === activeSupplier ? ACCENT.purple : ACCENT.blue}
-                  opacity={entry.supplier === activeSupplier ? 1 : 0.75}
-                />
-              ))}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
+        <div
+          className="card fade-up delay-2"
+          style={{ padding: '1.125rem', display: 'flex', flexDirection: 'column', minWidth: 0, cursor: 'pointer' }}
+          onDoubleClick={() => setFullscreenChart('product')}
+          title="Double-click chart to view full screen"
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+            <div className="section-title" style={{ margin: 0 }}>Product Breakdown</div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <label style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)', fontWeight: 600 }}>Supplier:</label>
+              <select
+                value={activeSupplier}
+                onChange={(e) => setSelectedSupplier(e.target.value)}
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 6,
+                  padding: '0.25rem 0.5rem', fontSize: 'var(--font-size-compact)', color: 'var(--text-primary)',
+                  fontWeight: 700, outline: 'none', cursor: 'pointer', maxWidth: 160,
+                }}
+              >
+                {fullSupplierData.map(s => (
+                  <option key={s.supplier} value={s.supplier}>{s.supplier} ({s.count})</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {productPieData.length === 0 ? (
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
+              No product data for selected supplier.
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={240}>
+              <PieChart style={{ outline: 'none' }}>
+                <Pie
+                  data={productPieData}
+                  cx="50%" cy="50%"
+                  innerRadius={45} outerRadius={75}
+                  paddingAngle={4} dataKey="value" stroke="none"
+                  label={({ name, percent }: any) => `${name} (${(percent * 100).toFixed(0)}%)`}
+                >
+                  {productPieData.map((entry) => (
+                    <Cell key={entry.name} fill={entry.color} stroke="none" />
+                  ))}
+                </Pie>
+                <Tooltip content={<ChartTooltip />} />
+              </PieChart>
+            </ResponsiveContainer>
+          )}
+        </div>
       </div>
 
-      <div className="card fade-up delay-2" style={{ padding: '1.125rem', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-          <div className="section-title" style={{ margin: 0 }}>Product Breakdown</div>
+      {fullscreenChart === 'supplier' && (
+        <FullscreenChartModal title="Supplier-Wise Shipments" onClose={() => setFullscreenChart(null)}>
+          <ResponsiveContainer width="100%" height={500}>
+            <BarChart accessibilityLayer={false} data={fullSupplierData} barSize={36}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+              <XAxis dataKey="supplier" tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} interval={0} angle={-25} textAnchor="end" />
+              <YAxis allowDecimals={false} tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} />
+              <Tooltip content={<ChartTooltip />} />
+              <Bar dataKey="count" name="Shipments" fill={ACCENT.blue} radius={[6, 6, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </FullscreenChartModal>
+      )}
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-            <label style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)', fontWeight: 600 }}>Supplier:</label>
-            <select
-              value={activeSupplier}
-              onChange={(e) => setSelectedSupplier(e.target.value)}
-              style={{
-                background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 6,
-                padding: '0.25rem 0.5rem', fontSize: 'var(--font-size-compact)', color: 'var(--text-primary)',
-                fontWeight: 700, outline: 'none', cursor: 'pointer', maxWidth: 160,
-              }}
-            >
-              {fullSupplierData.map(s => (
-                <option key={s.supplier} value={s.supplier}>
-                  {s.supplier} ({s.count})
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        {productPieData.length === 0 ? (
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
-            No product data for selected supplier.
-          </div>
-        ) : (
-          <ResponsiveContainer width="100%" height={240}>
-            <PieChart style={{ outline: 'none' }}>
+      {fullscreenChart === 'product' && (
+        <FullscreenChartModal title={`Product Breakdown for ${activeSupplier}`} onClose={() => setFullscreenChart(null)}>
+          <ResponsiveContainer width="100%" height={500}>
+            <PieChart>
               <Pie
                 data={productPieData}
                 cx="50%" cy="50%"
-                innerRadius={45} outerRadius={75}
+                innerRadius={80} outerRadius={180}
                 paddingAngle={4} dataKey="value" stroke="none"
-                label={({ name, percent }: any) => `${name} (${(percent * 100).toFixed(0)}%)`}
+                label={({ name, value, percent }: any) => `${name}: ${value} (${(percent * 100).toFixed(0)}%)`}
               >
                 {productPieData.map((entry) => (
                   <Cell key={entry.name} fill={entry.color} stroke="none" />
@@ -1292,14 +1330,16 @@ function SupplierAndProductAnalytics({ data }: { data: Shipment[] }) {
               <Tooltip content={<ChartTooltip />} />
             </PieChart>
           </ResponsiveContainer>
-        )}
-      </div>
-    </div>
+        </FullscreenChartModal>
+      )}
+    </>
   );
 }
 
-/* ── REQUIREMENT 4: Material ID-Wise Shipment Count Bar Chart Component ── */
+/* ── Material ID-Wise Shipment Count Bar Chart Component ── */
 function MaterialIdWiseShipments({ data }: { data: Shipment[] }) {
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
   const materialIdData = useMemo(() => {
     const map = new Map<string, number>();
     data.forEach(s => {
@@ -1311,33 +1351,50 @@ function MaterialIdWiseShipments({ data }: { data: Shipment[] }) {
       .sort((a, b) => b.count - a.count);
   }, [data]);
 
+  const renderChart = (height: number) => (
+    <ResponsiveContainer width="100%" height={height}>
+      <BarChart accessibilityLayer={false} data={materialIdData} barSize={isFullscreen ? 36 : 28} margin={{ top: 10, right: 10, left: 0, bottom: 15 }} style={{ outline: 'none' }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+        <XAxis dataKey="materialId" tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} interval={0} />
+        <YAxis width={35} allowDecimals={false} tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} />
+        <Tooltip content={<ChartTooltip />} />
+        <Bar dataKey="count" name="Shipments" radius={[6, 6, 0, 0]}>
+          {materialIdData.map((entry, index) => (
+            <Cell key={entry.materialId} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+          ))}
+        </Bar>
+      </BarChart>
+    </ResponsiveContainer>
+  );
+
   return (
-    <div className="card fade-up delay-1" style={{ padding: '1.125rem', minWidth: 0, width: '100%', height: '100%', boxSizing: 'border-box' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-        <div className="section-title" style={{ margin: 0 }}>Material ID-Wise Shipments</div>
-        <span style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)' }}>
-          ({materialIdData.length} Material IDs)
-        </span>
+    <>
+      <div
+        className="card fade-up delay-1"
+        style={{ padding: '1.125rem', minWidth: 0, width: '100%', height: '100%', boxSizing: 'border-box', cursor: 'pointer' }}
+        onDoubleClick={() => setIsFullscreen(true)}
+        title="Double-click chart to view full screen"
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+          <div className="section-title" style={{ margin: 0 }}>Material ID-Wise Shipments</div>
+          <span style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)' }}>({materialIdData.length} Material IDs)</span>
+        </div>
+        {renderChart(210)}
       </div>
-      <ResponsiveContainer width="100%" height={210}>
-        <BarChart accessibilityLayer={false} data={materialIdData} barSize={28} margin={{ top: 10, right: 10, left: 0, bottom: 15 }} style={{ outline: 'none' }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-          <XAxis dataKey="materialId" tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} interval={0} />
-          <YAxis width={35} allowDecimals={false} tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} />
-          <Tooltip content={<ChartTooltip />} />
-          <Bar dataKey="count" name="Shipments" radius={[6, 6, 0, 0]}>
-            {materialIdData.map((entry, index) => (
-              <Cell key={entry.materialId} fill={PIE_COLORS[index % PIE_COLORS.length]} />
-            ))}
-          </Bar>
-        </BarChart>
-      </ResponsiveContainer>
-    </div>
+
+      {isFullscreen && (
+        <FullscreenChartModal title="Material ID-Wise Shipments" onClose={() => setIsFullscreen(false)}>
+          {renderChart(500)}
+        </FullscreenChartModal>
+      )}
+    </>
   );
 }
 
 /* ── Country-Wise Shipments Chart Component ── */
 function ShipmentsByCountry({ data }: { data: Shipment[] }) {
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
   const countryData = useMemo(() => {
     const map = new Map<string, number>();
     data.forEach(s => {
@@ -1349,28 +1406,47 @@ function ShipmentsByCountry({ data }: { data: Shipment[] }) {
       .sort((a, b) => b.count - a.count);
   }, [data]);
 
+  const renderChart = (height: number) => (
+    <ResponsiveContainer width="100%" height={height}>
+      <BarChart accessibilityLayer={false} data={countryData} barSize={isFullscreen ? 36 : 28} margin={{ top: 10, right: 10, left: 0, bottom: 20 }} style={{ outline: 'none' }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+        <XAxis dataKey="country" tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} interval={0} angle={-15} textAnchor="end" />
+        <YAxis width={35} allowDecimals={false} tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} />
+        <Tooltip content={<ChartTooltip />} />
+        <Bar dataKey="count" name="Shipments" radius={[6, 6, 0, 0]}>
+          {countryData.map((entry, index) => (
+            <Cell key={entry.country} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+          ))}
+        </Bar>
+      </BarChart>
+    </ResponsiveContainer>
+  );
+
   return (
-    <div className="card fade-up delay-1" style={{ padding: '1.125rem', minWidth: 0, width: '100%', height: '100%', boxSizing: 'border-box' }}>
-      <div className="section-title">Country-Wise Shipments</div>
-      <ResponsiveContainer width="100%" height={210}>
-        <BarChart accessibilityLayer={false} data={countryData} barSize={28} margin={{ top: 10, right: 10, left: 0, bottom: 20 }} style={{ outline: 'none' }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-          <XAxis dataKey="country" tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} interval={0} angle={-15} textAnchor="end" />
-          <YAxis width={35} allowDecimals={false} tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} />
-          <Tooltip content={<ChartTooltip />} />
-          <Bar dataKey="count" name="Shipments" radius={[6, 6, 0, 0]}>
-            {countryData.map((entry, index) => (
-              <Cell key={entry.country} fill={PIE_COLORS[index % PIE_COLORS.length]} />
-            ))}
-          </Bar>
-        </BarChart>
-      </ResponsiveContainer>
-    </div>
+    <>
+      <div
+        className="card fade-up delay-1"
+        style={{ padding: '1.125rem', minWidth: 0, width: '100%', height: '100%', boxSizing: 'border-box', cursor: 'pointer' }}
+        onDoubleClick={() => setIsFullscreen(true)}
+        title="Double-click chart to view full screen"
+      >
+        <div className="section-title">Country-Wise Shipments</div>
+        {renderChart(210)}
+      </div>
+
+      {isFullscreen && (
+        <FullscreenChartModal title="Country-Wise Shipments" onClose={() => setIsFullscreen(false)}>
+          {renderChart(500)}
+        </FullscreenChartModal>
+      )}
+    </>
   );
 }
 
 /* ── Payment Status Donut ── */
 function PaymentDonut({ data }: { data: Shipment[] }) {
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
   const counts = useMemo(() => {
     const map = Object.fromEntries(PAYMENT_STATUSES.map((status) => [status, 0])) as Record<PaymentStatus, number>;
     data.forEach(s => { map[s.paymentStatus] += 1; });
@@ -1379,54 +1455,70 @@ function PaymentDonut({ data }: { data: Shipment[] }) {
 
   const total = data.length;
   const slices = PAYMENT_STATUSES.map((status) => ({
-    name: status,
-    value: counts[status],
-    color: PAYMENT_STATUS_COLOR[status],
+    name: status, value: counts[status], color: PAYMENT_STATUS_COLOR[status],
   }));
 
+  const renderDonut = (height: number, innerR: number, outerR: number) => (
+    <ResponsiveContainer width="100%" height={height}>
+      <PieChart style={{ outline: 'none' }}>
+        <Pie data={slices} cx="50%" cy="50%" innerRadius={innerR} outerRadius={outerR} paddingAngle={3} dataKey="value" stroke="none">
+          {slices.map((entry) => (
+            <Cell key={entry.name} fill={entry.color} stroke="none" />
+          ))}
+        </Pie>
+        <Tooltip content={<ChartTooltip />} />
+      </PieChart>
+    </ResponsiveContainer>
+  );
+
   return (
-    <div className="card fade-up delay-3" style={{
-      padding: '1.125rem', display: 'flex', flexDirection: 'column',
-      alignItems: 'center', justifyContent: 'space-between', minWidth: 0, width: '100%', height: '100%', boxSizing: 'border-box',
-    }}>
-      <div className="section-title" style={{ alignSelf: 'flex-start' }}>PRW Status</div>
-      <ResponsiveContainer width="100%" height={160}>
-        <PieChart style={{ outline: 'none' }}>
-          <Pie data={slices} cx="50%" cy="50%" innerRadius={45} outerRadius={65} paddingAngle={3} dataKey="value" stroke="none">
-            {slices.map((entry) => (
-              <Cell key={entry.name} fill={entry.color} stroke="none" />
-            ))}
-          </Pie>
-          <Tooltip content={<ChartTooltip />} />
-        </PieChart>
-      </ResponsiveContainer>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem', width: '100%' }}>
-        {slices.map(s => (
-          <div key={s.name} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: 'var(--font-size-body-small)' }}>
-            <div style={{ width: 10, height: 10, borderRadius: 3, background: s.color, flexShrink: 0 }} />
-            <span style={{ flex: 1, color: 'var(--text-secondary)' }}>{s.name}</span>
-            <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{s.value}</span>
-            <span style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-compact)' }}>
-              ({total > 0 ? ((s.value / total) * 100).toFixed(0) : 0}%)
-            </span>
-          </div>
-        ))}
+    <>
+      <div
+        className="card fade-up delay-3"
+        style={{
+          padding: '1.125rem', display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'space-between', minWidth: 0, width: '100%', height: '100%', boxSizing: 'border-box',
+          cursor: 'pointer',
+        }}
+        onDoubleClick={() => setIsFullscreen(true)}
+        title="Double-click chart to view full screen"
+      >
+        <div className="section-title" style={{ alignSelf: 'flex-start' }}>PRW Status</div>
+        {renderDonut(160, 45, 65)}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem', width: '100%' }}>
+          {slices.map(s => (
+            <div key={s.name} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: 'var(--font-size-body-small)' }}>
+              <div style={{ width: 10, height: 10, borderRadius: 3, background: s.color, flexShrink: 0 }} />
+              <span style={{ flex: 1, color: 'var(--text-secondary)' }}>{s.name}</span>
+              <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{s.value}</span>
+              <span style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-compact)' }}>
+                ({total > 0 ? ((s.value / total) * 100).toFixed(0) : 0}%)
+              </span>
+            </div>
+          ))}
+        </div>
       </div>
-    </div>
+
+      {isFullscreen && (
+        <FullscreenChartModal title="PRW Status Distribution" onClose={() => setIsFullscreen(false)}>
+          {renderDonut(480, 100, 180)}
+        </FullscreenChartModal>
+      )}
+    </>
   );
 }
 
 /* ── Shipments by Mode ── */
 function ShipmentsByMode({ data }: { data: Shipment[] }) {
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
   const modeData = useMemo(() => {
     const counts = new Map<string, number>();
     data.forEach((shipment) => {
       counts.set(shipment.modeOfShipment, (counts.get(shipment.modeOfShipment) ?? 0) + 1);
     });
     return Array.from(counts, ([mode, count], index) => ({
-      mode,
-      count,
-      color: [ACCENT.blue, ACCENT.teal, ACCENT.purple][index % 3],
+      mode, count, color: [ACCENT.blue, ACCENT.teal, ACCENT.purple][index % 3],
     }));
   }, [data]);
 
@@ -1435,40 +1527,53 @@ function ShipmentsByMode({ data }: { data: Shipment[] }) {
       : mode === 'Air' ? <Plane size={14} color={color} />
         : <Package size={14} color={color} />;
 
+  const renderChart = (height: number) => (
+    <ResponsiveContainer width="100%" height={height}>
+      <BarChart accessibilityLayer={false} data={modeData} barSize={isFullscreen ? 50 : 36} barCategoryGap="40%" margin={{ top: 10, right: 10, left: 0, bottom: 0 }} style={{ outline: 'none' }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+        <XAxis dataKey="mode" tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} />
+        <YAxis width={35} allowDecimals={false} tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} />
+        <Tooltip content={<ChartTooltip />} />
+        <Bar dataKey="count" name="Shipments" radius={[6, 6, 0, 0]}>
+          {modeData.map((entry, i) => (
+            <Cell key={i} fill={entry.color} />
+          ))}
+        </Bar>
+      </BarChart>
+    </ResponsiveContainer>
+  );
+
   return (
-    <div className="card fade-up delay-1" style={{ padding: '1.125rem', minWidth: 0, width: '100%', height: '100%', boxSizing: 'border-box' }}>
-      <div className="section-title">Shipments by Mode</div>
-      <ResponsiveContainer width="100%" height={210}>
-        <BarChart accessibilityLayer={false} data={modeData} barSize={36} barCategoryGap="40%" margin={{ top: 10, right: 10, left: 0, bottom: 0 }} style={{ outline: 'none' }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-          <XAxis dataKey="mode" tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} />
-          <YAxis width={35} allowDecimals={false} tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} />
-          <Tooltip content={<ChartTooltip />} />
-          <Bar dataKey="count" name="Shipments" radius={[6, 6, 0, 0]}>
-            {modeData.map((entry, i) => (
-              <Cell key={i} fill={entry.color} />
-            ))}
-          </Bar>
-        </BarChart>
-      </ResponsiveContainer>
-      <div style={{ display: 'flex', justifyContent: 'center', gap: '1.5rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
-        {modeData.map(m => (
-          <div key={m.mode} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            {modeIcon(m.mode, m.color)}
-            <span style={{ fontSize: 'var(--font-size-body-small)', fontWeight: 700, color: 'var(--text-primary)' }}>
-              {m.count}
-            </span>
-            <span style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)' }}>
-              {m.mode}
-            </span>
-          </div>
-        ))}
+    <>
+      <div
+        className="card fade-up delay-1"
+        style={{ padding: '1.125rem', minWidth: 0, width: '100%', height: '100%', boxSizing: 'border-box', cursor: 'pointer' }}
+        onDoubleClick={() => setIsFullscreen(true)}
+        title="Double-click chart to view full screen"
+      >
+        <div className="section-title">Shipments by Mode</div>
+        {renderChart(210)}
+        <div style={{ display: 'flex', justifyContent: 'center', gap: '1.5rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
+          {modeData.map(m => (
+            <div key={m.mode} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              {modeIcon(m.mode, m.color)}
+              <span style={{ fontSize: 'var(--font-size-body-small)', fontWeight: 700, color: 'var(--text-primary)' }}>{m.count}</span>
+              <span style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)' }}>{m.mode}</span>
+            </div>
+          ))}
+        </div>
       </div>
-    </div>
+
+      {isFullscreen && (
+        <FullscreenChartModal title="Shipments by Mode" onClose={() => setIsFullscreen(false)}>
+          {renderChart(500)}
+        </FullscreenChartModal>
+      )}
+    </>
   );
 }
 
-/* ── CHA Name-Wise Pending Customs Clearance Chart (For 'At Port' Status) ── */
+/* ── CHA Clearance Chart ── */
 function ChaCustomsClearanceChart({
   data,
   onSelectCha,
@@ -1476,8 +1581,9 @@ function ChaCustomsClearanceChart({
   data: Shipment[];
   onSelectCha: (chaName: string, items: Shipment[]) => void;
 }) {
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
   const chaData = useMemo(() => {
-    // Filter shipments that are currently in 'At Port' status awaiting clearance
     const pendingClearanceShipments = data.filter(s => s.materialStatus === 'At Port');
 
     const map = new Map<string, Shipment[]>();
@@ -1489,77 +1595,80 @@ function ChaCustomsClearanceChart({
     });
 
     return Array.from(map.entries())
-      .map(([cha, items]) => ({
-        cha,
-        count: items.length,
-        items,
-      }))
+      .map(([cha, items]) => ({ cha, count: items.length, items }))
       .sort((a, b) => b.count - a.count);
   }, [data]);
 
   const totalPending = chaData.reduce((acc, curr) => acc + curr.count, 0);
 
+  const renderChart = (height: number) => (
+    <ResponsiveContainer width="100%" height={height}>
+      <BarChart
+        accessibilityLayer={false}
+        data={chaData}
+        barSize={isFullscreen ? 36 : 20}
+        margin={{ top: 5, right: 5, left: -15, bottom: 15 }}
+        style={{ outline: 'none' }}
+        onClick={(state: any) => {
+          if (state && state.activePayload && state.activePayload.length) {
+            const payload = state.activePayload[0].payload;
+            onSelectCha(payload.cha, payload.items);
+          }
+        }}
+      >
+        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+        <XAxis dataKey="cha" tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} interval={0} angle={-15} textAnchor="end" />
+        <YAxis width={30} allowDecimals={false} tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} />
+        <Tooltip content={<ChartTooltip />} />
+        <Bar dataKey="count" name="Pending Clearance" fill={ACCENT.purple} radius={[4, 4, 0, 0]} cursor="pointer">
+          {chaData.map((entry, index) => (
+            <Cell key={entry.cha} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+          ))}
+        </Bar>
+      </BarChart>
+    </ResponsiveContainer>
+  );
+
   return (
-    <div style={{
-      display: 'flex', flexDirection: 'column', height: 165,
-      justifyContent: 'space-between', paddingTop: '0.5rem',
-      borderTop: '1px dashed var(--border)', boxSizing: 'border-box',
-      overflow: 'hidden',
-    }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem' }}>
-        <div className="section-title" style={{ margin: 0, fontSize: 'var(--font-size-compact)', fontWeight: 700 }}>
-          CHA-Wise Customs Clearance Pending (At Port)
+    <>
+      <div
+        style={{
+          display: 'flex', flexDirection: 'column', height: 165,
+          justifyContent: 'space-between', paddingTop: '0.5rem',
+          borderTop: '1px dashed var(--border)', boxSizing: 'border-box',
+          overflow: 'hidden', cursor: 'pointer',
+        }}
+        onDoubleClick={() => setIsFullscreen(true)}
+        title="Double-click chart to view full screen"
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem' }}>
+          <div className="section-title" style={{ margin: 0, fontSize: 'var(--font-size-compact)', fontWeight: 700 }}>
+            CHA-Wise Customs Clearance Pending (At Port)
+          </div>
+          <span style={{ fontSize: 'var(--font-size-compact)', color: ACCENT.purple, fontWeight: 700 }}>
+            {totalPending} Pending
+          </span>
         </div>
-        <span style={{ fontSize: 'var(--font-size-compact)', color: ACCENT.purple, fontWeight: 700 }}>
-          {totalPending} Pending
-        </span>
+
+        {chaData.length === 0 ? (
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: 'var(--font-size-compact)' }}>
+            No shipments currently at port awaiting clearance.
+          </div>
+        ) : (
+          renderChart(115)
+        )}
       </div>
 
-      {chaData.length === 0 ? (
-        <div style={{
-          flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-          color: 'var(--text-muted)', fontSize: 'var(--font-size-compact)',
-        }}>
-          No shipments currently at port awaiting clearance.
-        </div>
-      ) : (
-        <ResponsiveContainer width="100%" height={115}>
-          <BarChart
-            accessibilityLayer={false}
-            data={chaData}
-            barSize={20}
-            margin={{ top: 5, right: 5, left: -15, bottom: 15 }}
-            style={{ outline: 'none' }}
-            onClick={(state: any) => {
-              if (state && state.activePayload && state.activePayload.length) {
-                const payload = state.activePayload[0].payload;
-                onSelectCha(payload.cha, payload.items);
-              }
-            }}
-          >
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-            <XAxis
-              dataKey="cha"
-              tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }}
-              interval={0}
-              angle={-15}
-              textAnchor="end"
-            />
-            <YAxis width={30} allowDecimals={false} tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} />
-            <Tooltip content={<ChartTooltip />} />
-            <Bar dataKey="count" name="Pending Clearance" fill={ACCENT.purple} radius={[4, 4, 0, 0]} cursor="pointer">
-              {chaData.map((entry, index) => (
-                <Cell key={entry.cha} fill={PIE_COLORS[index % PIE_COLORS.length]} />
-              ))}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
+      {isFullscreen && (
+        <FullscreenChartModal title="CHA-Wise Customs Clearance Pending (At Port)" onClose={() => setIsFullscreen(false)}>
+          {renderChart(500)}
+        </FullscreenChartModal>
       )}
-    </div>
+    </>
   );
 }
 
-/* ── Material Status Breakdown + CHA Clearance Fixed Height Container (380px) ── */
+/* ── Material Status Breakdown Container ── */
 function MaterialStatusBreakdown({
   data,
   onSelectStatus,
@@ -1571,14 +1680,10 @@ function MaterialStatusBreakdown({
 }) {
   const statusCounts = useMemo(() => {
     const map: Record<string, number> = {};
-    data.forEach(s => {
-      map[s.materialStatus] = (map[s.materialStatus] || 0) + 1;
-    });
+    data.forEach(s => { map[s.materialStatus] = (map[s.materialStatus] || 0) + 1; });
     const statuses: MaterialStatus[] = ['Pending Shipment', 'In Transit', 'At Port', 'Customs Clearance', 'Arrived'];
     return statuses.map(st => ({
-      status: st,
-      count: map[st] || 0,
-      color: MATERIAL_STATUS_COLOR[st],
+      status: st, count: map[st] || 0, color: MATERIAL_STATUS_COLOR[st],
       shipments: data.filter(s => s.materialStatus === st),
     }));
   }, [data]);
@@ -1591,7 +1696,6 @@ function MaterialStatusBreakdown({
       display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
       boxSizing: 'border-box', overflow: 'hidden',
     }}>
-      {/* Top Half: Material Status (Fixed Height ~185px) */}
       <div style={{ height: 185, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div className="section-title" style={{ margin: 0 }}>Material Status</div>
@@ -1612,8 +1716,7 @@ function MaterialStatusBreakdown({
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
                   <span style={{
                     display: 'inline-block', padding: '1px 6px', borderRadius: 8,
-                    background: `${s.color}18`, color: s.color,
-                    fontSize: 'var(--font-size-tiny)', fontWeight: 700,
+                    background: `${s.color}18`, color: s.color, fontSize: 'var(--font-size-tiny)', fontWeight: 700,
                   }}>
                     {s.status}
                   </span>
@@ -1626,8 +1729,7 @@ function MaterialStatusBreakdown({
                 </div>
                 <div style={{ height: 4, borderRadius: 2, background: 'var(--bg-secondary)', overflow: 'hidden' }}>
                   <div style={{
-                    height: '100%', borderRadius: 2,
-                    width: `${(s.count / totalShipmentsCount) * 100}%`,
+                    height: '100%', borderRadius: 2, width: `${(s.count / totalShipmentsCount) * 100}%`,
                     background: s.color, transition: 'width 0.6s ease',
                   }} />
                 </div>
@@ -1637,28 +1739,18 @@ function MaterialStatusBreakdown({
         </div>
       </div>
 
-      {/* Bottom Half: CHA-Wise Clearance Pending for 'At Port' Status */}
       <ChaCustomsClearanceChart data={data} onSelectCha={onSelectCha} />
     </div>
   );
 }
 
-/* ── Upcoming & Overdue Payments Table with Full Search & Column Filters ── */
-
+/* ── Upcoming & Overdue Payments Table: Exports ONLY filtered due payment items ── */
 function DuePaymentsTable({ data }: { data: Shipment[] }) {
   const [currentPage, setCurrentPage] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
   const [colFilters, setColFilters] = useState({
-    shipmentId: '',
-    supplier: '',
-    country: '',
-    poDate: '',
-    invoiceDate: '',
-    blDate: '',
-    paymentTerms: '',
-    dueDate: '',
-    paymentStatus: '',
-    materialStatus: '',
+    shipmentId: '', supplier: '', country: '', poDate: '', invoiceDate: '',
+    blDate: '', paymentTerms: '', dueDate: '', paymentStatus: '', materialStatus: '',
   });
 
   const pageSize = 10;
@@ -1672,10 +1764,7 @@ function DuePaymentsTable({ data }: { data: Shipment[] }) {
 
     return data
       .map(s => ({
-        shipment: s,
-        dueDate: getPaymentDueDate(s),
-        daysLeft: getDaysUntilDue(s),
-        period: getPaymentPeriod(s),
+        shipment: s, dueDate: getPaymentDueDate(s), daysLeft: getDaysUntilDue(s), period: getPaymentPeriod(s),
       }))
       .filter(r => r.dueDate !== null && isPaymentCalendarEligible(r.shipment))
       .filter(r => {
@@ -1691,21 +1780,13 @@ function DuePaymentsTable({ data }: { data: Shipment[] }) {
         const paymentStatusStr = s.paymentStatus.toLowerCase();
         const materialStatusStr = s.materialStatus.toLowerCase();
 
-        // General search bar check
         const matchesGlobal = !q || (
-          shipmentIdStr.includes(q) ||
-          supplierStr.includes(q) ||
-          countryStr.includes(q) ||
-          poDateStr.includes(q) ||
-          invoiceDateStr.includes(q) ||
-          blDateStr.includes(q) ||
-          paymentTermsStr.includes(q) ||
-          dueDateStr.includes(q) ||
-          paymentStatusStr.includes(q) ||
+          shipmentIdStr.includes(q) || supplierStr.includes(q) || countryStr.includes(q) ||
+          poDateStr.includes(q) || invoiceDateStr.includes(q) || blDateStr.includes(q) ||
+          paymentTermsStr.includes(q) || dueDateStr.includes(q) || paymentStatusStr.includes(q) ||
           materialStatusStr.includes(q)
         );
 
-        // Column-wise Excel filter check
         const matchesCol =
           shipmentIdStr.includes(colFilters.shipmentId) &&
           supplierStr.includes(colFilters.supplier) &&
@@ -1743,31 +1824,19 @@ function DuePaymentsTable({ data }: { data: Shipment[] }) {
   const cell: React.CSSProperties = { padding: '0.55rem 0.875rem' };
 
   const inputFilterStyle: React.CSSProperties = {
-    width: '100%',
-    padding: '0.25rem 0.4rem',
-    marginTop: '0.35rem',
-    fontSize: 'var(--font-size-compact)',
-    background: 'var(--bg-card)',
-    border: '1px solid var(--border)',
-    borderRadius: 4,
-    color: 'var(--text-primary)',
-    outline: 'none',
-    boxSizing: 'border-box',
-    fontWeight: 400,
-    textTransform: 'none',
+    width: '100%', padding: '0.25rem 0.4rem', marginTop: '0.35rem',
+    fontSize: 'var(--font-size-compact)', background: 'var(--bg-card)',
+    border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text-primary)',
+    outline: 'none', boxSizing: 'border-box', fontWeight: 400, textTransform: 'none',
   };
 
   return (
     <div className="card fade-up delay-1" style={{ padding: '1.125rem' }}>
-      {/* Header & Main Search Input */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.75rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
           <div className="section-title" style={{ margin: 0 }}>Upcoming Due Payments</div>
-          <span style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)' }}>
-            ({allRows.length} total)
-          </span>
+          <span style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)' }}>({allRows.length} total)</span>
 
-          {/* Quick Search Input */}
           <div style={{
             display: 'flex', alignItems: 'center', gap: '0.4rem',
             background: 'var(--bg-secondary)', border: '1px solid var(--border)',
@@ -1785,57 +1854,57 @@ function DuePaymentsTable({ data }: { data: Shipment[] }) {
               }}
             />
             {searchTerm && (
-              <button
-                onClick={() => setSearchTerm('')}
-                style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 0 }}
-              >
+              <button onClick={() => setSearchTerm('')} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 0 }}>
                 <X size={12} />
               </button>
             )}
           </div>
         </div>
 
-        {/* Pagination Arrow Controls */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          {/* EXPORTS ONLY THE FILTERED DUE PAYMENTS */}
           <button
-            onClick={() => setCurrentPage(p => Math.max(0, p - 1))}
-            disabled={currentPage === 0}
+            onClick={() => exportToExcelWithGreenHeader(allRows.map(r => r.shipment), 'Upcoming_Due_Payments')}
             style={{
-              background: 'var(--bg-secondary)',
-              border: '1px solid var(--border)',
-              borderRadius: 6,
-              padding: '0.25rem 0.5rem',
-              cursor: currentPage === 0 ? 'not-allowed' : 'pointer',
-              opacity: currentPage === 0 ? 0.4 : 1,
-              display: 'flex',
-              alignItems: 'center',
-              color: 'var(--text-primary)',
+              display: 'flex', alignItems: 'center', gap: 6,
+              background: '#198754', color: '#fff', border: 'none',
+              borderRadius: 6, padding: '0.35rem 0.75rem', cursor: 'pointer',
+              fontSize: 'var(--font-size-compact)', fontWeight: 700,
+              boxShadow: `0 2px 6px rgba(25, 135, 84, 0.4)`,
             }}
-            title="Previous page"
+            title="Export current due payment search view to Excel"
           >
-            <ChevronLeft size={16} />
+            <Download size={14} />
+            Export Excel
           </button>
-          <span style={{ fontSize: 'var(--font-size-compact)', fontWeight: 700, color: 'var(--text-secondary)' }}>
-            {currentPage + 1} / {totalPages}
-          </span>
-          <button
-            onClick={() => setCurrentPage(p => Math.min(totalPages - 1, p + 1))}
-            disabled={currentPage >= totalPages - 1}
-            style={{
-              background: 'var(--bg-secondary)',
-              border: '1px solid var(--border)',
-              borderRadius: 6,
-              padding: '0.25rem 0.5rem',
-              cursor: currentPage >= totalPages - 1 ? 'not-allowed' : 'pointer',
-              opacity: currentPage >= totalPages - 1 ? 0.4 : 1,
-              display: 'flex',
-              alignItems: 'center',
-              color: 'var(--text-primary)',
-            }}
-            title="Next page"
-          >
-            <ChevronRight size={16} />
-          </button>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <button
+              onClick={() => setCurrentPage(p => Math.max(0, p - 1))}
+              disabled={currentPage === 0}
+              style={{
+                background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 6,
+                padding: '0.25rem 0.5rem', cursor: currentPage === 0 ? 'not-allowed' : 'pointer',
+                opacity: currentPage === 0 ? 0.4 : 1, display: 'flex', alignItems: 'center', color: 'var(--text-primary)',
+              }}
+            >
+              <ChevronLeft size={16} />
+            </button>
+            <span style={{ fontSize: 'var(--font-size-compact)', fontWeight: 700, color: 'var(--text-secondary)' }}>
+              {currentPage + 1} / {totalPages}
+            </span>
+            <button
+              onClick={() => setCurrentPage(p => Math.min(totalPages - 1, p + 1))}
+              disabled={currentPage >= totalPages - 1}
+              style={{
+                background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 6,
+                padding: '0.25rem 0.5rem', cursor: currentPage >= totalPages - 1 ? 'not-allowed' : 'pointer',
+                opacity: currentPage >= totalPages - 1 ? 0.4 : 1, display: 'flex', alignItems: 'center', color: 'var(--text-primary)',
+              }}
+            >
+              <ChevronRight size={16} />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1904,19 +1973,10 @@ function DuePaymentsTable({ data }: { data: Shipment[] }) {
               const statusColor = PAYMENT_STATUS_COLOR[s.paymentStatus];
 
               return (
-                <tr key={s.id} style={{
-                  borderBottom: '1px solid var(--border)',
-                  background: i % 2 === 1 ? 'var(--bg-secondary)' : 'transparent',
-                }}>
-                  <td style={{ ...cell, fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap', fontSize: 'var(--font-size-body-small)' }}>
-                    {s.id}
-                  </td>
-                  <td style={{ ...cell, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', fontSize: 'var(--font-size-body-small)' }}>
-                    {s.supplier}
-                  </td>
-                  <td style={{ ...cell, color: 'var(--text-secondary)', fontSize: 'var(--font-size-body-small)' }}>
-                    {s.country || '—'}
-                  </td>
+                <tr key={s.id} style={{ borderBottom: '1px solid var(--border)', background: i % 2 === 1 ? 'var(--bg-secondary)' : 'transparent' }}>
+                  <td style={{ ...cell, fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap', fontSize: 'var(--font-size-body-small)' }}>{s.id}</td>
+                  <td style={{ ...cell, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', fontSize: 'var(--font-size-body-small)' }}>{s.supplier}</td>
+                  <td style={{ ...cell, color: 'var(--text-secondary)', fontSize: 'var(--font-size-body-small)' }}>{s.country || '—'}</td>
                   <td style={{ ...cell, color: 'var(--text-secondary)', fontSize: 'var(--font-size-body-small)' }}>
                     <div>{s.poNo}</div>
                     <div style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)' }}>{s.poDate ? formatDMY(s.poDate) : '—'}</div>
@@ -1930,16 +1990,13 @@ function DuePaymentsTable({ data }: { data: Shipment[] }) {
                     <div style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)' }}>{s.blDate ? formatDMY(s.blDate) : '—'}</div>
                   </td>
                   <td style={{ ...cell, whiteSpace: 'nowrap' }}>
-                    <div style={{ color: 'var(--text-primary)', fontWeight: 600, fontSize: 'var(--font-size-body-small)' }}>
-                      {getPaymentTermsLabel(s)}
-                    </div>
+                    <div style={{ color: 'var(--text-primary)', fontWeight: 600, fontSize: 'var(--font-size-body-small)' }}>{getPaymentTermsLabel(s)}</div>
                   </td>
                   <td style={{ ...cell, color: 'var(--text-secondary)', fontSize: 'var(--font-size-body-small)', whiteSpace: 'nowrap' }}>
                     <div>{r.dueDate ? formatDMY(r.dueDate) : '—'}</div>
                     <span style={{
                       display: 'inline-block', marginTop: 2, padding: '2px 8px', borderRadius: 8,
-                      background: `${daysColor}18`, color: daysColor,
-                      fontSize: 'var(--font-size-compact)', fontWeight: 700,
+                      background: `${daysColor}18`, color: daysColor, fontSize: 'var(--font-size-compact)', fontWeight: 700,
                     }}>
                       {overdue ? `${Math.abs(daysLeft)}d overdue` : `${daysLeft}d left`}
                     </span>
@@ -1947,8 +2004,7 @@ function DuePaymentsTable({ data }: { data: Shipment[] }) {
                   <td style={cell}>
                     <span style={{
                       display: 'inline-block', padding: '2px 8px', borderRadius: 8,
-                      background: `${statusColor}18`, color: statusColor,
-                      fontSize: 'var(--font-size-compact)', fontWeight: 700, whiteSpace: 'nowrap',
+                      background: `${statusColor}18`, color: statusColor, fontSize: 'var(--font-size-compact)', fontWeight: 700, whiteSpace: 'nowrap',
                     }}>
                       {s.paymentStatus}
                     </span>
@@ -2066,17 +2122,10 @@ export default function ShipmentDashboardPage() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-
       {/* Header */}
-      <div style={{
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        flexWrap: 'wrap', gap: '0.75rem', marginBottom: '0.25rem',
-      }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '0.25rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', flexWrap: 'wrap' }}>
-          <h2 style={{
-            fontSize: 'var(--font-size-section-heading)', fontWeight: 800,
-            color: 'var(--text-primary)', margin: 0,
-          }}>
+          <h2 style={{ fontSize: 'var(--font-size-section-heading)', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
             Shipment Dashboard
           </h2>
 
@@ -2121,11 +2170,27 @@ export default function ShipmentDashboardPage() {
             >
               This financial year
             </button>
-            
           </div>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
+          {/* MAIN PAGE EXCEL EXPORT BUTTON (EXPORTS ALL CURRENTLY FILTERED DASHBOARD DATA) */}
+          <button
+            onClick={() => exportToExcelWithGreenHeader(filtered, 'Dashboard_Shipments')}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '0.5rem 1rem', borderRadius: 8,
+              background: '#198754', color: '#fff',
+              border: 'none', cursor: 'pointer',
+              fontSize: 'var(--font-size-body-small)', fontWeight: 700,
+              fontFamily: 'inherit',
+              boxShadow: `0 2px 8px rgba(25, 135, 84, 0.4)`,
+            }}
+          >
+            <Download size={15} />
+            Export Excel
+          </button>
+
           <Link href="/shipments?tab=history" style={{ textDecoration: 'none' }}>
             <button style={{
               display: 'flex', alignItems: 'center', gap: 6,
@@ -2133,8 +2198,7 @@ export default function ShipmentDashboardPage() {
               background: 'var(--bg-card)', color: 'var(--text-primary)',
               border: '1px solid var(--border)', cursor: 'pointer',
               fontSize: 'var(--font-size-body-small)', fontWeight: 700,
-              fontFamily: 'inherit',
-              boxShadow: 'var(--card-shadow)',
+              fontFamily: 'inherit', boxShadow: 'var(--card-shadow)',
               transition: 'transform 0.15s',
             }}>
               History
@@ -2147,8 +2211,7 @@ export default function ShipmentDashboardPage() {
               background: ACCENT.blue, color: '#fff',
               border: 'none', cursor: 'pointer',
               fontSize: 'var(--font-size-body-small)', fontWeight: 700,
-              fontFamily: 'inherit',
-              boxShadow: `0 2px 8px ${ACCENT.blue}40`,
+              fontFamily: 'inherit', boxShadow: `0 2px 8px ${ACCENT.blue}40`,
               transition: 'transform 0.15s, box-shadow 0.15s',
             }}>
               <Plus size={15} />
@@ -2173,10 +2236,8 @@ export default function ShipmentDashboardPage() {
           onChange={e => setSearchTerm(e.target.value)}
           style={{
             flex: 1, border: 'none', outline: 'none',
-            background: 'transparent',
-            fontSize: 'var(--font-size-body-small)',
-            color: 'var(--text-primary)',
-            fontFamily: 'inherit',
+            background: 'transparent', fontSize: 'var(--font-size-body-small)',
+            color: 'var(--text-primary)', fontFamily: 'inherit',
           }}
         />
         {searchTerm && (
@@ -2194,63 +2255,36 @@ export default function ShipmentDashboardPage() {
         </span>
       </div>
 
-      {/* REQUIREMENT 1 FIX: KPI Cards using kpis.total.length as total denominator */}
+      {/* KPI Stat Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.5rem' }}>
         <KpiCard
-          icon={Package}
-          label="Total Shipments"
-          value={kpis.total.length}
-          total={kpis.total.length}
-          color={ACCENT.blue}
-          delay={0.05}
+          icon={Package} label="Total Shipments" value={kpis.total.length} total={kpis.total.length}
+          color={ACCENT.blue} delay={0.05}
           onClick={() => setActiveModal({ title: 'Total Shipments', color: ACCENT.blue, data: kpis.total })}
         />
         <KpiCard
-          icon={Ship}
-          label="In Transit"
-          value={kpis.inTransit.length}
-          total={kpis.total.length}
-          color={ACCENT.orange}
-          delay={0.1}
+          icon={Ship} label="In Transit" value={kpis.inTransit.length} total={kpis.total.length}
+          color={ACCENT.orange} delay={0.1}
           onClick={() => setActiveModal({ title: 'In Transit Shipments', color: ACCENT.orange, data: kpis.inTransit })}
         />
         <KpiCard
-          icon={AlertCircle}
-          label="Pending Payments"
-          value={kpis.pendingPayments.length}
-          total={kpis.total.length}
-          color={ACCENT.red}
-          delay={0.15}
+          icon={AlertCircle} label="Pending Payments + Overdue" value={kpis.pendingPayments.length} total={kpis.total.length}
+          color={ACCENT.red} delay={0.15}
           onClick={() => setActiveModal({ title: 'Pending Payments', color: ACCENT.red, data: kpis.pendingPayments })}
         />
         <KpiCard
-          icon={Clock}
-          label="Overdue Payments"
-          value={kpis.overduePayments.length}
-          total={kpis.total.length}
-          color={ACCENT.red}
-          delay={0.2}
-          pulsing={kpis.overduePayments.length > 0}
+          icon={Clock} label="Overdue Payments" value={kpis.overduePayments.length} total={kpis.total.length}
+          color={ACCENT.red} delay={0.2} pulsing={kpis.overduePayments.length > 0}
           onClick={() => setActiveModal({ title: 'Overdue Payments', color: ACCENT.red, data: kpis.overduePayments })}
         />
         <KpiCard
-          icon={PackageX}
-          label="ETD Passed – Not In Transit"
-          value={kpis.etdSurpassedNotTransit.length}
-          total={kpis.total.length}
-          color={ACCENT.red}
-          delay={0.25}
-          pulsing={kpis.etdSurpassedNotTransit.length > 0}
+          icon={PackageX} label="ETD Passed – Not In Transit" value={kpis.etdSurpassedNotTransit.length} total={kpis.total.length}
+          color={ACCENT.red} delay={0.25} pulsing={kpis.etdSurpassedNotTransit.length > 0}
           onClick={() => setActiveModal({ title: 'ETD Surpassed – Still Pending Shipment', color: ACCENT.red, data: kpis.etdSurpassedNotTransit })}
         />
         <KpiCard
-          icon={Anchor}
-          label="ETA Passed – Not Arrived"
-          value={kpis.etaSurpassedNotArrived.length}
-          total={kpis.total.length}
-          color={ACCENT.orange}
-          delay={0.3}
-          pulsing={kpis.etaSurpassedNotArrived.length > 0}
+          icon={Anchor} label="ETA Passed – Not Arrived" value={kpis.etaSurpassedNotArrived.length} total={kpis.total.length}
+          color={ACCENT.orange} delay={0.3} pulsing={kpis.etaSurpassedNotArrived.length > 0}
           onClick={() => setActiveModal({ title: 'ETA Passed – Not Arrived', color: ACCENT.orange, data: kpis.etaSurpassedNotArrived })}
         />
       </div>
@@ -2264,7 +2298,7 @@ export default function ShipmentDashboardPage() {
         />
       )}
 
-      {/* Analytics Rows - Row 2 height-stretched cards */}
+      {/* Analytics Rows */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '0.5rem', alignItems: 'stretch' }}>
         <PaymentCalendar
           data={filtered}
@@ -2307,7 +2341,6 @@ export default function ShipmentDashboardPage() {
 
       <SupplierAndProductAnalytics data={filtered} />
 
-      {/* REQUIREMENT 4: 5th Row containing Material ID-Wise Shipment Count Bar Chart */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '0.5rem' }}>
         <ShipmentsByMode data={filtered} />
         <MaterialIdWiseShipments data={filtered} />

@@ -13,6 +13,7 @@
     "next": "16.4.3",
     "react": "19.3.0",
     "react-dom": "19.3.0",
+    "react-html5-camera-photo": "^1.5.11",
     "recharts": "^3.10.1",
     "xlsx": "^0.18.5"
   },
