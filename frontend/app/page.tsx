@@ -1378,7 +1378,7 @@ function MaterialStatusBreakdown({
           <div
             key={s.status}
             onClick={() => onSelectStatus(s.status, s.shipments)}
-            style={{ cursor: 'pointer', borderRadius: 6, padding: '2px 4px', transition: 'background 0.15s' }}
+            style={{ cursor: 'pointer', borderRadius: 6, padding: '5px 4px', transition: 'background 0.15s' }}
             onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-secondary)')}
             onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
           >
