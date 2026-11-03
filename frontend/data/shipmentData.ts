@@ -790,17 +790,20 @@ export function getDocumentRemark(status?: DocumentStatus): string {
   return '';
 }
 
-/** Generates the next sequential shipment ID based on existing records */
-export function nextShipmentId(records: Shipment[]): string {
+/** Generates the next sequential shipment ID for the current financial year */
+export function nextShipmentId(records: Shipment[], materialId = 'IC'): string {
+  const normalizedMaterialId = materialId.trim().toUpperCase() || 'IC';
+  const financialYear = getFinancialYearRange();
+  const suffix = `FY${financialYear.startDate.slice(2, 4)}-${financialYear.endDate.slice(2, 4)}`;
   let maxNum = 0;
   for (const r of records) {
-    const m = r.id.match(/SHP-(\d+)/);
-    if (m) {
-      const num = parseInt(m[1], 10);
-      if (num > maxNum) maxNum = num;
-    }
+    const id = r.id.toUpperCase();
+    if (!id.startsWith(normalizedMaterialId) || !id.endsWith(suffix)) continue;
+    const sequence = id.slice(normalizedMaterialId.length, -suffix.length);
+    if (!/^\d{4,}$/.test(sequence)) continue;
+    maxNum = Math.max(maxNum, Number(sequence));
   }
-  return `SHP-${String(maxNum + 1).padStart(3, '0')}`;
+  return `${normalizedMaterialId}${String(maxNum + 1).padStart(4, '0')}${suffix}`;
 }
 
 /** Groups shipments by due date string (YYYY-MM-DD) */

@@ -790,7 +790,7 @@ export default function ShipmentEntryAndHistoryPage() {
 
   const handlePreview = () => {
     if (!validateFormAndScroll()) return;
-    const currentId = editingId || nextShipmentId(shipments);
+    const currentId = editingId || nextShipmentId(shipments, formData.materialId);
     const mockPreview = formToShipment(formData, currentId, toISODate(new Date()), undefined, selectedPaymentTerm);
     setPreviewShipment(mockPreview);
   };
@@ -2528,7 +2528,7 @@ export default function ShipmentEntryAndHistoryPage() {
 
       {showSaveConfirm && (
         <ConfirmDialog
-          title={isEditing ? `Update Shipment ${editingId}?` : `Save Shipment ${nextShipmentId(shipments)}?`}
+          title={isEditing ? `Update Shipment ${editingId}?` : `Save Shipment ${nextShipmentId(shipments, formData.materialId)}?`}
           message={`Are you sure you want to save this shipment record for ${formData.supplier || 'this supplier'}?`}
           confirmLabel={isEditing ? 'Confirm Update' : 'Confirm Save'}
           onCancel={() => setShowSaveConfirm(false)}

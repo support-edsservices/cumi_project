@@ -245,7 +245,7 @@ def _material_id_name(cursor, name: str | None) -> str:
 
 
 def _next_sh_no(cursor, material_id: str, fy_code: str) -> str:
-    """Generate next sequential SH No in format {material_id}{seq:03d}FY{YY}-{YY}."""
+    """Generate next sequential SH No in format {material_id}{seq:04d}FY{YY}-{YY}."""
     fy_suffix = fy_code.replace("T", "-")
     cursor.execute(
         f"SELECT sh_no FROM {DB_TABLES['shipments']} WHERE sh_no LIKE %s",
@@ -253,7 +253,7 @@ def _next_sh_no(cursor, material_id: str, fy_code: str) -> str:
     )
     rows = cursor.fetchall()
     highest = 0
-    regex = re.compile(rf"^{re.escape(material_id)}(\d+){re.escape(fy_suffix)}$", re.IGNORECASE)
+    regex = re.compile(rf"^{re.escape(material_id)}(\d{{4,}}){re.escape(fy_suffix)}$", re.IGNORECASE)
     for r in rows:
         match = regex.match(str(r["sh_no"]).strip())
         if match:
@@ -261,7 +261,7 @@ def _next_sh_no(cursor, material_id: str, fy_code: str) -> str:
             if num > highest:
                 highest = num
     next_num = highest + 1
-    new_sh_no = f"{material_id}{next_num:03d}{fy_suffix}"
+    new_sh_no = f"{material_id}{next_num:04d}{fy_suffix}"
     for attempt in range(20):
         cursor.execute(
             f"SELECT 1 FROM {DB_TABLES['shipments']} WHERE sh_no = %s LIMIT 1",
@@ -270,8 +270,8 @@ def _next_sh_no(cursor, material_id: str, fy_code: str) -> str:
         if cursor.fetchone() is None:
             return new_sh_no
         next_num += 1
-        new_sh_no = f"{material_id}{next_num:03d}{fy_suffix}"
-    return new_sh_no
+        new_sh_no = f"{material_id}{next_num:04d}{fy_suffix}"
+    raise HTTPException(status_code=409, detail=f"Could not allocate a unique shipment number for {material_id} {fy_suffix}.")
 
 
 def _shipment_mode(cursor, name: str) -> str:
@@ -938,12 +938,13 @@ def import_shipments(batch: ShipmentImportBatch, user: dict[str, Any] = Depends(
     fiscal_year_code = _import_fiscal_year_code(batch.fiscalYearCode)
     results = []
     for row in batch.rows:
+        shipment_id = _shipment_id_with_fiscal_year(row.shipmentId, fiscal_year_code)
         try:
             shipment = _create_shipment_record(
                 row.shipment,
                 user,
                 allow_missing_po_dates=True,
-                requested_shipment_id=row.shipmentId,
+                requested_shipment_id=shipment_id,
                 fiscal_year_code=fiscal_year_code,
                 skip_existing_shipment_id=True,
             )
@@ -971,6 +972,13 @@ def _import_fiscal_year_code(value: str | None) -> str:
     today = date.today()
     start_year = today.year if today.month >= 4 else today.year - 1
     return f"FY{start_year % 100:02d}T{(start_year + 1) % 100:02d}"
+
+
+def _shipment_id_with_fiscal_year(shipment_id: str, fiscal_year_code: str) -> str:
+    clean_id = shipment_id.strip()
+    if re.search(r"(?:FY\d{2}-\d{2}|-?FY\d{2}T\d{2})$", clean_id, re.IGNORECASE):
+        return clean_id
+    return f"{clean_id}{fiscal_year_code.replace('T', '-')}"
 
 
 def _create_shipment_record(

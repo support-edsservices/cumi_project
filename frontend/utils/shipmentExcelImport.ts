@@ -1,5 +1,6 @@
 ﻿import * as XLSX from 'xlsx';
 import type { MasterEntry, MasterType } from '@/data/masterData';
+import { getFinancialYearRange } from '@/data/financialYear';
 import type {
   CreditDaysFrom,
   DocumentStatus,
@@ -88,6 +89,12 @@ const HEADER_ALIASES: Record<ShipmentImportField, string[]> = {
   eta: ['eta', 'estimated arrival date'],
   arrivedDate: ['arrival date', 'arrived date'],
 };
+
+function shipmentIdForFiscalYear(shipmentId: string, fiscalYearCode: string): string {
+  const cleanId = shipmentId.trim();
+  if (/(?:FY\d{2}-\d{2}|-?FY\d{2}T\d{2})$/i.test(cleanId)) return cleanId;
+  return `${cleanId}${fiscalYearCode.replace('T', '-')}`;
+}
 
 const SHIPMENT_ID_ALIASES = ['sh no', 'sh no.', 'shipment no', 'shipment id'];
 const REQUIRED_COLUMNS: { field: ShipmentImportField; label: string }[] = [];
@@ -228,10 +235,18 @@ export function parseShipmentExcel(buffer: ArrayBuffer): ShipmentExcelPreview {
     .map(({ label }) => label);
   if (!selected.shipmentIdColumn) missingRequiredColumns.unshift('SH. No');
   const fiscalYearMatch = /\bFY\s*(\d{2})\s*[-–/]\s*(\d{2})\b/i.exec(selected.sheetName);
+  const currentFinancialYear = getFinancialYearRange();
+  const fiscalYearCode = fiscalYearMatch
+    ? `FY${fiscalYearMatch[1]}T${fiscalYearMatch[2]}`
+    : `FY${currentFinancialYear.startDate.slice(2, 4)}T${currentFinancialYear.endDate.slice(2, 4)}`;
+  const rowsWithFiscalYear = rows.map((row) => ({
+    ...row,
+    shipmentId: row.shipmentId ? shipmentIdForFiscalYear(row.shipmentId, fiscalYearCode) : '',
+  }));
 
   return {
     sheetName: selected.sheetName,
-    fiscalYearCode: fiscalYearMatch ? `FY${fiscalYearMatch[1]}T${fiscalYearMatch[2]}` : null,
+    fiscalYearCode,
     headerRowNumber: selected.headerIndex + 1,
     matchedColumns: [
       ...(selected.shipmentIdColumn
@@ -240,7 +255,7 @@ export function parseShipmentExcel(buffer: ArrayBuffer): ShipmentExcelPreview {
       ...Array.from(selected.columns, ([field, column]) => ({ field, header: column.header })),
     ],
     missingRequiredColumns,
-    rows,
+    rows: rowsWithFiscalYear,
   };
 }
 
