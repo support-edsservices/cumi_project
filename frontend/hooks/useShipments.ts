@@ -54,6 +54,15 @@ function shipmentFromApi(shipment: Shipment): Shipment {
   return normalized;
 }
 
+function uniqueShipments(shipments: Shipment[]): Shipment[] {
+  const seen = new Set<string>();
+  return shipments.filter((shipment) => {
+    if (seen.has(shipment.id)) return false;
+    seen.add(shipment.id);
+    return true;
+  });
+}
+
 export function useShipments() {
   const { fetchWithAuth } = useAuth();
   const [shipments, setShipments] = useState<Shipment[]>([]);
@@ -78,7 +87,7 @@ export function useShipments() {
           offset += page.length;
         }
         if (active) {
-          setShipments(data.map(shipmentFromApi));
+          setShipments(uniqueShipments(data.map(shipmentFromApi)));
           setError(null);
         }
       } catch (loadError) {
@@ -103,7 +112,7 @@ export function useShipments() {
     });
     if (!response.ok) throw await responseError(response, 'Could not save shipment.');
     const saved: Shipment = shipmentFromApi(await response.json());
-    setShipments((current) => [saved, ...current]);
+    setShipments((current) => uniqueShipments([saved, ...current]));
     setError(null);
     return saved;
   }, [fetchWithAuth]);
@@ -124,7 +133,7 @@ export function useShipments() {
       .filter((result): result is ShipmentImportResult & { shipment: Shipment } => Boolean(result.shipment))
       .map((result) => shipmentFromApi(result.shipment));
     if (imported.length) {
-      setShipments((current) => [...imported, ...current]);
+      setShipments((current) => uniqueShipments([...imported, ...current]));
       setError(null);
     }
     return data.results;
@@ -138,7 +147,9 @@ export function useShipments() {
     });
     if (!response.ok) throw await responseError(response, 'Could not update shipment.');
     const saved: Shipment = shipmentFromApi(await response.json());
-    setShipments((current) => current.map((shipment) => shipment.id === saved.id ? saved : shipment));
+    setShipments((current) => uniqueShipments(
+      current.map((shipment) => shipment.id === saved.id ? saved : shipment),
+    ));
     setError(null);
     return saved;
   }, [fetchWithAuth]);

@@ -341,7 +341,7 @@ function importDate(value: string | undefined, _fieldLabel: string): string {
 
 function importedStatus(
   row: ShipmentImportRow,
-): { materialStatus: MaterialStatus; etd: string; eta: string } {
+): { materialStatus: MaterialStatus; etd: string; eta: string; arrivedDate: string } {
   const source = row.fields.materialStatus?.trim() ?? '';
   const normalized = source.toLocaleLowerCase().replace(/\s+/g, ' ');
   const statusMap: Record<string, MaterialStatus> = {
@@ -356,14 +356,17 @@ function importedStatus(
   const sourceEtd = source.match(new RegExp(String.raw`\bETD\s*[:\-]\s*${scheduleDate}`, 'i'))?.[1];
   const sourceEta = source.match(new RegExp(String.raw`\bETA\s*[:\-]\s*${scheduleDate}`, 'i'))?.[1];
   const inferredEtd = sourceEtd ? parseLooseDate(sourceEtd) ?? '' : '';
-  const inferredEta = sourceEta ? parseLooseDate(sourceEta) ?? '' : parseLooseDate(source) ?? '';
+  const dateInStatus = parseLooseDate(source) ?? '';
+  const inferredEta = sourceEta ? parseLooseDate(sourceEta) ?? '' : '';
+  const arrivedDate = explicitStatus === 'Arrived' ? dateInStatus : !explicitStatus && !sourceEtd && !sourceEta ? dateInStatus : '';
   if (source && !explicitStatus && !/\b(?:ETD|ETA)\b/i.test(source) && !parseLooseDate(source)) {
     // status optional
   }
   return {
-    materialStatus: explicitStatus ?? 'In Transit',
+    materialStatus: explicitStatus ?? (arrivedDate ? 'Arrived' : 'In Transit'),
     etd: importDate(row.fields.etd, 'ETD') || inferredEtd,
     eta: importDate(row.fields.eta, 'ETA') || inferredEta,
+    arrivedDate,
   };
 }
 
@@ -452,7 +455,7 @@ export function buildShipmentImportRecord(
     bankReferenceNo: fields.bankReferenceNo?.trim() ?? '',
     materialStatus: schedule.materialStatus,
     warehouseName: requiredMasterName('warehouses', fields.warehouseName ?? '', masters) || undefined,
-    arrivedDate: importDate(fields.arrivedDate, 'Arrival Date') || undefined,
+    arrivedDate: importDate(fields.arrivedDate, 'Arrival Date') || schedule.arrivedDate || undefined,
     etd: schedule.etd,
     eta: schedule.eta,
     link: '',

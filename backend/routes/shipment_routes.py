@@ -672,7 +672,7 @@ def _shipment_rows(
         LEFT JOIN {DB_TABLES['shipment_modes']} AS shipment_mode
             ON shipment_mode.code = s.mode_of_shipment
         {filter_sql}
-        ORDER BY overview.created_at DESC
+        ORDER BY overview.created_at DESC, overview.sh_no DESC
         {limit_sql}
         """,
         tuple(parameters),
