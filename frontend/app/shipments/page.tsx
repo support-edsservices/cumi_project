@@ -1112,7 +1112,7 @@ export default function ShipmentEntryAndHistoryPage() {
   const isEditing = editingId !== null;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', maxWidth: "100%", margin: '0 auto', width: '100%' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '.5rem', maxWidth: "100%", margin: '0 auto', width: '100%' }}>
       <style>{PAGE_CSS}</style>
 
       {error && (
@@ -1156,7 +1156,7 @@ export default function ShipmentEntryAndHistoryPage() {
 
       {/* ── Header Bar ── */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <Link
             href="/"
             style={{
@@ -2152,12 +2152,7 @@ export default function ShipmentEntryAndHistoryPage() {
               >
                 {showShipmentsWithoutPoDate ? 'Only showing records without PO date' : 'Show records without PO date'}
               </button>
-              <span style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-size-compact)' }}>
-                {financialYear.label}
-              </span>
-              <span style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-size-compact)' }}>
-                Filter based on PO date
-              </span>
+              
             </div>
 
             <div

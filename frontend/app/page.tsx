@@ -1543,10 +1543,10 @@ function DuePaymentsTable({ data }: { data: Shipment[] }) {
                   borderBottom: '1px solid var(--border)',
                   background: i % 2 === 1 ? 'var(--bg-secondary)' : 'transparent',
                 }}>
-                  <td style={{ ...cell, fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
+                  <td style={{ ...cell, fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap',fontSize: 'var(--font-size-body-small)' }}>
                     {s.id}
                   </td>
-                  <td style={{ ...cell, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
+                  <td style={{ ...cell, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap',fontSize: 'var(--font-size-body-small)' }}>
                     {s.supplier}
                   </td>
                   <td style={{ ...cell, color: 'var(--text-secondary)', fontSize: 'var(--font-size-body-small)' }}>
