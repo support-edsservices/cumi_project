@@ -2540,7 +2540,7 @@ export default function ShipmentEntryAndHistoryPage() {
       {deleteTarget && (
         <ConfirmDialog
           title={`Delete ${deleteTarget.id}?`}
-          message={`${deleteTarget.supplier} • ${deleteTarget.poNo} will be removed from history. This cannot be undone.`}
+          message={`${deleteTarget.supplier} • ${deleteTarget.poNo} and all related shipment data and attachments will be permanently deleted. This cannot be undone.`}
           confirmLabel="Delete"
           onCancel={() => setDeleteTarget(null)}
           onConfirm={confirmDelete}

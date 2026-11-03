@@ -36,7 +36,7 @@ CREDIT_BASES = {
 
 
 class MasterEntryInput(BaseModel):
-    name: str = Field(min_length=1, max_length=255)
+    name: str = Field(default="", max_length=255)
     paymentType: str = Field(default="OTHER", max_length=30)
     creditDays: int | None = Field(default=None, ge=0, le=65535)
     creditBasis: str | None = None
@@ -105,15 +105,28 @@ def _validate_master_name(master_type: str, name: str) -> str:
     return clean_name
 
 
-def _validate_payment_term(data: MasterEntryInput) -> tuple[str, str | None, int | None, bool]:
+def _validate_payment_term(data: MasterEntryInput) -> tuple[str, str | None, int | None, bool, str]:
     payment_type = data.paymentType.strip().upper()
     if payment_type not in {"LC", "CREDIT_DAYS", "OTHER"}:
         raise HTTPException(status_code=422, detail="Unsupported payment type")
-    if data.creditBasis and data.creditBasis not in CREDIT_BASES:
-        raise HTTPException(status_code=422, detail="Unsupported payment date basis")
-    if (data.creditDays is None) != (data.creditBasis is None):
-        raise HTTPException(status_code=422, detail="Credit days and date basis must be provided together")
-    return payment_type, data.creditBasis, data.creditDays, data.needsReview
+    if payment_type == "LC":
+        return payment_type, None, None, data.needsReview, "LC"
+    if payment_type == "OTHER":
+        name = _validate_master_name("payment-terms", data.name)
+        return payment_type, None, None, data.needsReview, name
+    if data.creditDays is None:
+        raise HTTPException(status_code=422, detail="Credit days are required for credit-day payment terms")
+    if not data.creditBasis or data.creditBasis not in CREDIT_BASES:
+        raise HTTPException(status_code=422, detail="Select a valid payment date basis")
+
+    basis_labels = {
+        "INVOICE_DATE": "Invoice Date",
+        "BL_DATE": "BL Date",
+        "PO_DATE": "PO Date",
+        "PROFORMA_INVOICE_DATE": "Proforma Invoice Date",
+    }
+    name = f"{data.creditDays} Days from {basis_labels[data.creditBasis]}"
+    return payment_type, data.creditBasis, data.creditDays, data.needsReview, name
 
 
 @router.get("/{master_type}")
@@ -171,10 +184,10 @@ def create_master_entry(
     table = MASTER_TABLES.get(master_type)
     if table is None:
         raise HTTPException(status_code=404, detail="Unknown master list")
-    name = _validate_master_name(master_type, data.name)
-
     if master_type == "payment-terms":
-        payment_type, credit_basis, credit_days, needs_review = _validate_payment_term(data)
+        payment_type, credit_basis, credit_days, needs_review, name = _validate_payment_term(data)
+    else:
+        name = _validate_master_name(master_type, data.name)
     if master_type == "suppliers":
         letters = re.sub(r"[^A-Za-z]", "", name).upper()
         if len(letters) < 2:
@@ -258,7 +271,7 @@ def update_master_entry(
     if master_type == "prw":
         raise HTTPException(status_code=409, detail="PRW values are fixed system statuses and cannot be renamed")
 
-    name = _validate_master_name(master_type, data.name)
+    name = _validate_master_name(master_type, data.name) if master_type != "payment-terms" else ""
     if master_type == "suppliers" and len(name) > 150:
         raise HTTPException(status_code=422, detail="Supplier name must be at most 150 characters")
     if master_type == "countries" and len(name) > 80:
@@ -268,7 +281,7 @@ def update_master_entry(
     if master_type == "materials" and len(name) > 255:
         raise HTTPException(status_code=422, detail="Material name must be at most 255 characters")
     if master_type == "payment-terms":
-        payment_type, credit_basis, credit_days, needs_review = _validate_payment_term(data)
+        payment_type, credit_basis, credit_days, needs_review, name = _validate_payment_term(data)
 
     conn = _connection()
     cursor = None

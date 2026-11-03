@@ -1313,17 +1313,54 @@ def update_shipment(sh_no: str, data: ShipmentInput, user: dict[str, Any] = Depe
 def delete_shipment(sh_no: str, user: dict[str, Any] = Depends(require_admin)):
     conn = _connection()
     cursor = None
+    attachment_paths: list[Path] = []
     try:
         cursor = conn.cursor(dictionary=True)
-        cursor.execute(f"SELECT sh_no FROM {DB_TABLES['shipments']} WHERE sh_no = %s AND deleted_at IS NULL FOR UPDATE", (sh_no,))
+        cursor.execute(
+            f"SELECT sh_no FROM {DB_TABLES['shipments']} WHERE sh_no = %s FOR UPDATE",
+            (sh_no,),
+        )
         if cursor.fetchone() is None:
             raise HTTPException(status_code=404, detail="Shipment not found")
+
         cursor.execute(
-            f"UPDATE {DB_TABLES['shipments']} SET deleted_at = CURRENT_TIMESTAMP, updated_by = %s WHERE sh_no = %s",
-            (_actor(user), sh_no),
+            f"SELECT storage_path FROM {DB_TABLES['shipment_attachments']} WHERE sh_no = %s",
+            (sh_no,),
         )
-        _audit(cursor, sh_no, "DELETE", "Shipment soft deleted", _actor(user))
+        attachment_paths = [
+            _safe_storage_path(str(row["storage_path"]))
+            for row in cursor.fetchall()
+            if row.get("storage_path")
+        ]
+        cursor.execute(
+            f"""
+            DELETE FROM {DB_TABLES['invoice_payments']}
+            WHERE invoice_id IN (
+                SELECT id FROM {DB_TABLES['shipment_invoices']} WHERE sh_no = %s
+            )
+            """,
+            (sh_no,),
+        )
+        cursor.execute(f"DELETE FROM {DB_TABLES['shipment_attachments']} WHERE sh_no = %s", (sh_no,))
+        cursor.execute(f"DELETE FROM {DB_TABLES['shipment_invoices']} WHERE sh_no = %s", (sh_no,))
+        cursor.execute(f"DELETE FROM {DB_TABLES['shipment_pos']} WHERE sh_no = %s", (sh_no,))
+        cursor.execute(f"DELETE FROM {DB_TABLES['shipment_bls']} WHERE sh_no = %s", (sh_no,))
+        cursor.execute(f"DELETE FROM {DB_TABLES['shipment_boes']} WHERE sh_no = %s", (sh_no,))
+        cursor.execute(f"DELETE FROM {DB_TABLES['shipment_audit']} WHERE sh_no = %s", (sh_no,))
+        cursor.execute(
+            f"DELETE FROM {DB_TABLES['shipments']} WHERE sh_no = %s",
+            (sh_no,),
+        )
         conn.commit()
+        for attachment_path in attachment_paths:
+            try:
+                attachment_path.unlink(missing_ok=True)
+            except OSError:
+                logger.exception("Shipment was permanently deleted but an attachment file could not be removed")
+                raise HTTPException(
+                    status_code=500,
+                    detail="Shipment was deleted, but one or more attachment files could not be removed.",
+                )
     except HTTPException:
         conn.rollback()
         raise

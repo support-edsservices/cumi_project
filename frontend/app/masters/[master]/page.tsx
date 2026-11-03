@@ -41,6 +41,20 @@ export default function MasterEntryPage() {
   const [actionId, setActionId] = useState<number | null>(null);
   const [notice, setNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const canManage = ['manager', 'admin', 'superadmin'].includes(user?.role.toLowerCase() ?? '');
+  const creditBasisLabels: Record<string, string> = {
+    INVOICE_DATE: 'Invoice Date',
+    BL_DATE: 'BL Date',
+    PO_DATE: 'PO Date',
+    PROFORMA_INVOICE_DATE: 'Proforma Invoice Date',
+  };
+  const generatedCreditTermName = creditDays !== '' && creditBasisLabels[creditBasis]
+    ? `${creditDays} Days from ${creditBasisLabels[creditBasis]}`
+    : '';
+  const paymentTermName = paymentType === 'LC'
+    ? 'LC'
+    : paymentType === 'CREDIT_DAYS'
+      ? generatedCreditTermName
+      : name.trim();
 
   const fetchEntries = useCallback(async () => {
     if (!masterType) return;
@@ -121,7 +135,7 @@ export default function MasterEntryPage() {
 
   const saveEntry = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!masterType || !name.trim()) return;
+    if (!masterType || (masterType === 'payment-terms' ? !paymentTermName : !name.trim())) return;
     setSaving(true);
     setNotice(null);
     try {
@@ -131,16 +145,16 @@ export default function MasterEntryPage() {
           method: editingEntry ? 'PUT' : 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            name: name.trim(),
+            name: masterType === 'payment-terms' ? paymentTermName : name.trim(),
             paymentType,
-            creditDays: creditDays !== '' ? Number(creditDays) : null,
-            creditBasis: creditBasis || null,
+            creditDays: paymentType === 'CREDIT_DAYS' && creditDays !== '' ? Number(creditDays) : null,
+            creditBasis: paymentType === 'CREDIT_DAYS' ? creditBasis || null : null,
             needsReview,
           }),
         },
       );
       if (!response.ok) throw new Error(await errorMessage(response, `Could not ${editingEntry ? 'update' : 'save'} master entry.`));
-      const savedName = name.trim();
+      const savedName = masterType === 'payment-terms' ? paymentTermName : name.trim();
       setName('');
       setPaymentType('OTHER');
       setCreditDays('');
@@ -256,40 +270,79 @@ export default function MasterEntryPage() {
       )}
 
       <form onSubmit={saveEntry} className="card" style={{ padding: '1rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '0.8rem', alignItems: 'end' }}>
-        <label style={fieldLabelStyle}>
-          {entryLabel(masterType)}
-          <input required maxLength={maxNameLength(masterType)} value={name} onChange={(event) => setName(event.target.value)} placeholder={placeholderFor(masterType)} style={inputStyle} />
-        </label>
-
         {masterType === 'payment-terms' && (
           <>
             <label style={fieldLabelStyle}>
               Payment type
-              <select value={paymentType} onChange={(event) => setPaymentType(event.target.value)} style={inputStyle}>
-                <option value="OTHER">Other / advance</option>
+              <select
+                value={paymentType}
+                onChange={(event) => {
+                  setPaymentType(event.target.value);
+                  setName('');
+                  setCreditDays('');
+                  setCreditBasis('');
+                }}
+                style={inputStyle}
+              >
                 <option value="LC">LC</option>
                 <option value="CREDIT_DAYS">Credit days</option>
+                <option value="OTHER">Others</option>
               </select>
             </label>
-            <label style={fieldLabelStyle}>
-              Credit days
-              <input type="number" min="0" max="65535" value={creditDays} onChange={(event) => setCreditDays(event.target.value)} style={inputStyle} />
-            </label>
-            <label style={fieldLabelStyle}>
-              Count from
-              <select value={creditBasis} onChange={(event) => setCreditBasis(event.target.value)} style={inputStyle}>
-                <option value="">Not applicable</option>
-                <option value="INVOICE_DATE">Invoice date</option>
-                <option value="BL_DATE">BL date</option>
-                <option value="PO_DATE">PO date</option>
-                <option value="PROFORMA_INVOICE_DATE">Proforma invoice date</option>
-              </select>
-            </label>
+            {paymentType === 'CREDIT_DAYS' && (
+              <>
+                <label style={fieldLabelStyle}>
+                  Credit days
+                  <input
+                    required
+                    type="number"
+                    min="0"
+                    max="65535"
+                    value={creditDays}
+                    onChange={(event) => setCreditDays(event.target.value)}
+                    style={inputStyle}
+                  />
+                </label>
+                <label style={fieldLabelStyle}>
+                  Count from
+                  <select required value={creditBasis} onChange={(event) => setCreditBasis(event.target.value)} style={inputStyle}>
+                    <option value="">Select date basis</option>
+                    <option value="INVOICE_DATE">Invoice date</option>
+                    <option value="BL_DATE">BL date</option>
+                    <option value="PO_DATE">PO date</option>
+                    <option value="PROFORMA_INVOICE_DATE">Proforma invoice date</option>
+                  </select>
+                </label>
+                <label style={fieldLabelStyle}>
+                  Generated payment term
+                  <input readOnly value={generatedCreditTermName} placeholder="Enter credit days and count from" style={inputStyle} />
+                </label>
+              </>
+            )}
+            {paymentType === 'OTHER' && (
+              <label style={fieldLabelStyle}>
+                Payment term
+                <input
+                  required
+                  maxLength={maxNameLength(masterType)}
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  placeholder={placeholderFor(masterType)}
+                  style={inputStyle}
+                />
+              </label>
+            )}
             <label style={{ ...fieldLabelStyle, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <input type="checkbox" checked={needsReview} onChange={(event) => setNeedsReview(event.target.checked)} />
               Needs business review
             </label>
           </>
+        )}
+        {masterType !== 'payment-terms' && (
+          <label style={fieldLabelStyle}>
+            {entryLabel(masterType)}
+            <input required maxLength={maxNameLength(masterType)} value={name} onChange={(event) => setName(event.target.value)} placeholder={placeholderFor(masterType)} style={inputStyle} />
+          </label>
         )}
 
         <button type="submit" disabled={saving} style={{ ...buttonStyle, justifyContent: 'center', minHeight: 40, background: 'var(--accent-blue)', color: '#fff', borderColor: 'var(--accent-blue)' }}>
