@@ -46,6 +46,7 @@ DB_TABLES = {
     "shipment_attachments": "shipment_attachments",
     "shipment_audit": "shipment_audit",
     "invoice_payments": "invoice_payments",
+    "material_id_master": "materialIDMaster",
 }
 DB_VIEWS = {
     "shipment_overview": "v_shipment_overview",

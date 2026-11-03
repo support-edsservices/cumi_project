@@ -1,4 +1,4 @@
-import hashlib
+﻿import hashlib
 import logging
 import re
 from typing import Any
@@ -24,6 +24,7 @@ MASTER_TABLES = {
     "countries": DB_TABLES["countries"],
     "prw": DB_TABLES["prw_statuses"],
     "materials": DB_TABLES["materials"],
+    "material-id": DB_TABLES["material_id_master"],
 }
 PRW_VALUES = {"PAID", "NOT PAID", "PARTIAL", "ADVANCE", "2 WAY", "SR DATE"}
 CREDIT_BASES = {
@@ -147,6 +148,8 @@ def list_master_entries(master_type: str, _user: dict[str, Any] = Depends(get_cu
                 f"SELECT id, name, code, is_active FROM {table} "
                 "WHERE LOWER(name) <> 'others' ORDER BY name"
             )
+        elif master_type == "material-id":
+            cursor.execute(f"SELECT id, name, 1 AS is_active FROM {table} ORDER BY name")
         else:
             cursor.execute(f"SELECT id, name, is_active FROM {table} ORDER BY name")
         return cursor.fetchall()
@@ -211,6 +214,13 @@ def create_master_entry(
                 f"INSERT INTO {table} (name, code) VALUES (%s, %s)",
                 (name, name),
             )
+        elif master_type == "material-id":
+            clean = name.strip().upper()
+            if not re.fullmatch(r"[A-Z0-9]+", clean) or len(clean) < 2 or len(clean) > 50:
+                raise HTTPException(status_code=422, detail="Material ID must be 2-50 uppercase alphanumeric characters")
+            cursor.execute(f"INSERT INTO {DB_TABLES['material_id_master']} (name) VALUES (%s)", (clean,))
+            conn.commit()
+            return {"id": int(cursor.lastrowid), "name": clean}
         else:
             cursor.execute(
                 f"""
@@ -296,6 +306,11 @@ def update_master_entry(
                     f"UPDATE {DB_TABLES['shipments']} SET material_summary = %s WHERE material_summary = %s",
                     (name, existing["name"]),
                 )
+            elif master_type == "material-id" and name != existing["name"]:
+                cursor.execute(
+                    f"UPDATE {DB_TABLES['shipments']} SET material_id = %s WHERE material_id = %s",
+                    (name, existing["name"]),
+                )
         conn.commit()
         return {"id": entry_id, "name": name}
     except HTTPException:
@@ -320,6 +335,8 @@ def deactivate_master_entry(
     entry_id: int,
     _user: dict[str, Any] = Depends(require_master_writer),
 ):
+    if master_type == "material-id":
+        raise HTTPException(status_code=409, detail="Material ID entries cannot be deactivated; delete them instead.")
     table = MASTER_TABLES.get(master_type)
     if table is None:
         raise HTTPException(status_code=404, detail="Unknown master list")
@@ -486,6 +503,11 @@ def delete_master_entry(
                 f"SELECT COUNT(*) AS count FROM {DB_TABLES['shipments']} WHERE material_summary = %s",
                 (entry["name"],),
             )
+        elif master_type == "material-id":
+            cursor.execute(
+                f"SELECT COUNT(*) AS count FROM {DB_TABLES['shipments']} WHERE material_id = %s",
+                (entry["name"],),
+            )
         else:
             status_map = {
                 "PAID": ("PAID", None),
@@ -532,6 +554,8 @@ def activate_master_entry(
     entry_id: int,
     _user: dict[str, Any] = Depends(require_master_writer),
 ):
+    if master_type == "material-id":
+        raise HTTPException(status_code=409, detail="Material ID entries cannot be activated; they are active by default.")
     table = MASTER_TABLES.get(master_type)
     if table is None:
         raise HTTPException(status_code=404, detail="Unknown master list")

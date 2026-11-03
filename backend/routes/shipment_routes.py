@@ -1,4 +1,4 @@
-import hashlib
+﻿import hashlib
 import json
 import logging
 import re
@@ -37,6 +37,7 @@ class ShipmentInput(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     supplier: str = Field(min_length=1, max_length=150)
+    materialId: str = Field(default="IC", max_length=50)
     poNo: str = Field(default="", max_length=20654)
     poDate: str | None = None
     material: str = Field(default="", max_length=500)
@@ -232,6 +233,57 @@ def _require_master_table(cursor, table: str) -> None:
         )
 
 
+def _material_id_name(cursor, name: str | None) -> str:
+    clean = (name or "").strip().upper()
+    if not clean:
+        return "IC"
+    _require_master_table(cursor, DB_TABLES["material_id_master"])
+    cursor.execute(
+        f"SELECT name FROM {DB_TABLES['material_id_master']} WHERE UPPER(name) = %s",
+        (clean,),
+    )
+    row = cursor.fetchone()
+    if row is None:
+        try:
+            cursor.execute(
+                f"INSERT INTO {DB_TABLES['material_id_master']} (name) VALUES (%s)",
+                (clean,),
+            )
+        except Exception:
+            pass
+        return clean
+    return str(row["name"]).upper()
+
+
+def _next_sh_no(cursor, material_id: str, fy_code: str) -> str:
+    """Generate next sequential SH No in format {material_id}{seq:03d}FY{YY}-{YY}."""
+    fy_suffix = fy_code.replace("T", "-")
+    cursor.execute(
+        f"SELECT sh_no FROM {DB_TABLES['shipments']} WHERE sh_no LIKE %s",
+        (f"{material_id}%{fy_suffix}",),
+    )
+    rows = cursor.fetchall()
+    highest = 0
+    regex = re.compile(rf"^{re.escape(material_id)}(\d+){re.escape(fy_suffix)}$", re.IGNORECASE)
+    for r in rows:
+        match = regex.match(str(r["sh_no"]).strip())
+        if match:
+            num = int(match.group(1))
+            if num > highest:
+                highest = num
+    next_num = highest + 1
+    new_sh_no = f"{material_id}{next_num:03d}{fy_suffix}"
+    for attempt in range(20):
+        cursor.execute(
+            f"SELECT 1 FROM {DB_TABLES['shipments']} WHERE sh_no = %s LIMIT 1",
+            (new_sh_no,),
+        )
+        if cursor.fetchone() is None:
+            return new_sh_no
+        next_num += 1
+        new_sh_no = f"{material_id}{next_num:03d}{fy_suffix}"
+    return new_sh_no
+
 def _shipment_mode(cursor, name: str) -> str:
     clean_name = name.strip()
     if not clean_name or len(clean_name) > 40:
@@ -325,6 +377,7 @@ def _shipment_input_values(
     actor: str | None,
     allow_missing_po_dates: bool = False,
 ) -> dict[str, Any]:
+    material_id = _material_id_name(cursor, getattr(data, "materialId", "IC"))
     supplier_id, supplier_folder = _supplier(cursor, data.supplier)
     loading_port_id = _lookup_id(cursor, DB_TABLES["ports"], data.portOfLoading)
     landing_port_id = _lookup_id(cursor, DB_TABLES["ports"], data.portOfLanding)
@@ -372,10 +425,7 @@ def _shipment_input_values(
         DB_TABLES["shipment_bls"]: _document_rows(data.blNo, data.blDate, "BL number", "BL date", 80),
         DB_TABLES["shipment_boes"]: _document_rows(data.boeNo, data.boeDate, "BOE number", "BOE date", 40),
     }
-    if not child_rows[DB_TABLES["shipment_pos"]]:
-        raise HTTPException(status_code=422, detail="At least one PO number is required")
-    if not child_rows[DB_TABLES["shipment_invoices"]]:
-        raise HTTPException(status_code=422, detail="At least one invoice number is required")
+    # PO and Invoice are now optional — no mandatory minimum enforced
     proforma_rows = _document_rows(
         data.proformaInvoiceNo,
         data.proformaInvoiceDate,
@@ -409,6 +459,7 @@ def _shipment_input_values(
         )
 
     return {
+        "material_id": material_id,
         "supplier_id": supplier_id,
         "supplier_folder": supplier_folder,
         "material_summary": data.material.strip() or None,
@@ -454,6 +505,8 @@ def _insert_children(
         DB_TABLES["shipment_bls"]: ("bl_no", "bl_date", False),
         DB_TABLES["shipment_boes"]: ("boe_no", "boe_date", False),
     }
+    for table in definitions:
+        cursor.execute(f"DELETE FROM {table} WHERE sh_no = %s", (sh_no,))
     for table, records in rows.items():
         number_column, date_column, has_material = definitions[table]
         if not records:
@@ -563,6 +616,7 @@ def _shape_shipment(row: dict[str, Any], attachments: list[dict[str, Any]]) -> d
     payment_type = str(row.get("payment_type") or "OTHER")
     return {
         "id": sh_no,
+        "materialId": row.get("material_id") or "IC",
         "supplier": row.get("supplier_name") or "",
         "poNo": row.get("po_nos") or "",
         "poDate": _iso_joined_dates(row.get("po_dates")),
@@ -635,7 +689,7 @@ def _shipment_rows(cursor, sh_no: str | None = None, *, limit: int = 200, offset
     limit_sql = "" if sh_no else "LIMIT %s OFFSET %s"
     cursor.execute(
         f"""
-        SELECT overview.*, s.other_mode_detail, s.prw_raw, s.arrived_date,
+        SELECT overview.*, s.material_id, s.other_mode_detail, s.prw_raw, s.arrived_date,
                shipment_mode.name AS mode_name,
                (SELECT GROUP_CONCAT(i.proforma_invoice_no ORDER BY i.line_no SEPARATOR '_')
                 FROM {DB_TABLES['shipment_invoices']} i WHERE i.sh_no = s.sh_no) AS proforma_invoice_nos,
@@ -981,14 +1035,9 @@ def _create_shipment_record(
             allow_missing_po_dates=allow_missing_po_dates,
         )
         if requested_shipment_id is None:
-            cursor.execute(
-                f"CALL {DB_PROCEDURES['next_shipment_number']}(%s, %s, @generated_sh_no, @generated_fy_code)",
-                (values["supplier_id"], date.today()),
-            )
-            cursor.execute("SELECT @generated_sh_no AS sh_no, @generated_fy_code AS fy_code")
-            generated = cursor.fetchone()
-            sh_no = str(generated["sh_no"])
-            fy_code = str(generated["fy_code"])
+            material_id_code = values["material_id"]
+            fy_code = fiscal_year_code or _import_fiscal_year_code(None)
+            sh_no = _next_sh_no(cursor, material_id_code, fy_code)
         else:
             sh_no = requested_shipment_id.strip()
             fy_code = fiscal_year_code or _import_fiscal_year_code(None)
@@ -996,19 +1045,19 @@ def _create_shipment_record(
         cursor.execute(
             f"""
             INSERT INTO {DB_TABLES['shipments']} (
-                sh_no, fy_code, supplier_id, material_summary, country,
+                sh_no, fy_code, material_id, supplier_id, material_summary, country,
                 mode_of_shipment, other_mode_detail, port_of_loading_id, port_of_landing_id,
                 mawb_no, hawb_no, cha_id, warehouse_id, document_status, docs_folder_path,
                 payment_term_id, payment_terms_text, payment_type, credit_days, credit_basis,
                 prw_status, prw_raw, bank_reference_no, lead_time_days, material_status,
                 etd, eta, arrived_date, created_by, updated_by
             ) VALUES (
-                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                 %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
             )
             """,
             (
-                sh_no, fy_code, values["supplier_id"], values["material_summary"], values["country"],
+                sh_no, fy_code, values["material_id"], values["supplier_id"], values["material_summary"], values["country"],
                 values["mode_of_shipment"], values["other_mode_detail"], values["port_of_loading_id"],
                 values["port_of_landing_id"], values["mawb_no"], values["hawb_no"], values["cha_id"],
                 values["warehouse_id"], values["document_status"], docs_folder_path, values["payment_term_id"],
@@ -1236,7 +1285,7 @@ def update_shipment(sh_no: str, data: ShipmentInput, user: dict[str, Any] = Depe
         cursor.execute(
             f"""
             UPDATE {DB_TABLES['shipments']} SET
-                supplier_id = %s, material_summary = %s, country = %s,
+                material_id = %s, supplier_id = %s, material_summary = %s, country = %s,
                 mode_of_shipment = %s, other_mode_detail = %s, port_of_loading_id = %s,
                 port_of_landing_id = %s, mawb_no = %s, hawb_no = %s, cha_id = %s,
                 warehouse_id = %s, document_status = %s, payment_term_id = %s,
@@ -1247,7 +1296,7 @@ def update_shipment(sh_no: str, data: ShipmentInput, user: dict[str, Any] = Depe
             WHERE sh_no = %s
             """,
             (
-                values["supplier_id"], values["material_summary"], values["country"],
+                values["material_id"], values["supplier_id"], values["material_summary"], values["country"],
                 values["mode_of_shipment"], values["other_mode_detail"], values["port_of_loading_id"],
                 values["port_of_landing_id"], values["mawb_no"], values["hawb_no"], values["cha_id"],
                 values["warehouse_id"], values["document_status"], values["payment_term_id"],

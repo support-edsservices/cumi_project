@@ -1,4 +1,4 @@
-// data/navigation.ts
+﻿// data/navigation.ts
 
 import type { LucideIcon } from 'lucide-react';
 import {
@@ -53,6 +53,7 @@ export const navSections: NavSection[] = [
           { label: 'PRW / Payment Status', href: '/masters/prw' },
           { label: 'Warehouses', href: '/masters/warehouses' },
           { label: 'Materials', href: '/masters/materials' },
+          { label: 'Material Ids', href: '/masters/material-id' },
         ],
       },
     ],

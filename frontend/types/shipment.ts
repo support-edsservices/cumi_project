@@ -1,4 +1,4 @@
-/* ─────────────────────────────────────────────────────────────────────────────
+﻿/* ─────────────────────────────────────────────────────────────────────────────
    Shipment types
    NOTE: rebuilt from how the pages use them. If your existing types file has
    extra exports, merge them in rather than deleting them.
@@ -43,6 +43,7 @@ export interface ShipmentDocument {
 
 export interface Shipment {
   id: string;
+  materialId?: string;
 
   supplier: string;
   poNo: string;

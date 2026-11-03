@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { CSSProperties, FormEvent } from 'react';
@@ -423,6 +423,7 @@ export default function MasterEntryPage() {
 }
 
 function placeholderFor(type: MasterType): string {
+  if (type === 'material-id') return 'e.g. IC, MS, AB';
   if (type === 'suppliers') return 'e.g. Bosch GmbH';
   if (type === 'ports') return 'e.g. Hamburg Port';
   if (type === 'chas') return 'e.g. DHL Global Forwarding';
@@ -435,6 +436,7 @@ function placeholderFor(type: MasterType): string {
 }
 
 function maxNameLength(type: MasterType): number {
+  if (type === 'material-id') return 50;
   if (type === 'payment-terms') return 255;
   if (type === 'modes') return 40;
   if (type === 'countries') return 80;
@@ -455,6 +457,7 @@ function entryLabel(type: MasterType): string {
     prw: 'PRW/payment status',
     warehouses: 'Warehouse',
     materials: 'Material',
+    'material-id': 'Material ID',
   };
   return labels[type];
 }

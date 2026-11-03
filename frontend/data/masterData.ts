@@ -1,4 +1,4 @@
-export const MASTER_TYPES = [
+﻿export const MASTER_TYPES = [
   'suppliers',
   'ports',
   'chas',
@@ -8,6 +8,7 @@ export const MASTER_TYPES = [
   'prw',
   'warehouses',
   'materials',
+  'material-id',
 ] as const;
 
 export type MasterType = typeof MASTER_TYPES[number];
@@ -33,6 +34,7 @@ export const MASTER_LABELS: Record<MasterType, string> = {
   prw: 'PRW / Payment Statuses',
   warehouses: 'Warehouses',
   materials: 'Materials',
+  'material-id': 'Material IDs',
 };
 
 export const MASTER_PATHS: Record<MasterType, string> = {
@@ -45,4 +47,5 @@ export const MASTER_PATHS: Record<MasterType, string> = {
   prw: '/masters/prw',
   warehouses: '/masters/warehouses',
   materials: '/masters/materials',
+  'material-id': '/masters/material-id',
 };

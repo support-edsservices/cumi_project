@@ -1,4 +1,4 @@
-import * as XLSX from 'xlsx';
+﻿import * as XLSX from 'xlsx';
 import type { MasterEntry, MasterType } from '@/data/masterData';
 import type {
   CreditDaysFrom,
@@ -10,6 +10,7 @@ import type {
 } from '@/types/shipment';
 
 export type ShipmentImportField =
+  | 'materialId'
   | 'supplier'
   | 'poNo'
   | 'poDate'
@@ -57,6 +58,7 @@ export interface ShipmentExcelPreview {
 export type ShipmentImportMasters = Partial<Record<MasterType, MasterEntry[]>>;
 
 const HEADER_ALIASES: Record<ShipmentImportField, string[]> = {
+  materialId: ['material id', 'material_id', 'mat id', 'materialid'],
   supplier: ['supplier', 'supplier name'],
   poNo: ['po no', 'po no.', 'purchase order', 'purchase order no', 'purchase order number'],
   poDate: ['po date', 'purchase order date'],
@@ -90,8 +92,6 @@ const HEADER_ALIASES: Record<ShipmentImportField, string[]> = {
 const SHIPMENT_ID_ALIASES = ['sh no', 'sh no.', 'shipment no', 'shipment id'];
 const REQUIRED_COLUMNS: { field: ShipmentImportField; label: string }[] = [
   { field: 'supplier', label: 'Supplier' },
-  { field: 'poNo', label: 'PO No' },
-  { field: 'invoiceNo', label: 'Invoice No' },
 ];
 
 function normalizeHeader(value: unknown): string {
@@ -250,8 +250,6 @@ export function shipmentImportRowIssues(row: ShipmentImportRow): string[] {
   const issues: string[] = [];
   if (!row.shipmentId.trim()) issues.push('SH. No is missing');
   if (!row.fields.supplier?.trim()) issues.push('Supplier is missing');
-  if (!row.fields.poNo?.trim()) issues.push('PO No is missing');
-  if (!row.fields.invoiceNo?.trim()) issues.push('Invoice No is missing');
   return issues;
 }
 
@@ -424,6 +422,7 @@ export function buildShipmentImportRecord(
 
   return {
     id: '',
+    materialId: fields.materialId?.trim().toUpperCase() || 'IC',
     supplier,
     poNo: fields.poNo?.trim() ?? '',
     poDate: importDate(fields.poDate, 'PO Date') || undefined,

@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 /* ─────────────────────────────────────────────────────────────────────────────
    Shipment Entry & History Portal
@@ -83,6 +83,7 @@ import {
    Form state
 ═══════════════════════════════════════════════════════════════════════════ */
 const emptyForm = {
+  materialId: 'IC',
   supplier: '',
   poNo: '',
   poDate: '',
@@ -168,6 +169,7 @@ function shipmentToForm(s: Shipment & { mawbDocument?: ShipmentDocument; hawbDoc
   const savedPaymentTerms = s.paymentTerms ?? getPaymentTermsLabel(s);
 
   return {
+    materialId: s.materialId ?? 'IC',
     supplier: s.supplier,
     poNo: s.poNo,
     poDate: s.poDate ?? '',
@@ -222,6 +224,7 @@ function formToShipment(
 
   return {
     id,
+    materialId: f.materialId || 'IC',
     supplier: f.supplier.trim(),
     poNo: f.poNo.trim(),
     poDate: f.poDate || undefined,
@@ -280,9 +283,10 @@ function validate(
   const proformaDates = splitDocumentValues(f.proformaInvoiceDate, documentCounts.invoiceNo);
   const blValues = splitDocumentValues(f.blNo === 'BL-PENDING' ? '' : f.blNo, documentCounts.blNo);
   const boeValues = splitDocumentValues(f.boeNo === 'BOE-PENDING' ? '' : f.boeNo, documentCounts.boeNo);
-  if (poValues.some((value) => !value.trim())) e.poNo = 'Enter a PO number in every PO field';
-  if (poDates.some((value) => !value)) e.poDate = 'Enter a PO date for every PO';
-  if (invoiceValues.some((value) => !value.trim())) e.invoiceNo = 'Enter an invoice number in every invoice field';
+  // PO and Invoice are now optional — only validate consistency within entered values
+  if (poValues.some((value) => value.trim()) && poValues.some((value) => !value.trim())) e.poNo = 'Enter a PO number in every PO field or leave all blank';
+  if (poDates.some(Boolean) && poDates.some((value) => !value)) e.poDate = 'Enter a PO date for every PO or leave all blank';
+  if (invoiceValues.some((value) => value.trim()) && invoiceValues.some((value) => !value.trim())) e.invoiceNo = 'Enter an invoice number in every invoice field or leave all blank';
   const hasProformaData = proformaNumbers.some((value) => value.trim()) || proformaDates.some(Boolean);
   if (proformaRequired && proformaNumbers.some((value) => !value.trim())) {
     e.proformaInvoiceNo = 'Enter a proforma invoice number for every invoice';
@@ -305,9 +309,6 @@ function validate(
     e.boeNo = 'Complete every BOE field or leave all BOE fields blank';
   }
   const paymentTerms = f.paymentTermChoice;
-  if (!paymentTerms) e.paymentTerms = 'Select or enter payment terms';
-  if (!activeModeNames.includes(f.modeOfShipment)) e.modeOfShipment = 'Select an active shipment mode';
-  if (!f.paymentStatus) e.paymentStatus = 'Select a PRW/payment status';
 
 
   if (f.paymentType === 'LC' && !f.bankReferenceNo.trim()) {
@@ -723,7 +724,7 @@ export default function ShipmentEntryAndHistoryPage() {
   };
 
   const changeDocumentCount = (field: keyof DocumentCounts, requestedCount: number) => {
-    const minimum = field === 'poNo' || field === 'invoiceNo' ? 1 : 0;
+    const minimum = 0;
     const count = Math.max(minimum, Math.min(255, Math.floor(requestedCount)));
     setDocumentCounts((current) => ({ ...current, [field]: count }));
     setFormData((current) => {
@@ -1267,6 +1268,18 @@ export default function ShipmentEntryAndHistoryPage() {
 
           <Section icon={<Building2 size={16} color="var(--accent-blue)" />} tint="#3b82f618" title="Supplier & Purchase Order">
             <div style={gridStyle}>
+              <Field label="Material ID" id="materialId">
+                <SearchableSelect
+                  ariaLabel="Material ID"
+                  value={formData.materialId}
+                  onChange={(value) => setField('materialId', value)}
+                  options={masterSelectOptions('material-id')}
+                  placeholder="Select Material ID (e.g. IC)"
+                  style={inputStyle}
+                  allowCustom
+                />
+                {!activeMasterNames('material-id').length && <MasterSetupLink masterType="material-id" />}
+              </Field>
               <Field label="Supplier Name" required id="supplier" error={errors.supplier}>
                 <SearchableSelect
                   ariaLabel="Supplier Name"
@@ -1285,13 +1298,12 @@ export default function ShipmentEntryAndHistoryPage() {
                 dateLabel="PO date"
                 id="poNo"
                 count={documentCounts.poNo}
-                minimum={1}
-                required
+                minimum={0}
                 numberValues={splitDocumentValues(formData.poNo, documentCounts.poNo)}
                 dateValues={splitDocumentValues(formData.poDate, documentCounts.poNo)}
                 error={errors.poNo ?? errors.poDate}
                 numberError={errors.poNo}
-                dateRequired
+                dateRequired={false}
                 dateError={errors.poDate}
                 onCountChange={(count) => changeDocumentCount('poNo', count)}
                 onNumberChange={(index, value) => updateDocumentValue('poNo', index, value)}
@@ -1330,9 +1342,8 @@ export default function ShipmentEntryAndHistoryPage() {
                 dateLabel="Invoice date"
                 id="invoiceNo"
                 count={documentCounts.invoiceNo}
-                minimum={1}
+                minimum={0}
                 fullWidth
-                required
                 numberValues={splitDocumentValues(formData.invoiceNo, documentCounts.invoiceNo)}
                 dateValues={splitDocumentValues(formData.invoiceDate, documentCounts.invoiceNo)}
                 error={errors.invoiceNo ?? errors.invoiceDate ?? errors.proformaInvoiceNo ?? errors.proformaInvoiceDate}
@@ -1364,7 +1375,7 @@ export default function ShipmentEntryAndHistoryPage() {
           <Section icon={<Navigation size={16} color="var(--accent-teal)" />} tint="#06b6d418" title="Mode of Shipment & Freight Documents" delay={2}>
             <div style={gridStyle}>
               <div style={{ gridColumn: '1 / -1' }}>
-                <label style={labelStyle}>Mode of Shipment <span style={{ color: 'var(--accent-red)' }}>*</span></label>
+                <label style={labelStyle}>Mode of Shipment</label>
                 <SearchableSelect
                   ariaLabel="Mode of Shipment"
                   value={formData.modeOfShipment}
@@ -1536,7 +1547,7 @@ export default function ShipmentEntryAndHistoryPage() {
                 </div>
               </div>
 
-              <Field label="Payment Terms" required id="paymentTerms" error={errors.paymentTerms}>
+              <Field label="Payment Terms" id="paymentTerms" error={errors.paymentTerms}>
                 <SearchableSelect
                   ariaLabel="Payment Terms"
                   value={formData.paymentTermChoice}
@@ -1570,7 +1581,7 @@ export default function ShipmentEntryAndHistoryPage() {
                 </div>
               </Field>
 
-              <Field label="PRW / Payment Status" required id="paymentStatus" error={errors.paymentStatus}>
+              <Field label="PRW / Payment Status" id="paymentStatus" error={errors.paymentStatus}>
                 <SearchableSelect
                   ariaLabel="PRW / Payment Status"
                   value={formData.paymentStatus}
@@ -2606,6 +2617,7 @@ function ShipmentDrawer({
           <TrackingProgress shipment={s} />
 
           <DetailGroup title="Supplier & Purchase Order" completion={completeness.supplierPo}>
+            <Detail label="Material ID">{s.materialId || 'IC'}</Detail>
             <Detail label="Supplier">{s.supplier || '-'}</Detail>
             <Detail label="Country of Origin">{s.country || '-'}</Detail>
             <Detail label="PO Number">{s.poNo || '-'}</Detail>
@@ -2878,10 +2890,10 @@ function getShipmentCompleteness(shipment: Shipment) {
     shipment.country,
     shipment.material,
   ];
-  addDocumentCompleteness(supplierPoValues, shipment.poNo, shipment.poDate, true);
+  addDocumentCompleteness(supplierPoValues, shipment.poNo, shipment.poDate, false);
 
   const invoiceValues: unknown[] = [];
-  addDocumentCompleteness(invoiceValues, shipment.invoiceNo, shipment.invoiceDate, true);
+  addDocumentCompleteness(invoiceValues, shipment.invoiceNo, shipment.invoiceDate, false);
   const paymentTerms = getPaymentTermsLabel(shipment);
   addDocumentCompleteness(
     invoiceValues,
