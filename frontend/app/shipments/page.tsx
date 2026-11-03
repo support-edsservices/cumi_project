@@ -297,7 +297,7 @@ export default function ShipmentEntryAndHistoryPage() {
 
   // History filters
   const [searchTerm, setSearchTerm] = useState('');
-  const [shNoSearch, setShNoSearch] = useState(''); // Added dedicated SH. No Search state
+  const [shNoSearch, setShNoSearch] = useState('');
   const [filterMode, setFilterMode] = useState('all');
   const [filterPayment, setFilterPayment] = useState('all');
   const [filterDocStatus, setFilterDocStatus] = useState('all');
@@ -2218,12 +2218,13 @@ export default function ShipmentEntryAndHistoryPage() {
               >
                 <colgroup>
                   <col style={{ width: '120px' }} />
-                  <col style={{ width: '220px' }} />
                   <col style={{ width: '200px' }} />
                   <col style={{ width: '180px' }} />
                   <col style={{ width: '180px' }} />
-                  <col style={{ width: '220px' }} />
+                  <col style={{ width: '160px' }} />
                   <col style={{ width: '180px' }} />
+                  <col style={{ width: '200px' }} />
+                  <col style={{ width: '160px' }} />
                   <col style={{ width: '140px' }} />
                 </colgroup>
 
@@ -2251,7 +2252,7 @@ export default function ShipmentEntryAndHistoryPage() {
                       ID / Mode
                     </th>
 
-                    {['Supplier & Country', 'PO & Invoice', 'BL / MAWB', 'BOE / CHA', 'Payment Terms & PRW', 'Material Status'].map((h) => (
+                    {['Supplier & Country', 'PO & Invoice', 'Material Name', 'BL Number', 'BOE / CHA', 'Payment Terms & PRW', 'Material Status'].map((h) => (
                       <th
                         key={h}
                         style={{
@@ -2300,7 +2301,7 @@ export default function ShipmentEntryAndHistoryPage() {
                 <tbody>
                   {filteredShipments.length === 0 ? (
                     <tr>
-                      <td colSpan={8} style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--text-muted)' }}>
+                      <td colSpan={9} style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--text-muted)' }}>
                         No shipment records match your search filter criteria.
                       </td>
                     </tr>
@@ -2343,12 +2344,6 @@ export default function ShipmentEntryAndHistoryPage() {
                               <ModeIcon mode={item.modeOfShipment} size={12} />
                               <span>{getModeLabel(item)}</span>
                             </div>
-                            <div style={{ marginTop: 7 }}>
-                              <CompletenessIndicator
-                                completion={getShipmentCompleteness(item).overall}
-                                compact
-                              />
-                            </div>
                           </td>
 
                           <td style={{ padding: '0.75rem 0.85rem', borderBottom: '1px solid var(--border)', verticalAlign: 'top' }}>
@@ -2368,7 +2363,13 @@ export default function ShipmentEntryAndHistoryPage() {
 
                           <td style={{ padding: '0.75rem 0.85rem', borderBottom: '1px solid var(--border)', verticalAlign: 'top' }}>
                             <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 'var(--font-size-compact)' }}>
-                              {item.blNo || item.mawb || '-'}
+                              {item.material || '-'}
+                            </div>
+                          </td>
+
+                          <td style={{ padding: '0.75rem 0.85rem', borderBottom: '1px solid var(--border)', verticalAlign: 'top' }}>
+                            <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 'var(--font-size-compact)' }}>
+                              {item.blNo || '-'}
                             </div>
                             <div style={{ fontSize: 'var(--font-size-tiny)', color: 'var(--text-muted)', marginTop: 2 }}>
                               BL Date: {formatDMY(item.blDate) || '-'}
@@ -2377,6 +2378,9 @@ export default function ShipmentEntryAndHistoryPage() {
 
                           <td style={{ padding: '0.75rem 0.85rem', borderBottom: '1px solid var(--border)', verticalAlign: 'top' }}>
                             <div style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-primary)', fontWeight: 600 }}>{item.boeNo || '-'}</div>
+                            <div style={{ fontSize: 'var(--font-size-tiny)', color: 'var(--text-muted)', marginTop: 2 }}>
+                              BOE Date: {formatDMY(item.boeDate) || '-'}
+                            </div>
                             <div style={{ fontSize: 'var(--font-size-tiny)', color: 'var(--text-muted)', marginTop: 2 }}>CHA: {item.cha}</div>
                           </td>
 
