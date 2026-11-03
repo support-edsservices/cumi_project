@@ -402,7 +402,7 @@ function ShipmentListModal({
     marginTop: '0.35rem',
     fontSize: 'var(--font-size-compact)',
     background: 'var(--bg-card)',
-    border: '1px solid var(--border)',
+    border: '2px solid var(--border-input)',
     borderRadius: 6,
     color: 'var(--text-primary)',
     outline: 'none',
@@ -1816,17 +1816,7 @@ export default function ShipmentDashboardPage() {
             >
               This financial year
             </button>
-            <button
-              type="button"
-              aria-pressed={showShipmentsWithoutPoDate}
-              onClick={() => setShowShipmentsWithoutPoDate((show) => !show)}
-              style={{ height: 28, padding: '0.15rem 0.5rem', border: '1px solid var(--border)', borderRadius: 6, background: showShipmentsWithoutPoDate ? 'var(--accent-blue)' : 'var(--bg-secondary)', color: showShipmentsWithoutPoDate ? '#fff' : 'var(--text-primary)', font: 'inherit', fontSize: 'var(--font-size-compact)', fontWeight: 700, cursor: 'pointer' }}
-            >
-              {showShipmentsWithoutPoDate ? 'Hide no-PO-date' : 'Show no-PO-date'}
-            </button>
-            <span style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-size-compact)', fontWeight: 600 }}>
-              {financialYear.label}
-            </span>
+            
           </div>
         </div>
 

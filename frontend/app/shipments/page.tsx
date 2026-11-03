@@ -1,15 +1,5 @@
 ﻿'use client';
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   Shipment Entry & History Portal
-   - New Entry / Edit Entry form
-       • Mode of shipment: selected from maintained master data
-       • MAWB / HAWB document attachments added
-       • Action Buttons: Clear, Preview, Save (with confirmation dialog)
-       • PO, invoice, BL and BOE entries can be added independently
-   - History & Records table with search, filters, Excel / CSV export
-   - Row details open in a right-side drawer (50% width, 100% height)
-───────────────────────────────────────────────────────────────────────────── */
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import * as XLSX from 'xlsx';
@@ -80,9 +70,6 @@ import {
   type ShipmentExcelPreview,
 } from '@/utils/shipmentExcelImport';
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   Form state
-═══════════════════════════════════════════════════════════════════════════ */
 const emptyForm = {
   materialId: 'IC',
   supplier: '',
@@ -146,8 +133,6 @@ function hasProformaInvoiceTerm(value: string): boolean {
   return /\b(?:pro\s*forma|per\s*forma)\s+invoice\b/i.test(value);
 }
 
-// Join values with "_", but return '' when every entry is blank so optional
-// fields (BL / BOE) are saved as empty instead of "_" or "__".
 function joinDocumentValues(values: string[]): string {
   return values.every((value) => !value.trim()) ? '' : values.join('_');
 }
@@ -279,9 +264,6 @@ function validate(
   return {};
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   Page Component
-═══════════════════════════════════════════════════════════════════════════ */
 export default function ShipmentEntryAndHistoryPage() {
   const { shipments, ready, error, addShipment, importShipments, updateShipment, deleteShipment, uploadAttachment } = useShipments();
   const { fetchWithAuth } = useAuth();
@@ -315,6 +297,7 @@ export default function ShipmentEntryAndHistoryPage() {
 
   // History filters
   const [searchTerm, setSearchTerm] = useState('');
+  const [shNoSearch, setShNoSearch] = useState(''); // Added dedicated SH. No Search state
   const [filterMode, setFilterMode] = useState('all');
   const [filterPayment, setFilterPayment] = useState('all');
   const [filterDocStatus, setFilterDocStatus] = useState('all');
@@ -895,10 +878,17 @@ export default function ShipmentEntryAndHistoryPage() {
   });
 
   const filteredShipments = useMemo(() => {
-    const q = searchTerm.toLowerCase();
+    const q = searchTerm.trim().toLowerCase();
+    const shQuery = shNoSearch.trim().toLowerCase();
+
     return shipments.filter((item) => {
+      // Direct SH. No / Shipment ID Filter
+      const matchShNo = !shQuery || item.id.toLowerCase().includes(shQuery);
+
+      // General Text Search Filter
       const matchSearch =
-        !searchTerm ||
+        !q ||
+        item.id.toLowerCase().includes(q) ||
         item.supplier.toLowerCase().includes(q) ||
         item.poNo.toLowerCase().includes(q) ||
         item.invoiceNo.toLowerCase().includes(q) ||
@@ -907,20 +897,44 @@ export default function ShipmentEntryAndHistoryPage() {
         item.material.toLowerCase().includes(q) ||
         item.country.toLowerCase().includes(q) ||
         item.cha.toLowerCase().includes(q) ||
-        item.id.toLowerCase().includes(q) ||
         item.modeOfShipment.toLowerCase().includes(q);
 
+      // Status & Dropdown Filters
       const matchMode = filterMode === 'all' || item.modeOfShipment === filterMode;
       const matchPayment = filterPayment === 'all' || item.paymentStatus === filterPayment;
       const matchDocStatus = filterDocStatus === 'all' || item.documentStatus === filterDocStatus;
       const matchMatStatus = filterMaterialStatus === 'all' || item.materialStatus === filterMaterialStatus;
-      const matchPoDate = hasPoDate(item.poDate)
-        ? poDateMatchesRange(item.poDate, historyPoDateRange.startDate, historyPoDateRange.endDate)
-        : showShipmentsWithoutPoDate;
 
-      return matchSearch && matchMode && matchPayment && matchDocStatus && matchMatStatus && matchPoDate;
+      // PO Date Filter
+      const itemHasPoDate = hasPoDate(item.poDate);
+      let matchPoDate = false;
+
+      if (showShipmentsWithoutPoDate) {
+        matchPoDate = !itemHasPoDate;
+      } else {
+        if (!itemHasPoDate) {
+          matchPoDate = false;
+        } else {
+          const poDates = (item.poDate || '').split('_').filter((d) => d && d !== '?');
+          matchPoDate = poDates.some((dateVal) =>
+            poDateMatchesRange(dateVal, historyPoDateRange.startDate, historyPoDateRange.endDate)
+          );
+        }
+      }
+
+      return matchShNo && matchSearch && matchMode && matchPayment && matchDocStatus && matchMatStatus && matchPoDate;
     });
-  }, [shipments, searchTerm, filterMode, filterPayment, filterDocStatus, filterMaterialStatus, historyPoDateRange, showShipmentsWithoutPoDate]);
+  }, [
+    shipments,
+    searchTerm,
+    shNoSearch,
+    filterMode,
+    filterPayment,
+    filterDocStatus,
+    filterMaterialStatus,
+    historyPoDateRange,
+    showShipmentsWithoutPoDate,
+  ]);
 
   const historyPageCount = Math.max(1, Math.ceil(filteredShipments.length / HISTORY_PAGE_SIZE));
   const currentHistoryPage = Math.min(historyPage, historyPageCount - 1);
@@ -1056,7 +1070,6 @@ export default function ShipmentEntryAndHistoryPage() {
       )}
       {!ready && <div role="status">Loading shipments…</div>}
 
-      {/* ── Top-Right Toast Notification ── */}
       {toastMessage && (
         <div
           style={{
@@ -1295,7 +1308,6 @@ export default function ShipmentEntryAndHistoryPage() {
                 {!activeMasterNames('materials').length && <MasterSetupLink masterType="materials" />}
               </Field>
 
-              {/* Invoices & Proforma Invoices displayed side-by-side per row */}
               <DocumentEntryFields
                 title="Invoices & Proforma Invoices"
                 numberLabel="Invoice number"
@@ -1396,7 +1408,6 @@ export default function ShipmentEntryAndHistoryPage() {
                 />
               </Field>
 
-              {/* MAWB Field + Attachment */}
               <Field label="MAWB (Master Air Waybill)">
                 <input
                   type="text"
@@ -1414,7 +1425,6 @@ export default function ShipmentEntryAndHistoryPage() {
                 />
               </Field>
 
-              {/* HAWB Field + Attachment */}
               <Field label="HAWB (House Air Waybill)">
                 <input
                   type="text"
@@ -1525,7 +1535,6 @@ export default function ShipmentEntryAndHistoryPage() {
 
               <Field
                 label="Bank Reference Number"
-                
                 id="bankReferenceNo"
                 error={errors.bankReferenceNo}
               >
@@ -1716,50 +1725,101 @@ export default function ShipmentEntryAndHistoryPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           <div className="card fade-up" style={{ padding: '1.125rem', display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.625rem',
-                  background: 'var(--bg-secondary)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 8,
-                  padding: '0.45rem 0.75rem',
-                  minWidth: 320,
-                  flex: 1,
-                }}
-              >
-                <Search size={16} color="var(--text-muted)" />
-                <input
-                  type="text"
-                  placeholder="Search by supplier, PO, Invoice, BL, material, country..."
-                  value={searchTerm}
-                  onChange={(e) => {
-                    setSearchTerm(e.target.value);
-                    setHistoryPage(0);
-                  }}
+              <div style={{ display: 'flex', gap: '0.75rem', flex: 1, minWidth: 320, flexWrap: 'wrap' }}>
+                {/* ── General Search Bar ── */}
+                <div
                   style={{
-                    background: 'transparent',
-                    border: 'none',
-                    outline: 'none',
-                    width: '100%',
-                    color: 'var(--text-primary)',
-                    fontSize: 'var(--font-size-body-compact)',
-                    fontFamily: 'inherit',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.625rem',
+                    background: 'var(--bg-secondary)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 8,
+                    padding: '0.45rem 0.75rem',
+                    flex: 2,
+                    minWidth: 220,
                   }}
-                />
-                {searchTerm && (
-                  <button
-                    onClick={() => {
-                      setSearchTerm('');
+                >
+                  <Search size={16} color="var(--text-muted)" />
+                  <input
+                    type="text"
+                    placeholder="Search supplier, PO, Invoice, BL, material..."
+                    value={searchTerm}
+                    onChange={(e) => {
+                      setSearchTerm(e.target.value);
                       setHistoryPage(0);
                     }}
-                    style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
-                    aria-label="Clear search"
-                  >
-                    <X size={14} />
-                  </button>
-                )}
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      outline: 'none',
+                      width: '100%',
+                      color: 'var(--text-primary)',
+                      fontSize: 'var(--font-size-body-compact)',
+                      fontFamily: 'inherit',
+                    }}
+                  />
+                  {searchTerm && (
+                    <button
+                      onClick={() => {
+                        setSearchTerm('');
+                        setHistoryPage(0);
+                      }}
+                      style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
+                      aria-label="Clear search"
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+
+                {/* ── Dedicated SH. No Search Bar ── */}
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.625rem',
+                    background: 'var(--bg-secondary)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 8,
+                    padding: '0.45rem 0.75rem',
+                    flex: 1,
+                    minWidth: 160,
+                  }}
+                >
+                  <Search size={16} color="var(--accent-blue)" />
+                  <input
+                    type="text"
+                    placeholder="SH. No / ID (e.g. IC0512)"
+                    value={shNoSearch}
+                    onChange={(e) => {
+                      setShNoSearch(e.target.value);
+                      setHistoryPage(0);
+                    }}
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      outline: 'none',
+                      width: '100%',
+                      color: 'var(--text-primary)',
+                      fontSize: 'var(--font-size-body-compact)',
+                      fontFamily: 'inherit',
+                      fontWeight: 600,
+                    }}
+                  />
+                  {shNoSearch && (
+                    <button
+                      onClick={() => {
+                        setShNoSearch('');
+                        setHistoryPage(0);
+                      }}
+                      style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
+                      aria-label="Clear SH. No search"
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
@@ -2038,7 +2098,7 @@ export default function ShipmentEntryAndHistoryPage() {
                   color: showShipmentsWithoutPoDate ? '#fff' : undefined,
                 }}
               >
-                {showShipmentsWithoutPoDate ? 'Hide records without PO date' : 'Show records without PO date'}
+                {showShipmentsWithoutPoDate ? 'Only showing records without PO date' : 'Show records without PO date'}
               </button>
               <span style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-size-compact)' }}>
                 {financialYear.label}
@@ -2447,9 +2507,6 @@ export default function ShipmentEntryAndHistoryPage() {
         </div>
       )}
 
-      {/* ═══════════════════════════════════════════════════════════════════
-          RIGHT-SIDE DETAILS DRAWER (Used for View & Preview)
-      ═══════════════════════════════════════════════════════════════════ */}
       {selectedShipment && (
         <ShipmentDrawer
           s={selectedShipment}
@@ -2469,7 +2526,6 @@ export default function ShipmentEntryAndHistoryPage() {
         />
       )}
 
-      {/* Save Confirmation Dialog */}
       {showSaveConfirm && (
         <ConfirmDialog
           title={isEditing ? `Update Shipment ${editingId}?` : `Save Shipment ${nextShipmentId(shipments)}?`}
@@ -2481,7 +2537,6 @@ export default function ShipmentEntryAndHistoryPage() {
         />
       )}
 
-      {/* Delete Confirmation Dialog */}
       {deleteTarget && (
         <ConfirmDialog
           title={`Delete ${deleteTarget.id}?`}
@@ -2496,9 +2551,6 @@ export default function ShipmentEntryAndHistoryPage() {
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   Drawer Component
-═══════════════════════════════════════════════════════════════════════════ */
 function ShipmentDrawer({
   s,
   isPreview,
@@ -3059,9 +3111,6 @@ function Detail({ label, children, wide }: { label: string; children: React.Reac
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   Dialogs & UI Helpers
-═══════════════════════════════════════════════════════════════════════════ */
 function ConfirmDialog({
   title,
   message,
@@ -3171,7 +3220,6 @@ function Section({
   );
 }
 
-/* Number + date entries for one independently managed document type with side-by-side Commercial vs Proforma alignment */
 function DocumentEntryFields({
   title,
   numberLabel,
@@ -3274,7 +3322,6 @@ function DocumentEntryFields({
               border: '1px solid var(--border)',
             }}
           >
-            {/* Column 1: Commercial Invoice Number & Date */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '8px 12px', width: '100%' }}>
               <label style={documentEntryLabelStyle}>
                 {numberLabel} {index + 1}{required && <span style={{ color: 'var(--accent-red)' }}> *</span>}
@@ -3303,7 +3350,6 @@ function DocumentEntryFields({
               </label>
             </div>
 
-            {/* Column 2: Proforma Invoice Number & Date (Positioned in adjacent grid column on Desktop) */}
             {hasProformaFields && (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '8px 12px', width: '100%' }}>
                 <label style={documentEntryLabelStyle}>
@@ -3403,60 +3449,6 @@ function DateField({
           color: 'var(--text-secondary)',
         }}
       />}
-    </div>
-  );
-}
-
-function Segmented<T extends string>({
-  value,
-  options,
-  onChange,
-}: {
-  value: T;
-  options: { id: T; label: string; icon?: React.ReactNode; color: string }[];
-  onChange: (v: T) => void;
-}) {
-  return (
-    <div
-      style={{
-        display: 'inline-flex',
-        flexWrap: 'wrap',
-        gap: '0.5rem',
-        background: 'var(--bg-secondary)',
-        padding: '0.3rem',
-        borderRadius: 10,
-        border: '1px solid var(--border)',
-      }}
-    >
-      {options.map((o) => {
-        const active = value === o.id;
-        return (
-          <button
-            key={o.id}
-            type="button"
-            onClick={() => onChange(o.id)}
-            aria-pressed={active}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem',
-              padding: '0.5rem 1.25rem',
-              borderRadius: 8,
-              border: 'none',
-              fontWeight: 700,
-              fontSize: 'var(--font-size-body-compact)',
-              cursor: 'pointer',
-              fontFamily: 'inherit',
-              background: active ? o.color : 'transparent',
-              color: active ? '#fff' : 'var(--text-secondary)',
-              transition: 'all 0.15s ease',
-            }}
-          >
-            {o.icon}
-            <span>{o.label}</span>
-          </button>
-        );
-      })}
     </div>
   );
 }
@@ -3583,9 +3575,6 @@ function FileUploadZone({
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   Shared styles
-═══════════════════════════════════════════════════════════════════════════ */
 const PAGE_CSS = `
 .sp-date { position: relative; }
 .sp-date::-webkit-calendar-picker-indicator {
@@ -3600,7 +3589,6 @@ const PAGE_CSS = `
 }
 `;
 
-// 240px minimum lets three fields sit side by side on a normal-width screen.
 const gridStyle: React.CSSProperties = {
   display: 'grid',
   gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',

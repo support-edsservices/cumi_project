@@ -161,7 +161,6 @@ def _document_rows(
     return list(zip(number_values, date_values))
 
 
-
 def _enum(value: str, mapping: dict[str, str], field: str) -> str:
     result = mapping.get(value.strip().casefold())
     if result is None:
@@ -192,7 +191,6 @@ def _supplier(cursor, name: str) -> tuple[int | None, str]:
         return None, folder
 
 
-
 def _lookup_id(cursor, table: str, name: str | None) -> int | None:
     clean_name = (name or "").strip()
     if not clean_name:
@@ -206,7 +204,6 @@ def _lookup_id(cursor, table: str, name: str | None) -> int | None:
         return int(cursor.lastrowid)
     except Exception:
         return None
-
 
 
 def _require_master_table(cursor, table: str) -> None:
@@ -276,10 +273,10 @@ def _next_sh_no(cursor, material_id: str, fy_code: str) -> str:
         new_sh_no = f"{material_id}{next_num:03d}{fy_suffix}"
     return new_sh_no
 
+
 def _shipment_mode(cursor, name: str) -> str:
     clean = (name or "").strip()
     return clean if clean and clean.casefold() != "others" else "Sea"
-
 
 
 def _payment_fields(cursor, data: ShipmentInput) -> tuple[int | None, str, int | None, str | None]:
@@ -341,7 +338,6 @@ def _payment_status(cursor, data: ShipmentInput) -> tuple[str, str | None]:
     return mapping.get(value, ("UNPAID", None))
 
 
-
 def _shipment_input_values(
     cursor,
     data: ShipmentInput,
@@ -385,8 +381,6 @@ def _shipment_input_values(
     arrived_date = _clean_date(data.arrivedDate, "Arrival date")
     etd = _clean_date(data.etd, "ETD")
     eta = _clean_date(data.eta, "ETA")
-    # eta/etd relaxed
-    # arrived_date relaxed
 
     child_rows = {
         DB_TABLES["shipment_pos"]: _document_rows(
@@ -396,7 +390,7 @@ def _shipment_input_values(
         DB_TABLES["shipment_bls"]: _document_rows(data.blNo, data.blDate, "BL number", "BL date", 80),
         DB_TABLES["shipment_boes"]: _document_rows(data.boeNo, data.boeDate, "BOE number", "BOE date", 40),
     }
-    # PO and Invoice are now optional — no mandatory minimum enforced
+
     proforma_rows = _document_rows(
         data.proformaInvoiceNo,
         data.proformaInvoiceDate,
@@ -405,10 +399,6 @@ def _shipment_input_values(
         80,
     )
     invoice_rows = child_rows[DB_TABLES["shipment_invoices"]]
-    has_proforma_number = bool(data.proformaInvoiceNo.strip())
-    has_proforma_date = bool(data.proformaInvoiceDate and data.proformaInvoiceDate.strip())
-    proforma_required = _uses_proforma_invoice(data.paymentTerms or "", credit_basis)
-    # Proforma rows aligned to invoice rows without raising
     if len(proforma_rows) < len(invoice_rows):
         proforma_rows = proforma_rows + [(None, None)] * (len(invoice_rows) - len(proforma_rows))
     elif len(proforma_rows) > len(invoice_rows):
@@ -638,11 +628,36 @@ def _shape_shipment(row: dict[str, Any], attachments: list[dict[str, Any]]) -> d
     }
 
 
-def _shipment_rows(cursor, sh_no: str | None = None, *, limit: int = 200, offset: int = 0) -> list[dict[str, Any]]:
+def _shipment_rows(
+    cursor,
+    sh_no: str | None = None,
+    *,
+    limit: int | None = None,
+    offset: int = 0,
+    search: str | None = None,
+) -> list[dict[str, Any]]:
     cursor.execute("SET SESSION group_concat_max_len = 8192")
-    filter_sql = "WHERE overview.sh_no = %s" if sh_no else ""
-    parameters: tuple[Any, ...] = (sh_no,) if sh_no else (limit, offset)
-    limit_sql = "" if sh_no else "LIMIT %s OFFSET %s"
+    
+    where_clauses = []
+    parameters: list[Any] = []
+
+    if sh_no:
+        where_clauses.append("overview.sh_no = %s")
+        parameters.append(sh_no)
+    elif search and search.strip():
+        q = f"%{search.strip()}%"
+        where_clauses.append(
+            "(overview.sh_no LIKE %s OR overview.supplier_name LIKE %s OR overview.po_nos LIKE %s OR overview.invoice_nos LIKE %s OR overview.bl_nos LIKE %s)"
+        )
+        parameters.extend([q, q, q, q, q])
+
+    filter_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
+    
+    limit_sql = ""
+    if not sh_no and limit is not None:
+        limit_sql = "LIMIT %s OFFSET %s"
+        parameters.extend([limit, offset])
+
     cursor.execute(
         f"""
         SELECT overview.*, s.material_id, s.other_mode_detail, s.prw_raw, s.arrived_date,
@@ -660,7 +675,7 @@ def _shipment_rows(cursor, sh_no: str | None = None, *, limit: int = 200, offset
         ORDER BY overview.created_at DESC
         {limit_sql}
         """,
-        parameters,
+        tuple(parameters),
     )
     return cursor.fetchall()
 
@@ -701,15 +716,16 @@ def _audit(cursor, sh_no: str, action: str, summary: str, actor: str | None) -> 
 
 @router.get("")
 def list_shipments(
-    limit: int = Query(default=200, ge=1, le=500),
+    limit: int | None = Query(default=None, ge=1, le=5000),
     offset: int = Query(default=0, ge=0),
+    search: str | None = Query(default=None),
     _user: dict[str, Any] = Depends(get_current_user),
 ):
     conn = _connection()
     cursor = None
     try:
         cursor = conn.cursor(dictionary=True)
-        return _serialize_rows(cursor, _shipment_rows(cursor, limit=limit, offset=offset))
+        return _serialize_rows(cursor, _shipment_rows(cursor, limit=limit, offset=offset, search=search))
     except mysql.connector.Error as exc:
         logger.exception("Could not load shipment list")
         raise HTTPException(status_code=500, detail="Could not load shipments") from exc
