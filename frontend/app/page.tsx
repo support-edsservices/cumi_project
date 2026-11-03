@@ -948,7 +948,7 @@ function DatePaymentDetails({
   );
 }
 
-/* ── Month-Wise PO Raised vs Payment Status ── */
+/* ── Month-Wise PO Raised vs Payment Status with Material ID Filter ── */
 function MonthlyPoAndPaymentAnalytics({
   data,
   selectedYear,
@@ -959,6 +959,24 @@ function MonthlyPoAndPaymentAnalytics({
   onYearChange: (y: number) => void;
 }) {
   const [clickedMonthIndex, setClickedMonthIndex] = useState<number | null>(null);
+  const [selectedMaterialId, setSelectedMaterialId] = useState<string>('ALL');
+
+  // Extract all unique Material IDs from dataset
+  const materialIdOptions = useMemo(() => {
+    const set = new Set<string>();
+    data.forEach(s => {
+      if (s.materialId?.trim()) {
+        set.add(s.materialId.trim());
+      }
+    });
+    return Array.from(set).sort();
+  }, [data]);
+
+  // Filter dataset by selected Material ID if not 'ALL'
+  const filteredByMaterial = useMemo(() => {
+    if (selectedMaterialId === 'ALL') return data;
+    return data.filter(s => (s.materialId || 'IC').trim() === selectedMaterialId);
+  }, [data, selectedMaterialId]);
 
   const monthlyData = useMemo(() => {
     const list = MONTH_NAMES.map((m, idx) => ({
@@ -973,7 +991,7 @@ function MonthlyPoAndPaymentAnalytics({
       srDate: 0,
     }));
 
-    data.forEach(s => {
+    filteredByMaterial.forEach(s => {
       const poDate = s.poDate ? toLocalDate(s.poDate) : null;
       if (poDate && poDate.getFullYear() === selectedYear) {
         const idx = poDate.getMonth();
@@ -988,22 +1006,22 @@ function MonthlyPoAndPaymentAnalytics({
     });
 
     return list;
-  }, [data, selectedYear]);
+  }, [filteredByMaterial, selectedYear]);
 
   const monthShipments = useMemo(() => {
     if (clickedMonthIndex === null) return [];
-    return data.filter(s => {
+    return filteredByMaterial.filter(s => {
       const poDate = s.poDate ? toLocalDate(s.poDate) : null;
       return poDate && poDate.getFullYear() === selectedYear && poDate.getMonth() === clickedMonthIndex;
     });
-  }, [data, selectedYear, clickedMonthIndex]);
+  }, [filteredByMaterial, selectedYear, clickedMonthIndex]);
 
   return (
     <>
       <div className="card fade-up delay-1" style={{ padding: '1.125rem', minWidth: 0, width: '100%' }}>
         <div style={{
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-          marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem',
+          marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <Filter size={18} color={ACCENT.purple} />
@@ -1012,20 +1030,47 @@ function MonthlyPoAndPaymentAnalytics({
             </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <label style={{ fontSize: 'var(--font-size-compact)', fontWeight: 700, color: 'var(--text-muted)' }}>
-              Enter Year:
-            </label>
-            <input
-              type="number"
-              value={selectedYear}
-              onChange={e => onYearChange(Number(e.target.value) || new Date().getFullYear())}
-              style={{
-                background: 'var(--bg-secondary)', border: '1px solid var(--border)',
-                borderRadius: 6, padding: '0.3rem 0.6rem', fontSize: 'var(--font-size-body-small)',
-                color: 'var(--text-primary)', fontWeight: 800, outline: 'none', width: 80,
-              }}
-            />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+            {/* Material ID Filter Dropdown */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <label style={{ fontSize: 'var(--font-size-compact)', fontWeight: 700, color: 'var(--text-muted)' }}>
+                Material ID:
+              </label>
+              <select
+                value={selectedMaterialId}
+                onChange={e => setSelectedMaterialId(e.target.value)}
+                style={{
+                  background: 'var(--bg-secondary)', border: '1px solid var(--border)',
+                  borderRadius: 6, padding: '0.3rem 0.6rem', fontSize: 'var(--font-size-body-small)',
+                  color: 'var(--text-primary)', fontWeight: 800, outline: 'none', cursor: 'pointer',
+                  maxWidth: 180,
+                }}
+              >
+                <option value="ALL">All Material IDs</option>
+                {materialIdOptions.map(matId => (
+                  <option key={matId} value={matId}>
+                    {matId}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Year Selector */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <label style={{ fontSize: 'var(--font-size-compact)', fontWeight: 700, color: 'var(--text-muted)' }}>
+                Enter Year:
+              </label>
+              <input
+                type="number"
+                value={selectedYear}
+                onChange={e => onYearChange(Number(e.target.value) || new Date().getFullYear())}
+                style={{
+                  background: 'var(--bg-secondary)', border: '1px solid var(--border)',
+                  borderRadius: 6, padding: '0.3rem 0.6rem', fontSize: 'var(--font-size-body-small)',
+                  color: 'var(--text-primary)', fontWeight: 800, outline: 'none', width: 80,
+                }}
+              />
+            </div>
           </div>
         </div>
 
@@ -1062,7 +1107,7 @@ function MonthlyPoAndPaymentAnalytics({
 
       {clickedMonthIndex !== null && (
         <ShipmentListModal
-          title={`Shipments for ${MONTH_NAMES[clickedMonthIndex]} ${selectedYear}`}
+          title={`Shipments for ${MONTH_NAMES[clickedMonthIndex]} ${selectedYear}${selectedMaterialId !== 'ALL' ? ` (${selectedMaterialId})` : ''}`}
           shipments={monthShipments}
           onClose={() => setClickedMonthIndex(null)}
           color={ACCENT.blue}
@@ -1423,13 +1468,106 @@ function ShipmentsByMode({ data }: { data: Shipment[] }) {
   );
 }
 
-/* ── Fixed Material Status Breakdown ── */
+/* ── CHA Name-Wise Pending Customs Clearance Chart (For 'At Port' Status) ── */
+function ChaCustomsClearanceChart({
+  data,
+  onSelectCha,
+}: {
+  data: Shipment[];
+  onSelectCha: (chaName: string, items: Shipment[]) => void;
+}) {
+  const chaData = useMemo(() => {
+    // Filter shipments that are currently in 'At Port' status awaiting clearance
+    const pendingClearanceShipments = data.filter(s => s.materialStatus === 'At Port');
+
+    const map = new Map<string, Shipment[]>();
+    pendingClearanceShipments.forEach(s => {
+      const chaName = s.cha?.trim() || 'Unassigned / Direct';
+      const existing = map.get(chaName) || [];
+      existing.push(s);
+      map.set(chaName, existing);
+    });
+
+    return Array.from(map.entries())
+      .map(([cha, items]) => ({
+        cha,
+        count: items.length,
+        items,
+      }))
+      .sort((a, b) => b.count - a.count);
+  }, [data]);
+
+  const totalPending = chaData.reduce((acc, curr) => acc + curr.count, 0);
+
+  return (
+    <div style={{
+      display: 'flex', flexDirection: 'column', height: 165,
+      justifyContent: 'space-between', paddingTop: '0.5rem',
+      borderTop: '1px dashed var(--border)', boxSizing: 'border-box',
+      overflow: 'hidden',
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem' }}>
+        <div className="section-title" style={{ margin: 0, fontSize: 'var(--font-size-compact)', fontWeight: 700 }}>
+          CHA-Wise Customs Clearance Pending (At Port)
+        </div>
+        <span style={{ fontSize: 'var(--font-size-compact)', color: ACCENT.purple, fontWeight: 700 }}>
+          {totalPending} Pending
+        </span>
+      </div>
+
+      {chaData.length === 0 ? (
+        <div style={{
+          flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          color: 'var(--text-muted)', fontSize: 'var(--font-size-compact)',
+        }}>
+          No shipments currently at port awaiting clearance.
+        </div>
+      ) : (
+        <ResponsiveContainer width="100%" height={115}>
+          <BarChart
+            accessibilityLayer={false}
+            data={chaData}
+            barSize={20}
+            margin={{ top: 5, right: 5, left: -15, bottom: 15 }}
+            style={{ outline: 'none' }}
+            onClick={(state: any) => {
+              if (state && state.activePayload && state.activePayload.length) {
+                const payload = state.activePayload[0].payload;
+                onSelectCha(payload.cha, payload.items);
+              }
+            }}
+          >
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+            <XAxis
+              dataKey="cha"
+              tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }}
+              interval={0}
+              angle={-15}
+              textAnchor="end"
+            />
+            <YAxis width={30} allowDecimals={false} tick={{ fontSize: FONT_SIZES.chartLabel, fill: 'var(--text-muted)' }} />
+            <Tooltip content={<ChartTooltip />} />
+            <Bar dataKey="count" name="Pending Clearance" fill={ACCENT.purple} radius={[4, 4, 0, 0]} cursor="pointer">
+              {chaData.map((entry, index) => (
+                <Cell key={entry.cha} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      )}
+    </div>
+  );
+}
+
+/* ── Material Status Breakdown + CHA Clearance Fixed Height Container (380px) ── */
 function MaterialStatusBreakdown({
   data,
-  onSelectStatus
+  onSelectStatus,
+  onSelectCha,
 }: {
   data: Shipment[];
   onSelectStatus: (status: MaterialStatus, shipments: Shipment[]) => void;
+  onSelectCha: (chaName: string, items: Shipment[]) => void;
 }) {
   const statusCounts = useMemo(() => {
     const map: Record<string, number> = {};
@@ -1445,59 +1583,68 @@ function MaterialStatusBreakdown({
     }));
   }, [data]);
 
-  // FIX: Use total shipments count as denominator so 223/240 renders ~92.9% width instead of 100%
   const totalShipmentsCount = Math.max(data.length, 1);
 
   return (
-    <div className="card fade-up delay-2" style={{ padding: '1.125rem', minWidth: 0, width: '100%', height: '100%', display: 'flex', flexDirection: 'column', boxSizing: 'border-box' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div className="section-title" style={{ margin: 0 }}>Material Status</div>
-        <span style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)' }}>Tap status to inspect</span>
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem', marginTop: '0.75rem', flex: 1, justifyContent: 'space-around' }}>
-        {statusCounts.map(s => {
-          const pct = ((s.count / totalShipmentsCount) * 100).toFixed(1);
-          return (
-            <div
-              key={s.status}
-              onClick={() => onSelectStatus(s.status, s.shipments)}
-              style={{ cursor: 'pointer', borderRadius: 6, padding: '5px 4px', transition: 'background 0.15s' }}
-              onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-secondary)')}
-              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+    <div className="card fade-up delay-2" style={{
+      padding: '1rem', minWidth: 0, width: '100%', height: 380,
+      display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
+      boxSizing: 'border-box', overflow: 'hidden',
+    }}>
+      {/* Top Half: Material Status (Fixed Height ~185px) */}
+      <div style={{ height: 185, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div className="section-title" style={{ margin: 0 }}>Material Status</div>
+          <span style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)' }}>Tap status to inspect</span>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+          {statusCounts.map(s => {
+            const pct = ((s.count / totalShipmentsCount) * 100).toFixed(1);
+            return (
+              <div
+                key={s.status}
+                onClick={() => onSelectStatus(s.status, s.shipments)}
+                style={{ cursor: 'pointer', borderRadius: 4, padding: '2px 4px', transition: 'background 0.15s' }}
+                onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-secondary)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
                   <span style={{
-                    display: 'inline-block', padding: '2px 8px', borderRadius: 10,
+                    display: 'inline-block', padding: '1px 6px', borderRadius: 8,
                     background: `${s.color}18`, color: s.color,
-                    fontSize: 'var(--font-size-compact)', fontWeight: 700,
+                    fontSize: 'var(--font-size-tiny)', fontWeight: 700,
                   }}>
                     {s.status}
                   </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <span style={{ fontSize: 'var(--font-size-compact)', fontWeight: 800, color: 'var(--text-primary)' }}>
+                      {s.count} <span style={{ fontSize: 'var(--font-size-tiny)', fontWeight: 600, color: 'var(--text-muted)' }}>({pct}%)</span>
+                    </span>
+                    <span style={{ fontSize: 'var(--font-size-tiny)', color: ACCENT.blue }}>→</span>
+                  </div>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontSize: 'var(--font-size-body-small)', fontWeight: 800, color: 'var(--text-primary)' }}>
-                    {s.count} <span style={{ fontSize: 'var(--font-size-compact)', fontWeight: 600, color: 'var(--text-muted)' }}>({pct}%)</span>
-                  </span>
-                  <span style={{ fontSize: 'var(--font-size-compact)', color: ACCENT.blue }}>→</span>
+                <div style={{ height: 4, borderRadius: 2, background: 'var(--bg-secondary)', overflow: 'hidden' }}>
+                  <div style={{
+                    height: '100%', borderRadius: 2,
+                    width: `${(s.count / totalShipmentsCount) * 100}%`,
+                    background: s.color, transition: 'width 0.6s ease',
+                  }} />
                 </div>
               </div>
-              <div style={{ height: 6, borderRadius: 3, background: 'var(--bg-secondary)', overflow: 'hidden' }}>
-                <div style={{
-                  height: '100%', borderRadius: 3,
-                  width: `${(s.count / totalShipmentsCount) * 100}%`,
-                  background: s.color, transition: 'width 0.6s ease',
-                }} />
-              </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
+
+      {/* Bottom Half: CHA-Wise Clearance Pending for 'At Port' Status */}
+      <ChaCustomsClearanceChart data={data} onSelectCha={onSelectCha} />
     </div>
   );
 }
 
 /* ── Upcoming & Overdue Payments Table with Full Search & Column Filters ── */
+
 function DuePaymentsTable({ data }: { data: Shipment[] }) {
   const [currentPage, setCurrentPage] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
@@ -2131,6 +2278,13 @@ export default function ShipmentDashboardPage() {
             setActiveModal({
               title: `Shipments in ${status}`,
               color: MATERIAL_STATUS_COLOR[status],
+              data: items,
+            });
+          }}
+          onSelectCha={(chaName, items) => {
+            setActiveModal({
+              title: `Customs Clearance Pending (At Port) for CHA: ${chaName}`,
+              color: ACCENT.purple,
               data: items,
             });
           }}

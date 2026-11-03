@@ -155,7 +155,7 @@ export default function Topbar({ title, subtitle, overduePayments = [], etaArriv
                           padding: '0.4rem 0.6rem',
                           fontSize: 'var(--font-size-tiny)',
                           fontWeight: 700,
-                          color: 'var(--text-muted)',
+                          color: '#ef4444',
                           textTransform: 'uppercase',
                           letterSpacing: '0.07em',
                         }}>
@@ -222,18 +222,18 @@ export default function Topbar({ title, subtitle, overduePayments = [], etaArriv
                       </div>
                     )}
 
-                    {/* ETA Arrived */}
+                    {/* ETA Passed – Not Arrived */}
                     {etaArrived.length > 0 && (
                       <div>
                         <div style={{
                           padding: '0.4rem 0.6rem',
                           fontSize: 'var(--font-size-tiny)',
                           fontWeight: 700,
-                          color: 'var(--text-muted)',
+                          color: '#ef4444',
                           textTransform: 'uppercase',
                           letterSpacing: '0.07em',
                         }}>
-                          ETA Arrived ({etaArrived.length})
+                          ETA Passed – Not Arrived ({etaArrived.length})
                         </div>
                         {etaArrived.slice(0, 5).map((shipment) => (
                           <div
@@ -266,7 +266,7 @@ export default function Topbar({ title, subtitle, overduePayments = [], etaArriv
                               gap: '0.5rem',
                               marginBottom: '0.25rem',
                             }}>
-                              <Anchor size={12} color="#10b981" />
+                              <Anchor size={12} color="#ef4444" />
                               <span style={{
                                 fontSize: 'var(--font-size-body-small)',
                                 fontWeight: 600,
@@ -290,7 +290,7 @@ export default function Topbar({ title, subtitle, overduePayments = [], etaArriv
                             color: 'var(--text-muted)',
                             textAlign: 'center',
                           }}>
-                            +{etaArrived.length - 5} more ETA arrived
+                            +{etaArrived.length - 5} more pending ETA shipments
                           </div>
                         )}
                       </div>
@@ -323,7 +323,7 @@ export default function Topbar({ title, subtitle, overduePayments = [], etaArriv
       {/* ── RIGHT IMAGE LOGO ── */}
       <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
         <img
-          src="/assets/murugappa.jpeg" // Replace with your right image path
+          src="/assets/murugappa.jpeg"
           alt="Group Logo"
           style={{ height: 50, width: 'auto', objectFit: 'contain', borderRadius: 4 }}
         />
