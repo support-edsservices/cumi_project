@@ -20,6 +20,7 @@ import { Shipment, MaterialStatus, PaymentStatus, PAYMENT_STATUSES } from '@/typ
 import {
   formatDMY,
   getDefaultPoDateRange,
+  hasPoDate,
   getDaysUntilDue,
   getPaymentDueDate,
   getPaymentPeriod,
@@ -1674,9 +1675,10 @@ function DuePaymentsTable({ data }: { data: Shipment[] }) {
    Main Dashboard Page
 ═══════════════════════════════════════════════════════════════════════════ */
 export default function ShipmentDashboardPage() {
-  const { shipments, ready } = useShipments();
+  const { shipments, ready, error } = useShipments();
   const { setNotifications } = useNotifications();
   const [searchTerm, setSearchTerm] = useState('');
+  const [showShipmentsWithoutPoDate, setShowShipmentsWithoutPoDate] = useState(false);
   const [dashboardPoDateRange, setDashboardPoDateRange] = useState(() => getDefaultPoDateRange('year'));
   const financialYear = useMemo(() => getFinancialYearRange(), []);
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<Date | null>(null);
@@ -1686,20 +1688,23 @@ export default function ShipmentDashboardPage() {
 
   const filtered = useMemo(() => {
     const q = searchTerm.toLowerCase();
-    return shipments.filter(s =>
-      poDateMatchesRange(s.poDate, dashboardPoDateRange.startDate, dashboardPoDateRange.endDate) &&
-      (!searchTerm.trim() ||
-        s.supplier.toLowerCase().includes(q) ||
-        s.invoiceNo.toLowerCase().includes(q) ||
-        s.material.toLowerCase().includes(q) ||
-        s.blNo.toLowerCase().includes(q) ||
-        s.poNo.toLowerCase().includes(q) ||
-        s.id.toLowerCase().includes(q) ||
-        s.country.toLowerCase().includes(q) ||
-        s.modeOfShipment.toLowerCase().includes(q) ||
-        (s.otherModeDetail ?? '').toLowerCase().includes(q))
-    );
-  }, [shipments, searchTerm, dashboardPoDateRange]);
+    return shipments.filter(s => {
+      const matchesPoDate = hasPoDate(s.poDate)
+        ? poDateMatchesRange(s.poDate, dashboardPoDateRange.startDate, dashboardPoDateRange.endDate)
+        : showShipmentsWithoutPoDate;
+      return matchesPoDate &&
+        (!searchTerm.trim() ||
+          s.supplier.toLowerCase().includes(q) ||
+          s.invoiceNo.toLowerCase().includes(q) ||
+          s.material.toLowerCase().includes(q) ||
+          s.blNo.toLowerCase().includes(q) ||
+          s.poNo.toLowerCase().includes(q) ||
+          s.id.toLowerCase().includes(q) ||
+          s.country.toLowerCase().includes(q) ||
+          s.modeOfShipment.toLowerCase().includes(q) ||
+          (s.otherModeDetail ?? '').toLowerCase().includes(q));
+    });
+  }, [shipments, searchTerm, dashboardPoDateRange, showShipmentsWithoutPoDate]);
 
   const today = useMemo(() => {
     const now = new Date();
@@ -1742,6 +1747,14 @@ export default function ShipmentDashboardPage() {
     return (
       <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: 'var(--font-size-body)' }}>
         Loading shipments…
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div role="alert" style={{ padding: '0.75rem 1rem', borderRadius: 8, color: 'var(--accent-red)', background: 'rgba(239,68,68,0.12)' }}>
+        Shipment data could not be loaded: {error}
       </div>
     );
   }
@@ -1791,10 +1804,25 @@ export default function ShipmentDashboardPage() {
             </label>
             <button
               type="button"
+              onClick={() => setDashboardPoDateRange({ startDate: '', endDate: '' })}
+              style={{ height: 28, padding: '0.15rem 0.5rem', border: '1px solid var(--border)', borderRadius: 6, background: 'var(--bg-secondary)', color: 'var(--text-primary)', font: 'inherit', fontSize: 'var(--font-size-compact)', fontWeight: 700, cursor: 'pointer' }}
+            >
+              All dates
+            </button>
+            <button
+              type="button"
               onClick={() => setDashboardPoDateRange(getDefaultPoDateRange('year'))}
               style={{ height: 28, padding: '0.15rem 0.5rem', border: '1px solid var(--border)', borderRadius: 6, background: 'var(--bg-secondary)', color: 'var(--text-primary)', font: 'inherit', fontSize: 'var(--font-size-compact)', fontWeight: 700, cursor: 'pointer' }}
             >
               This financial year
+            </button>
+            <button
+              type="button"
+              aria-pressed={showShipmentsWithoutPoDate}
+              onClick={() => setShowShipmentsWithoutPoDate((show) => !show)}
+              style={{ height: 28, padding: '0.15rem 0.5rem', border: '1px solid var(--border)', borderRadius: 6, background: showShipmentsWithoutPoDate ? 'var(--accent-blue)' : 'var(--bg-secondary)', color: showShipmentsWithoutPoDate ? '#fff' : 'var(--text-primary)', font: 'inherit', fontSize: 'var(--font-size-compact)', fontWeight: 700, cursor: 'pointer' }}
+            >
+              {showShipmentsWithoutPoDate ? 'Hide no-PO-date' : 'Show no-PO-date'}
             </button>
             <span style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-size-compact)', fontWeight: 600 }}>
               {financialYear.label}

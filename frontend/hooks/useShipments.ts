@@ -15,6 +15,8 @@ export interface ShipmentImportResult {
   statusCode?: number;
 }
 
+const SHIPMENT_PAGE_SIZE = 500;
+
 const DOCUMENT_PROPERTIES: Partial<Record<ShipmentDocumentType, keyof Shipment>> = {
   PO: 'poDocument',
   INVOICE: 'invoiceDocument',
@@ -62,9 +64,19 @@ export function useShipments() {
     let active = true;
     async function loadShipments() {
       try {
-        const response = await fetchWithAuth(`${BASE_URL}/api/shipments`);
-        if (!response.ok) throw await responseError(response, 'Could not load shipments.');
-        const data: Shipment[] = await response.json();
+        const data: Shipment[] = [];
+        let offset = 0;
+        while (true) {
+          const response = await fetchWithAuth(
+            `${BASE_URL}/api/shipments?limit=${SHIPMENT_PAGE_SIZE}&offset=${offset}`,
+          );
+          if (!response.ok) throw await responseError(response, 'Could not load shipments.');
+          const page: Shipment[] = await response.json();
+          if (!Array.isArray(page)) throw new Error('Shipment list response was invalid.');
+          data.push(...page);
+          if (page.length < SHIPMENT_PAGE_SIZE) break;
+          offset += page.length;
+        }
         if (active) {
           setShipments(data.map(shipmentFromApi));
           setError(null);

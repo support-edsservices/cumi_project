@@ -573,6 +573,30 @@ export function getDefaultPoDateRange(period: 'month' | 'year'): { startDate: st
   return { startDate: toISODate(start), endDate: toISODate(now) };
 }
 
+function normalizePoDate(value: string): string | null {
+  const raw = value.trim();
+  const iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(raw);
+  const dmy = /^(\d{2})[-/.](\d{2})[-/.](\d{4})$/.exec(raw);
+  const year = Number(iso?.[1] ?? dmy?.[3]);
+  const month = Number(iso?.[2] ?? dmy?.[2]);
+  const day = Number(iso?.[3] ?? dmy?.[1]);
+  if (!iso && !dmy) return null;
+
+  const date = new Date(year, month - 1, day);
+  if (
+    year < 1000
+    || date.getFullYear() !== year
+    || date.getMonth() !== month - 1
+    || date.getDate() !== day
+  ) return null;
+
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+export function hasPoDate(poDate: string | null | undefined): boolean {
+  return Boolean(poDate?.split('_').some((value) => normalizePoDate(value) !== null));
+}
+
 export function poDateMatchesRange(
   poDate: string | null | undefined,
   startDate: string,
@@ -582,12 +606,8 @@ export function poDateMatchesRange(
   if (!poDate) return false;
 
   return poDate.split('_').some((value) => {
-    const raw = value.trim();
-    const isoDate = /^(\d{4}-\d{2}-\d{2})/.exec(raw)?.[1]
-      ?? (/^(\d{2})-(\d{2})-(\d{4})$/.exec(raw)
-        ? `${raw.slice(6, 10)}-${raw.slice(3, 5)}-${raw.slice(0, 2)}`
-        : '');
-    return Boolean(isoDate) && (!startDate || isoDate >= startDate) && (!endDate || isoDate <= endDate);
+    const isoDate = normalizePoDate(value);
+    return isoDate !== null && (!startDate || isoDate >= startDate) && (!endDate || isoDate <= endDate);
   });
 }
 

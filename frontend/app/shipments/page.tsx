@@ -55,6 +55,7 @@ import {
   getDaysUntilDue,
   getDocumentRemark,
   getDefaultPoDateRange,
+  hasPoDate,
   getModeLabel,
   getPaymentBaseISO,
   getPaymentDueDate,
@@ -134,6 +135,7 @@ const DEFAULT_DOCUMENT_COUNTS: DocumentCounts = {
   blNo: 0,
   boeNo: 0,
 };
+const HISTORY_PAGE_SIZE = 10;
 
 function splitDocumentValues(value: string, count: number): string[] {
   const values = value ? value.split('_') : [];
@@ -269,67 +271,12 @@ function formToShipment(
 }
 
 function validate(
-  f: FormState,
-  activeModeNames: readonly string[],
-  documentCounts: DocumentCounts,
-  proformaRequired: boolean,
+  _f: FormState,
+  _activeModeNames: readonly string[],
+  _documentCounts: DocumentCounts,
+  _proformaRequired: boolean,
 ): Record<string, string> {
-  const e: Record<string, string> = {};
-  if (!f.supplier.trim()) e.supplier = 'Supplier name is required';
-  const poValues = splitDocumentValues(f.poNo, documentCounts.poNo);
-  const poDates = splitDocumentValues(f.poDate, documentCounts.poNo);
-  const invoiceValues = splitDocumentValues(f.invoiceNo, documentCounts.invoiceNo);
-  const proformaNumbers = splitDocumentValues(f.proformaInvoiceNo, documentCounts.invoiceNo);
-  const proformaDates = splitDocumentValues(f.proformaInvoiceDate, documentCounts.invoiceNo);
-  const blValues = splitDocumentValues(f.blNo === 'BL-PENDING' ? '' : f.blNo, documentCounts.blNo);
-  const boeValues = splitDocumentValues(f.boeNo === 'BOE-PENDING' ? '' : f.boeNo, documentCounts.boeNo);
-  // PO and Invoice are now optional — only validate consistency within entered values
-  if (poValues.some((value) => value.trim()) && poValues.some((value) => !value.trim())) e.poNo = 'Enter a PO number in every PO field or leave all blank';
-  if (poDates.some(Boolean) && poDates.some((value) => !value)) e.poDate = 'Enter a PO date for every PO or leave all blank';
-  if (invoiceValues.some((value) => value.trim()) && invoiceValues.some((value) => !value.trim())) e.invoiceNo = 'Enter an invoice number in every invoice field or leave all blank';
-  const hasProformaData = proformaNumbers.some((value) => value.trim()) || proformaDates.some(Boolean);
-  if (proformaRequired && proformaNumbers.some((value) => !value.trim())) {
-    e.proformaInvoiceNo = 'Enter a proforma invoice number for every invoice';
-  }
-  if (proformaRequired && proformaDates.some((value) => !value)) {
-    e.proformaInvoiceDate = 'Enter a proforma invoice date for every invoice';
-  }
-  if (hasProformaData && !proformaRequired) {
-    if (proformaNumbers.some((value) => !value.trim())) {
-      e.proformaInvoiceNo = 'Enter a proforma invoice number for every proforma date';
-    }
-    if (proformaDates.some((value) => !value)) {
-      e.proformaInvoiceDate = 'Enter a proforma invoice date for every proforma number';
-    }
-  }
-  if (blValues.some((value) => value.trim()) && blValues.some((value) => !value.trim())) {
-    e.blNo = 'Complete every BL field or leave all BL fields blank';
-  }
-  if (boeValues.some((value) => value.trim()) && boeValues.some((value) => !value.trim())) {
-    e.boeNo = 'Complete every BOE field or leave all BOE fields blank';
-  }
-  const paymentTerms = f.paymentTermChoice;
-
-
-  if (f.paymentType === 'LC' && !f.bankReferenceNo.trim()) {
-    e.bankReferenceNo = 'Bank reference is required for LC';
-  }
-
-  if (f.paymentStatus === 'NOT PAID' && f.paymentType !== 'LC') {
-    const dateBasis = getPaymentTermDateBasis(paymentTerms);
-    const allDatesProvided = (value: string, count: number) =>
-      count > 0 && splitDocumentValues(value, count).every((date) => Boolean(date));
-    if (dateBasis === 'Invoice Date' && !allDatesProvided(f.invoiceDate, documentCounts.invoiceNo)) {
-      e.invoiceDate = 'Enter an invoice date for each invoice to calculate the payment due date';
-    } else if (dateBasis === 'BL Date' && !allDatesProvided(f.blDate, documentCounts.blNo)) {
-      e.blDate = 'Enter a BL date for each BL to calculate the payment due date';
-    }
-  }
-
-  if (f.materialStatus === 'Arrived' && !f.arrivedDate) {
-    e.arrivedDate = 'Select the arrival date';
-  }
-  return e;
+  return {};
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -372,7 +319,9 @@ export default function ShipmentEntryAndHistoryPage() {
   const [filterPayment, setFilterPayment] = useState('all');
   const [filterDocStatus, setFilterDocStatus] = useState('all');
   const [filterMaterialStatus, setFilterMaterialStatus] = useState('all');
+  const [showShipmentsWithoutPoDate, setShowShipmentsWithoutPoDate] = useState(false);
   const [historyPoDateRange, setHistoryPoDateRange] = useState(() => getDefaultPoDateRange('year'));
+  const [historyPage, setHistoryPage] = useState(0);
   const financialYear = useMemo(() => getFinancialYearRange(), []);
 
   const selectedShipment = useMemo(
@@ -965,11 +914,22 @@ export default function ShipmentEntryAndHistoryPage() {
       const matchPayment = filterPayment === 'all' || item.paymentStatus === filterPayment;
       const matchDocStatus = filterDocStatus === 'all' || item.documentStatus === filterDocStatus;
       const matchMatStatus = filterMaterialStatus === 'all' || item.materialStatus === filterMaterialStatus;
-      const matchPoDate = !item.poDate || poDateMatchesRange(item.poDate, historyPoDateRange.startDate, historyPoDateRange.endDate);
+      const matchPoDate = hasPoDate(item.poDate)
+        ? poDateMatchesRange(item.poDate, historyPoDateRange.startDate, historyPoDateRange.endDate)
+        : showShipmentsWithoutPoDate;
 
       return matchSearch && matchMode && matchPayment && matchDocStatus && matchMatStatus && matchPoDate;
     });
-  }, [shipments, searchTerm, filterMode, filterPayment, filterDocStatus, filterMaterialStatus, historyPoDateRange]);
+  }, [shipments, searchTerm, filterMode, filterPayment, filterDocStatus, filterMaterialStatus, historyPoDateRange, showShipmentsWithoutPoDate]);
+
+  const historyPageCount = Math.max(1, Math.ceil(filteredShipments.length / HISTORY_PAGE_SIZE));
+  const currentHistoryPage = Math.min(historyPage, historyPageCount - 1);
+  const visibleShipments = filteredShipments.slice(
+    currentHistoryPage * HISTORY_PAGE_SIZE,
+    (currentHistoryPage + 1) * HISTORY_PAGE_SIZE,
+  );
+  const firstVisibleShipment = filteredShipments.length === 0 ? 0 : currentHistoryPage * HISTORY_PAGE_SIZE + 1;
+  const lastVisibleShipment = Math.min((currentHistoryPage + 1) * HISTORY_PAGE_SIZE, filteredShipments.length);
 
   const handleExportExcel = () => {
     if (filteredShipments.length === 0) {
@@ -1280,7 +1240,7 @@ export default function ShipmentEntryAndHistoryPage() {
                 />
                 {!activeMasterNames('material-id').length && <MasterSetupLink masterType="material-id" />}
               </Field>
-              <Field label="Supplier Name" required id="supplier" error={errors.supplier}>
+              <Field label="Supplier Name" id="supplier" error={errors.supplier}>
                 <SearchableSelect
                   ariaLabel="Supplier Name"
                   value={formData.supplier}
@@ -1565,7 +1525,7 @@ export default function ShipmentEntryAndHistoryPage() {
 
               <Field
                 label="Bank Reference Number"
-                required={formData.paymentType === 'LC'}
+                
                 id="bankReferenceNo"
                 error={errors.bankReferenceNo}
               >
@@ -1635,7 +1595,7 @@ export default function ShipmentEntryAndHistoryPage() {
               </Field>
 
               {formData.materialStatus === 'Arrived' ? (
-                <Field label="Arrival Date" required id="arrivedDate" error={errors.arrivedDate}>
+                <Field label="Arrival Date" id="arrivedDate" error={errors.arrivedDate}>
                   <DateField
                     value={formData.arrivedDate}
                     onChange={(v) => setField('arrivedDate', v)}
@@ -1774,7 +1734,10 @@ export default function ShipmentEntryAndHistoryPage() {
                   type="text"
                   placeholder="Search by supplier, PO, Invoice, BL, material, country..."
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={(e) => {
+                    setSearchTerm(e.target.value);
+                    setHistoryPage(0);
+                  }}
                   style={{
                     background: 'transparent',
                     border: 'none',
@@ -1787,7 +1750,10 @@ export default function ShipmentEntryAndHistoryPage() {
                 />
                 {searchTerm && (
                   <button
-                    onClick={() => setSearchTerm('')}
+                    onClick={() => {
+                      setSearchTerm('');
+                      setHistoryPage(0);
+                    }}
                     style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
                     aria-label="Clear search"
                   >
@@ -2017,7 +1983,10 @@ export default function ShipmentEntryAndHistoryPage() {
                   aria-label="History PO date from"
                   value={historyPoDateRange.startDate}
                   max={historyPoDateRange.endDate || undefined}
-                  onChange={(event) => setHistoryPoDateRange((range) => ({ ...range, startDate: event.target.value }))}
+                  onChange={(event) => {
+                    setHistoryPoDateRange((range) => ({ ...range, startDate: event.target.value }));
+                    setHistoryPage(0);
+                  }}
                   style={{ ...filterSelectStyle, minWidth: 165, color: 'var(--text-primary)' }}
                 />
               </label>
@@ -2028,16 +1997,48 @@ export default function ShipmentEntryAndHistoryPage() {
                   aria-label="History PO date to"
                   value={historyPoDateRange.endDate}
                   min={historyPoDateRange.startDate || undefined}
-                  onChange={(event) => setHistoryPoDateRange((range) => ({ ...range, endDate: event.target.value }))}
+                  onChange={(event) => {
+                    setHistoryPoDateRange((range) => ({ ...range, endDate: event.target.value }));
+                    setHistoryPage(0);
+                  }}
                   style={{ ...filterSelectStyle, minWidth: 165, color: 'var(--text-primary)' }}
                 />
               </label>
               <button
                 type="button"
-                onClick={() => setHistoryPoDateRange(getDefaultPoDateRange('year'))}
+                onClick={() => {
+                  setHistoryPoDateRange({ startDate: '', endDate: '' });
+                  setHistoryPage(0);
+                }}
+                style={{ ...ghostButtonStyle, minHeight: 34 }}
+              >
+                All dates
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setHistoryPoDateRange(getDefaultPoDateRange('year'));
+                  setHistoryPage(0);
+                }}
                 style={{ ...ghostButtonStyle, minHeight: 34 }}
               >
                 This financial year
+              </button>
+              <button
+                type="button"
+                aria-pressed={showShipmentsWithoutPoDate}
+                onClick={() => {
+                  setShowShipmentsWithoutPoDate((show) => !show);
+                  setHistoryPage(0);
+                }}
+                style={{
+                  ...ghostButtonStyle,
+                  minHeight: 34,
+                  background: showShipmentsWithoutPoDate ? 'var(--accent-blue)' : undefined,
+                  color: showShipmentsWithoutPoDate ? '#fff' : undefined,
+                }}
+              >
+                {showShipmentsWithoutPoDate ? 'Hide records without PO date' : 'Show records without PO date'}
               </button>
               <span style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-size-compact)' }}>
                 {financialYear.label}
@@ -2061,7 +2062,10 @@ export default function ShipmentEntryAndHistoryPage() {
                 <SearchableSelect
                   ariaLabel="Filter by mode"
                   value={filterMode}
-                  onChange={setFilterMode}
+                  onChange={(value) => {
+                    setFilterMode(value);
+                    setHistoryPage(0);
+                  }}
                   placeholder="Search modes"
                   options={[{ value: 'all', label: 'All Modes' }, ...Array.from(new Set(shipments.map((shipment) => shipment.modeOfShipment)))
                     .sort((left, right) => left.localeCompare(right))
@@ -2075,7 +2079,10 @@ export default function ShipmentEntryAndHistoryPage() {
                 <SearchableSelect
                   ariaLabel="Filter by PRW status"
                   value={filterPayment}
-                  onChange={setFilterPayment}
+                  onChange={(value) => {
+                    setFilterPayment(value);
+                    setHistoryPage(0);
+                  }}
                   placeholder="Search PRW statuses"
                   options={[{ value: 'all', label: 'All PRW statuses' }, ...PAYMENT_STATUSES.map((value) => ({ value, label: value }))]}
                   style={filterSelectStyle}
@@ -2087,7 +2094,10 @@ export default function ShipmentEntryAndHistoryPage() {
                 <SearchableSelect
                   ariaLabel="Filter by document status"
                   value={filterDocStatus}
-                  onChange={setFilterDocStatus}
+                  onChange={(value) => {
+                    setFilterDocStatus(value);
+                    setHistoryPage(0);
+                  }}
                   placeholder="Search document statuses"
                   options={['all', 'Provided', 'Not Provided'].map((value) => ({
                     value,
@@ -2102,7 +2112,10 @@ export default function ShipmentEntryAndHistoryPage() {
                 <SearchableSelect
                   ariaLabel="Filter by material status"
                   value={filterMaterialStatus}
-                  onChange={setFilterMaterialStatus}
+                  onChange={(value) => {
+                    setFilterMaterialStatus(value);
+                    setHistoryPage(0);
+                  }}
                   placeholder="Search material statuses"
                   options={['all', 'Pending Shipment', 'In Transit', 'At Port', 'Customs Clearance', 'Arrived'].map((value) => ({
                     value,
@@ -2124,7 +2137,7 @@ export default function ShipmentEntryAndHistoryPage() {
 
             <div
               style={{
-                height: '800px',
+                height: 'auto',
                 maxHeight: '800px',
                 overflow: 'auto',
                 width: '100%',
@@ -2232,7 +2245,7 @@ export default function ShipmentEntryAndHistoryPage() {
                       </td>
                     </tr>
                   ) : (
-                    filteredShipments.map((item, idx) => {
+                    visibleShipments.map((item, idx) => {
                       const dueDate = getPaymentDueDate(item);
                       const period = getPaymentPeriod(item);
                       const isOverdue = !!dueDate && item.paymentStatus === 'NOT PAID' && (getDaysUntilDue(item) ?? 0) < 0;
@@ -2403,6 +2416,32 @@ export default function ShipmentEntryAndHistoryPage() {
                   )}
                 </tbody>
               </table>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', marginTop: '0.75rem' }}>
+              <span style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-muted)' }}>
+                Showing {firstVisibleShipment}–{lastVisibleShipment} of {filteredShipments.length} records
+              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <button
+                  type="button"
+                  onClick={() => setHistoryPage((page) => Math.max(0, page - 1))}
+                  disabled={currentHistoryPage === 0}
+                  style={{ ...ghostButtonStyle, minHeight: 34, opacity: currentHistoryPage === 0 ? 0.5 : 1 }}
+                >
+                  Previous
+                </button>
+                <span style={{ fontSize: 'var(--font-size-compact)', color: 'var(--text-secondary)' }}>
+                  Page {currentHistoryPage + 1} of {historyPageCount}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setHistoryPage((page) => Math.min(historyPageCount - 1, page + 1))}
+                  disabled={currentHistoryPage >= historyPageCount - 1}
+                  style={{ ...ghostButtonStyle, minHeight: 34, opacity: currentHistoryPage >= historyPageCount - 1 ? 0.5 : 1 }}
+                >
+                  Next
+                </button>
+              </div>
             </div>
           </div>
         </div>

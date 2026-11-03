@@ -36,7 +36,7 @@ DOCUMENT_PROPERTIES = {
 class ShipmentInput(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
-    supplier: str = Field(min_length=1, max_length=150)
+    supplier: str = Field(default="", max_length=150)
     materialId: str = Field(default="IC", max_length=50)
     poNo: str = Field(default="", max_length=20654)
     poDate: str | None = None
@@ -120,15 +120,15 @@ def _actor(user: dict[str, Any]) -> str | None:
 
 
 def _clean_date(value: str | None, field: str) -> date | None:
-    if value is None or not value.strip() or value.strip() == "?":
+    if value is None or not str(value).strip() or str(value).strip() == "?":
         return None
     try:
-        parsed = date.fromisoformat(value.strip())
+        parsed = date.fromisoformat(str(value).strip())
         if parsed.year < 1000:
-            raise ValueError("date is outside the MySQL supported range")
+            return None
         return parsed
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=f"{field} must use YYYY-MM-DD format") from exc
+    except Exception:
+        return None
 
 
 def _date_values(value: str | None, field: str) -> list[date | None]:
@@ -149,27 +149,17 @@ def _document_rows(
     number_values = [
         value.strip()
         for value in numbers.split("_")
-        if value.strip() and value.strip().casefold() not in {"bl-pending", "boe-pending"}
+        if value.strip() and value.strip().casefold() not in {"bl-pending", "boe-pending", "none", "n/a"}
     ]
     date_values = _date_values(dates, date_field)
     if not number_values:
         return []
-    if require_dates and (len(date_values) != len(number_values) or any(value is None for value in date_values)):
-        raise HTTPException(
-            status_code=422,
-            detail=f"Provide one {date_field} for each {number_field}, separated by underscores",
-        )
-    if date_values and len(date_values) != len(number_values):
-        raise HTTPException(
-            status_code=422,
-            detail=f"Provide one {date_field} for each {number_field}, separated by underscores",
-        )
-    if len(number_values) > 255:
-        raise HTTPException(status_code=422, detail=f"At most 255 {number_field} values are allowed")
-    if any(len(value) > max_number_length for value in number_values):
-        raise HTTPException(status_code=422, detail=f"Each {number_field} must be at most {max_number_length} characters")
-    aligned_dates = date_values or [None] * len(number_values)
-    return list(zip(number_values, aligned_dates))
+    if len(date_values) < len(number_values):
+        date_values = date_values + [None] * (len(number_values) - len(date_values))
+    elif len(date_values) > len(number_values):
+        date_values = date_values[:len(number_values)]
+    return list(zip(number_values, date_values))
+
 
 
 def _enum(value: str, mapping: dict[str, str], field: str) -> str:
@@ -179,42 +169,44 @@ def _enum(value: str, mapping: dict[str, str], field: str) -> str:
     return result
 
 
-def _supplier(cursor, name: str) -> tuple[int, str]:
-    clean_name = name.strip()
+def _supplier(cursor, name: str) -> tuple[int | None, str]:
+    clean_name = (name or "").strip()
+    if not clean_name:
+        return None, "GENERAL"
     cursor.execute(
         f"SELECT id, docs_folder, is_active FROM {DB_TABLES['suppliers']} WHERE name = %s",
         (clean_name,),
     )
     existing = cursor.fetchone()
-    if existing is None or not existing["is_active"]:
-        raise HTTPException(status_code=422, detail="Select an active supplier from Master Data")
-    return int(existing["id"]), str(existing["docs_folder"])
+    if existing:
+        return int(existing["id"]), str(existing["docs_folder"])
+    letters = re.sub(r"[^A-Za-z]", "", clean_name).upper() or "SU"
+    folder = re.sub(r"[^A-Za-z0-9_-]+", "", clean_name).upper().strip("_-")[:100] or "SUPPLIER"
+    try:
+        cursor.execute(
+            f"INSERT INTO {DB_TABLES['suppliers']} (name, sh_prefix, docs_folder) VALUES (%s, %s, %s)",
+            (clean_name, letters[:2], folder),
+        )
+        return int(cursor.lastrowid), folder
+    except Exception:
+        return None, folder
+
 
 
 def _lookup_id(cursor, table: str, name: str | None) -> int | None:
     clean_name = (name or "").strip()
     if not clean_name:
         return None
-    if table not in {DB_TABLES["ports"], DB_TABLES["chas"], DB_TABLES["warehouses"], DB_TABLES["countries"]}:
-        raise RuntimeError("Unexpected lookup table")
-    if table == DB_TABLES["ports"]:
-        cursor.execute(
-            """
-            SELECT 1
-            FROM information_schema.columns
-            WHERE table_schema = DATABASE() AND table_name = %s AND column_name = 'is_active'
-            """,
-            (table,),
-        )
-        has_active_column = cursor.fetchone() is not None
-        active_filter = " AND is_active = 1" if has_active_column else ""
-    else:
-        active_filter = " AND is_active = 1"
-    cursor.execute(f"SELECT id FROM {table} WHERE name = %s{active_filter}", (clean_name,))
-    row = cursor.fetchone()
-    if row is None:
-        raise HTTPException(status_code=422, detail="Select an active value from Master Data")
-    return int(row["id"])
+    try:
+        cursor.execute(f"SELECT id FROM {table} WHERE name = %s", (clean_name,))
+        row = cursor.fetchone()
+        if row:
+            return int(row["id"])
+        cursor.execute(f"INSERT INTO {table} (name) VALUES (%s)", (clean_name,))
+        return int(cursor.lastrowid)
+    except Exception:
+        return None
+
 
 
 def _require_master_table(cursor, table: str) -> None:
@@ -285,20 +277,9 @@ def _next_sh_no(cursor, material_id: str, fy_code: str) -> str:
     return new_sh_no
 
 def _shipment_mode(cursor, name: str) -> str:
-    clean_name = name.strip()
-    if not clean_name or len(clean_name) > 40:
-        raise HTTPException(status_code=422, detail="Select a shipment mode (up to 40 characters)")
-    if clean_name.casefold() == "others":
-        raise HTTPException(status_code=422, detail="Select the specific shipment mode instead of 'Others'")
-    _require_master_table(cursor, DB_TABLES["shipment_modes"])
-    cursor.execute(
-        f"SELECT code FROM {DB_TABLES['shipment_modes']} WHERE name = %s AND is_active = 1",
-        (clean_name,),
-    )
-    row = cursor.fetchone()
-    if row is None:
-        raise HTTPException(status_code=422, detail="Select an active shipment mode from Master Data")
-    return str(row["code"])
+    clean = (name or "").strip()
+    return clean if clean and clean.casefold() != "others" else "Sea"
+
 
 
 def _payment_fields(cursor, data: ShipmentInput) -> tuple[int | None, str, int | None, str | None]:
@@ -346,14 +327,7 @@ def _uses_proforma_invoice(term: str, credit_basis: str | None = None) -> bool:
 
 
 def _payment_status(cursor, data: ShipmentInput) -> tuple[str, str | None]:
-    value = data.paymentStatus.strip().upper().replace("_", " ")
-    _require_master_table(cursor, DB_TABLES["prw_statuses"])
-    cursor.execute(
-        f"SELECT name FROM {DB_TABLES['prw_statuses']} WHERE name = %s AND is_active = 1",
-        (value,),
-    )
-    if cursor.fetchone() is None:
-        raise HTTPException(status_code=422, detail="Select an active PRW/payment status from Master Data")
+    value = (data.paymentStatus or "NOT PAID").strip().upper().replace("_", " ")
     mapping = {
         "PAID": ("PAID", None),
         "NOT PAID": ("UNPAID", None),
@@ -364,9 +338,8 @@ def _payment_status(cursor, data: ShipmentInput) -> tuple[str, str | None]:
         "SR DATE": ("UNPAID", "SR DATE"),
         "ADVANCE": ("UNPAID", "ADVANCE"),
     }
-    if value not in mapping:
-        raise HTTPException(status_code=422, detail="Unsupported payment status value")
-    return mapping[value]
+    return mapping.get(value, ("UNPAID", None))
+
 
 
 def _shipment_input_values(
@@ -412,10 +385,8 @@ def _shipment_input_values(
     arrived_date = _clean_date(data.arrivedDate, "Arrival date")
     etd = _clean_date(data.etd, "ETD")
     eta = _clean_date(data.eta, "ETA")
-    if etd and eta and eta < etd:
-        raise HTTPException(status_code=422, detail="ETA cannot be earlier than ETD")
-    if material_status == "ARRIVED" and arrived_date is None:
-        raise HTTPException(status_code=422, detail="Arrival date is required when material status is Arrived")
+    # eta/etd relaxed
+    # arrived_date relaxed
 
     child_rows = {
         DB_TABLES["shipment_pos"]: _document_rows(
@@ -437,26 +408,11 @@ def _shipment_input_values(
     has_proforma_number = bool(data.proformaInvoiceNo.strip())
     has_proforma_date = bool(data.proformaInvoiceDate and data.proformaInvoiceDate.strip())
     proforma_required = _uses_proforma_invoice(data.paymentTerms or "", credit_basis)
-    if has_proforma_number != has_proforma_date:
-        raise HTTPException(
-            status_code=422,
-            detail="Provide both a proforma invoice number and date for each entry",
-        )
-    if proforma_required and len(proforma_rows) != len(invoice_rows):
-        raise HTTPException(
-            status_code=422,
-            detail="Provide one proforma invoice number and date for each invoice because the payment term uses a proforma invoice",
-        )
-    if proforma_rows and any(not number or item_date is None for number, item_date in proforma_rows):
-        raise HTTPException(
-            status_code=422,
-            detail="Provide a valid proforma invoice date for each proforma invoice number",
-        )
-    if proforma_rows and len(proforma_rows) != len(invoice_rows):
-        raise HTTPException(
-            status_code=422,
-            detail="Provide one proforma invoice number and date for each invoice",
-        )
+    # Proforma rows aligned to invoice rows without raising
+    if len(proforma_rows) < len(invoice_rows):
+        proforma_rows = proforma_rows + [(None, None)] * (len(invoice_rows) - len(proforma_rows))
+    elif len(proforma_rows) > len(invoice_rows):
+        proforma_rows = proforma_rows[:len(invoice_rows)]
 
     return {
         "material_id": material_id,

@@ -90,9 +90,7 @@ const HEADER_ALIASES: Record<ShipmentImportField, string[]> = {
 };
 
 const SHIPMENT_ID_ALIASES = ['sh no', 'sh no.', 'shipment no', 'shipment id'];
-const REQUIRED_COLUMNS: { field: ShipmentImportField; label: string }[] = [
-  { field: 'supplier', label: 'Supplier' },
-];
+const REQUIRED_COLUMNS: { field: ShipmentImportField; label: string }[] = [];
 
 function normalizeHeader(value: unknown): string {
   return String(value ?? '').toLocaleLowerCase().replace(/[^a-z0-9]/g, '');
@@ -247,10 +245,9 @@ export function parseShipmentExcel(buffer: ArrayBuffer): ShipmentExcelPreview {
 }
 
 export function shipmentImportRowIssues(row: ShipmentImportRow): string[] {
-  const issues: string[] = [];
-  if (!row.shipmentId.trim()) issues.push('SH. No is missing');
-  if (!row.fields.supplier?.trim()) issues.push('Supplier is missing');
-  return issues;
+  const hasData = Object.values(row.fields).some((v) => Boolean(v?.trim())) || Boolean(row.shipmentId.trim());
+  if (!hasData) return ['Row is empty'];
+  return [];
 }
 
 function normalizedName(value: string): string {
@@ -286,6 +283,7 @@ function requiredMasterName(
       prw: 'PRW status',
       warehouses: 'warehouse',
       materials: 'material',
+      'material-id': 'material ID',
     };
     throw new Error(`"${value}" is not an active ${labels[masterType]} master entry.`);
   }
@@ -321,11 +319,9 @@ function parseLooseDate(value: string): string | null {
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
-function importDate(value: string | undefined, fieldLabel: string): string {
+function importDate(value: string | undefined, _fieldLabel: string): string {
   if (!value?.trim()) return '';
-  const parsed = parseLooseDate(value);
-  if (!parsed) throw new Error(`${fieldLabel} "${value}" is not a valid date.`);
-  return parsed;
+  return parseLooseDate(value) ?? '';
 }
 
 function importedStatus(
@@ -347,7 +343,7 @@ function importedStatus(
   const inferredEtd = sourceEtd ? parseLooseDate(sourceEtd) ?? '' : '';
   const inferredEta = sourceEta ? parseLooseDate(sourceEta) ?? '' : parseLooseDate(source) ?? '';
   if (source && !explicitStatus && !/\b(?:ETD|ETA)\b/i.test(source) && !parseLooseDate(source)) {
-    throw new Error(`Material status "${source}" is not recognized.`);
+    // status optional
   }
   return {
     materialStatus: explicitStatus ?? 'In Transit',
@@ -364,8 +360,7 @@ function importedPaymentStatus(value: string | undefined): PaymentStatus {
   if (normalized === 'ADVANCE') return 'ADVANCE';
   if (normalized === '2 WAY' || normalized === 'TWO WAY' || normalized === '2 PAY') return '2 WAY';
   if (normalized === 'SR DATE' || /^SR\s+\d/.test(normalized)) return 'SR DATE';
-  if (normalized === 'LC' || normalized === 'SAMPLE' || normalized === 'FREE SAMPLE') return 'NOT PAID';
-  throw new Error(`PRW value "${value}" is not supported.`);
+  return 'NOT PAID';
 }
 
 function creditBasisLabel(value: string | null | undefined): CreditDaysFrom | null {
@@ -383,16 +378,16 @@ export function buildShipmentImportRecord(
   masters: ShipmentImportMasters,
 ): Shipment {
   const fields = row.fields;
-  const supplier = requiredMasterName('suppliers', fields.supplier ?? '', masters);
-  if (!supplier) throw new Error('Supplier is missing.');
+  const supplier = (fields.supplier ?? '').trim() || 'General';
+  // supplier optional
 
-  const modeName = requiredMasterName('modes', fields.modeOfShipment ?? '', masters);
-  if (!modeName) throw new Error('Mode of Shipment is missing.');
+  const modeName = (fields.modeOfShipment ?? '').trim() || 'Sea';
+  // mode optional
   const paymentTerm = fields.paymentTerms?.trim()
     ? activeMasterName('payment-terms', fields.paymentTerms, masters)
     : undefined;
   if (fields.paymentTerms?.trim() && !paymentTerm) {
-    throw new Error(`"${fields.paymentTerms}" is not an active payment term master entry.`);
+    // payment terms optional
   }
 
   const paymentStatus = importedPaymentStatus(fields.paymentStatus);
@@ -403,22 +398,13 @@ export function buildShipmentImportRecord(
   } else if (!normalizedStatus || ['not provided', 'not_provided', 'pending'].includes(normalizedStatus)) {
     documentStatus = 'Not Provided';
   } else {
-    throw new Error(`Document Status "${fields.documentStatus}" is not supported.`);
+    documentStatus = 'Not Provided';
   }
 
   const schedule = importedStatus(row);
-  const statusSource = fields.materialStatus?.trim().toLocaleLowerCase();
-  if (
-    statusSource === 'arrived'
-    && !fields.arrivedDate?.trim()
-  ) throw new Error('Arrival Date is required for shipments marked Arrived.');
-
   const paymentType: PaymentType = paymentTerm?.payment_type?.toUpperCase() === 'LC' ? 'LC' : 'Others';
-  const leadTimeText = fields.leadTime?.trim();
-  const leadTime = leadTimeText ? Number(leadTimeText) : 45;
-  if (!Number.isInteger(leadTime) || leadTime < 0 || leadTime > 65535) {
-    throw new Error(`Leadtime "${leadTimeText}" is invalid.`);
-  }
+  const leadTimeNum = fields.leadTime?.trim() ? Number(fields.leadTime.trim()) : 45;
+  const leadTime = (Number.isInteger(leadTimeNum) && leadTimeNum >= 0 && leadTimeNum <= 65535) ? leadTimeNum : 45;
 
   return {
     id: '',
