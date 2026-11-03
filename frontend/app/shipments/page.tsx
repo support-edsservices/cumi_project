@@ -295,7 +295,7 @@ export default function ShipmentEntryAndHistoryPage() {
   const [showSaveConfirm, setShowSaveConfirm] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Shipment | null>(null);
 
-  // History filters
+  // History global filters
   const [searchTerm, setSearchTerm] = useState('');
   const [shNoSearch, setShNoSearch] = useState('');
   const [filterMode, setFilterMode] = useState('all');
@@ -306,6 +306,15 @@ export default function ShipmentEntryAndHistoryPage() {
   const [historyPoDateRange, setHistoryPoDateRange] = useState(() => getDefaultPoDateRange('year'));
   const [historyPage, setHistoryPage] = useState(0);
   const financialYear = useMemo(() => getFinancialYearRange(), []);
+
+  // Excel-style Table Column Header Filters
+  const [colFilterSupplier, setColFilterSupplier] = useState('');
+  const [colFilterInvoice, setColFilterInvoice] = useState('');
+  const [colFilterMaterial, setColFilterMaterial] = useState('');
+  const [colFilterBL, setColFilterBL] = useState('');
+  const [colFilterBoe, setColFilterBoe] = useState('');
+  const [colFilterPayment, setColFilterPayment] = useState('');
+  const [colFilterMaterialStatus, setColFilterMaterialStatus] = useState('');
 
   const selectedShipment = useMemo(
     () => previewShipment ?? (shipments.find((s) => s.id === selectedId) ?? null),
@@ -881,6 +890,15 @@ export default function ShipmentEntryAndHistoryPage() {
     const q = searchTerm.trim().toLowerCase();
     const shQuery = shNoSearch.trim().toLowerCase();
 
+    // Excel Column Filters Normalized
+    const colSupp = colFilterSupplier.trim().toLowerCase();
+    const colInv = colFilterInvoice.trim().toLowerCase();
+    const colMat = colFilterMaterial.trim().toLowerCase();
+    const colBL = colFilterBL.trim().toLowerCase();
+    const colBoe = colFilterBoe.trim().toLowerCase();
+    const colPay = colFilterPayment.trim().toLowerCase();
+    const colMatStat = colFilterMaterialStatus.trim().toLowerCase();
+
     return shipments.filter((item) => {
       // Direct SH. No / Shipment ID Filter
       const matchShNo = !shQuery || item.id.toLowerCase().includes(shQuery);
@@ -895,15 +913,25 @@ export default function ShipmentEntryAndHistoryPage() {
         (item.proformaInvoiceNo ?? '').toLowerCase().includes(q) ||
         item.blNo.toLowerCase().includes(q) ||
         item.material.toLowerCase().includes(q) ||
+        (item.materialId ?? '').toLowerCase().includes(q) ||
         item.country.toLowerCase().includes(q) ||
         item.cha.toLowerCase().includes(q) ||
         item.modeOfShipment.toLowerCase().includes(q);
 
-      // Status & Dropdown Filters
+      // Top Dropdown Filters
       const matchMode = filterMode === 'all' || item.modeOfShipment === filterMode;
       const matchPayment = filterPayment === 'all' || item.paymentStatus === filterPayment;
       const matchDocStatus = filterDocStatus === 'all' || item.documentStatus === filterDocStatus;
       const matchMatStatus = filterMaterialStatus === 'all' || item.materialStatus === filterMaterialStatus;
+
+      // Excel Column Header Filters
+      const matchColSupplier = !colSupp || item.supplier.toLowerCase().includes(colSupp) || item.country.toLowerCase().includes(colSupp);
+      const matchColInvoice = !colInv || item.invoiceNo.toLowerCase().includes(colInv) || item.poNo.toLowerCase().includes(colInv);
+      const matchColMaterial = !colMat || item.material.toLowerCase().includes(colMat) || (item.materialId ?? '').toLowerCase().includes(colMat) || item.invoiceDate.toLowerCase().includes(colMat);
+      const matchColBL = !colBL || item.blNo.toLowerCase().includes(colBL) || item.blDate.toLowerCase().includes(colBL);
+      const matchColBoe = !colBoe || item.boeNo.toLowerCase().includes(colBoe) || item.cha.toLowerCase().includes(colBoe);
+      const matchColPayment = !colPay || item.paymentStatus.toLowerCase().includes(colPay) || getPaymentTermsLabel(item).toLowerCase().includes(colPay);
+      const matchColMatStat = !colMatStat || item.materialStatus.toLowerCase().includes(colMatStat);
 
       // PO Date Filter
       const itemHasPoDate = hasPoDate(item.poDate);
@@ -922,7 +950,22 @@ export default function ShipmentEntryAndHistoryPage() {
         }
       }
 
-      return matchShNo && matchSearch && matchMode && matchPayment && matchDocStatus && matchMatStatus && matchPoDate;
+      return (
+        matchShNo &&
+        matchSearch &&
+        matchMode &&
+        matchPayment &&
+        matchDocStatus &&
+        matchMatStatus &&
+        matchPoDate &&
+        matchColSupplier &&
+        matchColInvoice &&
+        matchColMaterial &&
+        matchColBL &&
+        matchColBoe &&
+        matchColPayment &&
+        matchColMatStat
+      );
     });
   }, [
     shipments,
@@ -934,6 +977,13 @@ export default function ShipmentEntryAndHistoryPage() {
     filterMaterialStatus,
     historyPoDateRange,
     showShipmentsWithoutPoDate,
+    colFilterSupplier,
+    colFilterInvoice,
+    colFilterMaterial,
+    colFilterBL,
+    colFilterBoe,
+    colFilterPayment,
+    colFilterMaterialStatus,
   ]);
 
   const historyPageCount = Math.max(1, Math.ceil(filteredShipments.length / HISTORY_PAGE_SIZE));
@@ -959,6 +1009,7 @@ export default function ShipmentEntryAndHistoryPage() {
         'Supplier Name': s.supplier,
         'PO Number': s.poNo,
         'PO Date': s.poDate || '',
+        'Material ID': s.materialId || 'IC',
         'Material Description': s.material,
         'Mode of Shipment': getModeLabel(s),
         'Invoice Number': s.invoiceNo,
@@ -1014,6 +1065,7 @@ export default function ShipmentEntryAndHistoryPage() {
         'Supplier': s.supplier,
         'PO No': s.poNo,
         'PO Date': s.poDate || '',
+        'Material ID': s.materialId || 'IC',
         'Material': s.material,
         'Mode': getModeLabel(s),
         'Invoice No': s.invoiceNo,
@@ -2212,7 +2264,7 @@ export default function ShipmentEntryAndHistoryPage() {
                   borderCollapse: 'separate',
                   borderSpacing: 0,
                   textAlign: 'left',
-                  minWidth: 1350,
+                  minWidth: 1450,
                   tableLayout: 'fixed',
                 }}
               >
@@ -2220,7 +2272,7 @@ export default function ShipmentEntryAndHistoryPage() {
                   <col style={{ width: '120px' }} />
                   <col style={{ width: '200px' }} />
                   <col style={{ width: '180px' }} />
-                  <col style={{ width: '180px' }} />
+                  <col style={{ width: '200px' }} />
                   <col style={{ width: '160px' }} />
                   <col style={{ width: '180px' }} />
                   <col style={{ width: '200px' }} />
@@ -2230,72 +2282,93 @@ export default function ShipmentEntryAndHistoryPage() {
 
                 <thead>
                   <tr>
-                    <th
-                      style={{
-                        position: 'sticky',
-                        top: 0,
-                        left: 0,
-                        zIndex: 11,
-                        background: 'var(--bg-secondary)',
-                        borderBottom: '2px solid var(--border)',
-                        padding: '0.75rem 0.85rem',
-                        fontSize: 'var(--font-size-label)',
-                        fontWeight: 700,
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.05em',
-                        color: 'var(--text-muted)',
-                        whiteSpace: 'nowrap',
-                        boxShadow: '2px 0 5px rgba(0,0,0,0.05)',
-                        verticalAlign: 'middle',
-                      }}
-                    >
-                      ID / Mode
+                    <th style={stickyHeaderStyleLeft}>ID / Mode</th>
+
+                    {/* Supplier Header & Filter */}
+                    <th style={stickyHeaderStyle}>
+                      <div>SUPPLIER & COUNTRY</div>
+                      <input
+                        type="text"
+                        placeholder="Filter..."
+                        value={colFilterSupplier}
+                        onChange={(e) => { setColFilterSupplier(e.target.value); setHistoryPage(0); }}
+                        style={headerInputStyle}
+                      />
                     </th>
 
-                    {['Supplier & Country', 'PO & Invoice', 'Material Name', 'BL Number', 'BOE / CHA', 'Payment Terms & PRW', 'Material Status'].map((h) => (
-                      <th
-                        key={h}
-                        style={{
-                          position: 'sticky',
-                          top: 0,
-                          zIndex: 10,
-                          background: 'var(--bg-secondary)',
-                          borderBottom: '2px solid var(--border)',
-                          padding: '0.75rem 0.85rem',
-                          fontSize: 'var(--font-size-label)',
-                          fontWeight: 700,
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.05em',
-                          color: 'var(--text-muted)',
-                          whiteSpace: 'nowrap',
-                          verticalAlign: 'middle',
-                        }}
-                      >
-                        {h}
-                      </th>
-                    ))}
-
-                    <th
-                      style={{
-                        position: 'sticky',
-                        top: 0,
-                        right: 0,
-                        zIndex: 11,
-                        background: 'var(--bg-secondary)',
-                        borderBottom: '2px solid var(--border)',
-                        padding: '0.75rem 0.85rem',
-                        fontSize: 'var(--font-size-label)',
-                        fontWeight: 700,
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.05em',
-                        color: 'var(--text-muted)',
-                        whiteSpace: 'nowrap',
-                        boxShadow: '-2px 0 5px rgba(0,0,0,0.05)',
-                        verticalAlign: 'middle',
-                      }}
-                    >
-                      Actions
+                    {/* PO & Invoice Header & Filter */}
+                    <th style={stickyHeaderStyle}>
+                      <div>PO & INVOICE</div>
+                      <input
+                        type="text"
+                        placeholder="Filter..."
+                        value={colFilterInvoice}
+                        onChange={(e) => { setColFilterInvoice(e.target.value); setHistoryPage(0); }}
+                        style={headerInputStyle}
+                      />
                     </th>
+
+                    {/* Material Name Header & Filter */}
+                    <th style={stickyHeaderStyle}>
+                      <div>MATERIAL NAME</div>
+                      <input
+                        type="text"
+                        placeholder="Filter Material / ID..."
+                        value={colFilterMaterial}
+                        onChange={(e) => { setColFilterMaterial(e.target.value); setHistoryPage(0); }}
+                        style={headerInputStyle}
+                      />
+                    </th>
+
+                    {/* BL Number Header & Filter */}
+                    <th style={stickyHeaderStyle}>
+                      <div>BL NUMBER</div>
+                      <input
+                        type="text"
+                        placeholder="Filter BL..."
+                        value={colFilterBL}
+                        onChange={(e) => { setColFilterBL(e.target.value); setHistoryPage(0); }}
+                        style={headerInputStyle}
+                      />
+                    </th>
+
+                    {/* BOE / CHA Header & Filter */}
+                    <th style={stickyHeaderStyle}>
+                      <div>BOE / CHA</div>
+                      <input
+                        type="text"
+                        placeholder="Filter BOE/CHA..."
+                        value={colFilterBoe}
+                        onChange={(e) => { setColFilterBoe(e.target.value); setHistoryPage(0); }}
+                        style={headerInputStyle}
+                      />
+                    </th>
+
+                    {/* Payment Terms & PRW Header & Filter */}
+                    <th style={stickyHeaderStyle}>
+                      <div>PAYMENT TERMS & PRW</div>
+                      <input
+                        type="text"
+                        placeholder="Filter Terms..."
+                        value={colFilterPayment}
+                        onChange={(e) => { setColFilterPayment(e.target.value); setHistoryPage(0); }}
+                        style={headerInputStyle}
+                      />
+                    </th>
+
+                    {/* Material Status Header & Filter */}
+                    <th style={stickyHeaderStyle}>
+                      <div>MATERIAL STATUS</div>
+                      <input
+                        type="text"
+                        placeholder="Filter Status..."
+                        value={colFilterMaterialStatus}
+                        onChange={(e) => { setColFilterMaterialStatus(e.target.value); setHistoryPage(0); }}
+                        style={headerInputStyle}
+                      />
+                    </th>
+
+                    <th style={stickyHeaderStyleRight}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -2361,9 +2434,16 @@ export default function ShipmentEntryAndHistoryPage() {
                             </div>
                           </td>
 
+                          {/* Updated Material Name cell showing Material ID & Invoice Date */}
                           <td style={{ padding: '0.75rem 0.85rem', borderBottom: '1px solid var(--border)', verticalAlign: 'top' }}>
                             <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 'var(--font-size-compact)' }}>
                               {item.material || '-'}
+                            </div>
+                            <div style={{ fontSize: 'var(--font-size-tiny)', color: 'var(--text-muted)', marginTop: 2 }}>
+                              ID: {item.materialId || '-'}
+                            </div>
+                            <div style={{ fontSize: 'var(--font-size-tiny)', color: 'var(--text-muted)', marginTop: 2 }}>
+                              Inv Date: {formatDMY(item.invoiceDate) || '-'}
                             </div>
                           </td>
 
@@ -3716,4 +3796,48 @@ const chipStyle: React.CSSProperties = {
   color: 'var(--text-primary)',
   fontSize: 'var(--font-size-compact)',
   fontWeight: 600,
+};
+
+const stickyHeaderStyle: React.CSSProperties = {
+  position: 'sticky',
+  top: 0,
+  zIndex: 10,
+  background: 'var(--bg-secondary)',
+  borderBottom: '2px solid var(--border)',
+  padding: '0.65rem 0.85rem',
+  fontSize: 'var(--font-size-label)',
+  fontWeight: 700,
+  textTransform: 'uppercase',
+  letterSpacing: '0.05em',
+  color: 'var(--text-muted)',
+  whiteSpace: 'nowrap',
+  verticalAlign: 'top',
+};
+
+const stickyHeaderStyleLeft: React.CSSProperties = {
+  ...stickyHeaderStyle,
+  left: 0,
+  zIndex: 11,
+  boxShadow: '2px 0 5px rgba(0,0,0,0.05)',
+};
+
+const stickyHeaderStyleRight: React.CSSProperties = {
+  ...stickyHeaderStyle,
+  right: 0,
+  zIndex: 11,
+  boxShadow: '-2px 0 5px rgba(0,0,0,0.05)',
+};
+
+const headerInputStyle: React.CSSProperties = {
+  width: '100%',
+  marginTop: '6px',
+  padding: '0.25rem 0.4rem',
+  background: 'var(--bg-card)',
+  border: '1px solid var(--border)',
+  borderRadius: '4px',
+  color: 'var(--text-primary)',
+  fontSize: 'var(--font-size-tiny)',
+  outline: 'none',
+  fontWeight: 400,
+  textTransform: 'none',
 };
