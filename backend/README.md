@@ -21,7 +21,21 @@
 
 5. Check `http://127.0.0.1:8001/health/db` and `http://127.0.0.1:8001/docs`.
 
-The web app uses `NEXT_PUBLIC_API_URL` (defaults to `http://localhost:8001`). The API stores uploaded files under `DOCS_ROOT` and stores only their relative paths in MySQL. The default upload size limit is 25 MiB.
+The web app uses `NEXT_PUBLIC_API_URL` when set. Otherwise, it uses `http://localhost:8001` for local development and the current site's origin when hosted. The API stores uploaded files under `DOCS_ROOT` and stores only their relative paths in MySQL. The default upload size limit is 25 MiB.
+
+## Hosting and attachment storage
+
+On a Hostinger VPS or another server with a persistent disk, attachments are stored on the backend server, not on the user's PC. Set `DOCS_ROOT` in the backend `.env` to an absolute directory outside the application release directory, for example:
+
+```env
+DOCS_ROOT=/var/lib/cumi/docs
+```
+
+Create that directory and grant the backend process permission to write to it. Keep it on persistent storage, back it up, and do not place it in a publicly served web directory. The API returns authenticated download URLs; the frontend does not expose the server's filesystem path.
+
+By default, the hosted frontend calls the API on the same origin, so configure the reverse proxy to route the API paths (including `/api` and `/auth`) to the backend. If the API uses a different domain, set `NEXT_PUBLIC_API_URL` to that API's base URL when building the frontend, and configure backend `CORS_ORIGINS` to include the frontend's origin. `NEXT_PUBLIC_API_URL` is embedded during the frontend build, so rebuild after changing it.
+
+This filesystem setup is suitable for a single VPS with persistent disk. For ephemeral hosting or multiple backend instances, use shared persistent storage or object storage; a server's temporary local disk is not sufficient.
 
 Database table names are centralized in `config/settings.py` under `DB_TABLES`; views and the shipment-number procedure are in `DB_VIEWS` and `DB_PROCEDURES`. Update those mappings there if the schema uses different object names.
 

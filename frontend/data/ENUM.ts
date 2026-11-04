@@ -1,10 +1,12 @@
 // Central constants for the CUMI EnergyMeter Enterprise App.
 // Supports both HTTP (local dev) and HTTPS (cloud deployment).
 
+const configuredApiUrl = process.env.NEXT_PUBLIC_API_URL?.replace(/\/+$/, "");
+
 export const BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL ||
+  configuredApiUrl ||
   (typeof window !== "undefined" && window.location.hostname !== "localhost"
-    ? `${window.location.protocol}//${window.location.hostname}:8001`
+    ? window.location.origin
     : "http://localhost:8001");
 
 // ─────────────────────────────────────────────────────────────────────────────
